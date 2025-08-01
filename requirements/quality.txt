@@ -39,12 +39,15 @@ django==4.2.23
     #   -c https://raw.githubusercontent.com/edx/edx-lint/master/edx_lint/files/common_constraints.txt
     #   -r requirements/test.txt
     #   django-crum
+    #   django-model-utils
     #   django-waffle
     #   edx-django-utils
 django-crum==0.7.9
     # via
     #   -r requirements/test.txt
     #   edx-django-utils
+django-model-utils==5.0.0
+    # via -r requirements/test.txt
 django-waffle==5.0.0
     # via
     #   -r requirements/test.txt
@@ -78,6 +81,8 @@ pbr==6.1.1
     # via
     #   -r requirements/test.txt
     #   stevedore
+pillow==11.3.0
+    # via -r requirements/test.txt
 platformdirs==4.3.8
     # via pylint
 pluggy==1.6.0

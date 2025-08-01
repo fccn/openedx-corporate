@@ -17,10 +17,13 @@ django==4.2.23
     #   -c https://raw.githubusercontent.com/edx/edx-lint/master/edx_lint/files/common_constraints.txt
     #   -r requirements/base.in
     #   django-crum
+    #   django-model-utils
     #   django-waffle
     #   edx-django-utils
 django-crum==0.7.9
     # via edx-django-utils
+django-model-utils==5.0.0
+    # via -r requirements/base.in
 django-waffle==5.0.0
     # via edx-django-utils
 edx-django-utils==8.0.0
@@ -29,6 +32,8 @@ openedx-atlas==0.7.0
     # via -r requirements/base.in
 pbr==6.1.1
     # via stevedore
+pillow==11.3.0
+    # via -r requirements/base.in
 psutil==7.0.0
     # via edx-django-utils
 pycparser==2.22

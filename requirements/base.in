@@ -6,3 +6,5 @@ Django             # Web application framework
 
 openedx-atlas
 edx-django-utils  # Utility functions for Django applications
+django-model-utils
+pillow
