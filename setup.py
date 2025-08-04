@@ -136,7 +136,12 @@ setup(
     author='Open edX Project',
     author_email='oscm@openedx.org',
     packages=find_packages(
-        include=['corporate_partner_access', 'corporate_partner_access.*'],
+        include=[
+            'corporate_partner_access',
+            'corporate_partner_access.*',
+            'flex_catalog',
+            'flex_catalog.*'
+        ],
         exclude=["*tests"],
     ),
 

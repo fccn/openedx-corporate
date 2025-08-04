@@ -32,6 +32,7 @@ INSTALLED_APPS = (
     'django.contrib.contenttypes',
     'django.contrib.messages',
     'django.contrib.sessions',
+    'flex_catalog',
     'corporate_partner_access',
 )
 
