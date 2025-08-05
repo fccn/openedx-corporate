@@ -74,8 +74,8 @@ class CorporatePartnerCatalog(FlexibleCatalogModel):
         verbose_name_plural = "Corporate Partner Catalogs"
         ordering = ["name"]
 
-    def get_courses(self):
-        """Return all catalog courses associated with this instance."""
+    def get_course_runs(self):
+        """Return all catalog course runs associated with this instance."""
         return self.courses.all()
 
 
