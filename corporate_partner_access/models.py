@@ -1,5 +1,7 @@
 """Models for managing course catalogs and access for corporate partners."""
 
+import re
+
 from django.contrib.auth import get_user_model
 from django.db import models
 
@@ -87,7 +89,7 @@ class CorporatePartnerCatalogEmailRegex(models.Model):
         related_name="email_regexes",
     )
     regex = models.CharField(
-        max_length=255, help_text="Regex pattern for email validation."
+        max_length=500, help_text="Regex pattern for email validation."
     )
 
     def __str__(self):
@@ -95,6 +97,13 @@ class CorporatePartnerCatalogEmailRegex(models.Model):
         return (
             f"<CorporatePartnerCatalogEmailRegex: {self.catalog.name} - {self.regex}>"
         )
+
+    def clean(self):
+        """Validate the regex pattern."""
+        try:
+            re.compile(self.regex)
+        except re.error as exc:
+            raise ValueError(f"Invalid regex pattern: {self.regex}") from exc
 
 
 class CorporatePartnerCatalogCourse(models.Model):
@@ -114,10 +123,13 @@ class CorporatePartnerCatalogCourse(models.Model):
         verbose_name_plural = "Corporate Partner Catalog Courses"
         unique_together = ("catalog", "course_overview")
         ordering = ["position"]
+        indexes = [
+            models.Index(fields=["catalog", "course_overview"], name="catalog_course_idx"),
+        ]
 
     def __str__(self):
         """Return string representation of the CorporatePartnerCatalogCourse instance."""
-        return f"<CorporatePartnerCatalogCourse: {self.course_overview.display_name}>"  # pylint: disable=no-member
+        return f"<CorporatePartnerCatalogCourse: {self.course_overview.id}>"  # pylint: disable=no-member
 
 
 class CorporatePartnerCatalogLearner(models.Model):
