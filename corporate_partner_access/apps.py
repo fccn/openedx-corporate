@@ -3,7 +3,7 @@ corporate_partner_access Django application initialization.
 """
 
 from django.apps import AppConfig
-from edx_django_utils.plugins import PluginURLs
+from edx_django_utils.plugins import PluginSettings, PluginURLs
 
 
 class CorporatePartnerAccessConfig(AppConfig):
@@ -25,5 +25,13 @@ class CorporatePartnerAccessConfig(AppConfig):
                 PluginURLs.REGEX: r"^corporate-access/",
                 PluginURLs.RELATIVE_PATH: "urls",
             },
-        }
+        },
+        PluginSettings.CONFIG: {
+            'lms.djangoapp': {
+                'common': {PluginSettings.RELATIVE_PATH: 'settings.common'}
+            },
+            'cms.djangoapp': {
+                'common': {PluginSettings.RELATIVE_PATH: 'settings.common'}
+            },
+        },
     }

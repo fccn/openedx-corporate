@@ -32,6 +32,7 @@ INSTALLED_APPS = (
     'django.contrib.contenttypes',
     'django.contrib.messages',
     'django.contrib.sessions',
+    'flex_catalog',
     'corporate_partner_access',
 )
 
@@ -45,8 +46,8 @@ SECRET_KEY = 'insecure-secret-key'
 
 MIDDLEWARE = (
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'django.contrib.messages.middleware.MessageMiddleware',
 )
 
 TEMPLATES = [{
@@ -54,8 +55,11 @@ TEMPLATES = [{
     'APP_DIRS': False,
     'OPTIONS': {
         'context_processors': [
+            'django.template.context_processors.request',  # this is required for admin navigation sidebar
             'django.contrib.auth.context_processors.auth',  # this is required for admin
             'django.contrib.messages.context_processors.messages',  # this is required for admin
         ],
     },
 }]
+
+COURSE_OVERVIEW_BACKEND = "corporate_partner_access.test.backend_for_test"
