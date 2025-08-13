@@ -21,7 +21,7 @@ from corporate_partner_access.models import (
 class CorporatePartnerViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Corporate Partner data.
-    Provides read-only access to corporate partner information.
+    Provides access to corporate partner information.
     """
 
     queryset = CorporatePartner.objects.all()
@@ -32,7 +32,7 @@ class CorporatePartnerViewSet(viewsets.ModelViewSet):
 class CorporatePartnerCatalogViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Corporate Partner Catalog data.
-    Provides read-only access to corporate partner catalog information.
+    Provides access to corporate partner catalog information.
     """
 
     queryset = CorporatePartnerCatalog.objects.all()  # pylint: disable=E1111
@@ -62,3 +62,25 @@ class CorporatePartnerCatalogViewSet(viewsets.ModelViewSet):
         page = self.paginate_queryset(qs)
         serializer = CatalogCourseSerializer(page, many=True)
         return self.get_paginated_response(serializer.data)
+
+
+class CorporatePartnerCatalogLearnerViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Corporate Partner Catalog Learner data.
+    Provides access to corporate partner catalog learner information.
+    """
+
+    queryset = CorporatePartnerCatalogLearner.objects.all()
+    serializer_class = CatalogLearnerSerializer
+    permission_classes = [IsAuthenticated]
+
+
+class CorporatePartnerCatalogCourseViewSet(viewsets.ModelViewSet):
+    """
+    ViewSet for Corporate Partner Catalog Course data.
+    Provides access to corporate partner catalog course information.
+    """
+
+    queryset = CorporatePartnerCatalogCourse.objects.all()
+    serializer_class = CatalogCourseSerializer
+    permission_classes = [IsAuthenticated]

@@ -107,7 +107,6 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
 
     catalog = serializers.PrimaryKeyRelatedField(
         queryset=CorporatePartnerCatalog.objects.all(),
-        write_only=True,
     )
     course_run = CourseOverviewSimpleSerializer(
         source="course_overview", read_only=True
