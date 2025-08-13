@@ -8,6 +8,7 @@ from corporate_partner_access.models import (
     CorporatePartner,
     CorporatePartnerCatalog,
     CorporatePartnerCatalogCourse,
+    CorporatePartnerCatalogEmailRegex,
     CorporatePartnerCatalogLearner,
 )
 from flex_catalog.serializers import CourseOverviewSimpleSerializer
@@ -46,6 +47,8 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
         queryset=CorporatePartner.objects.all()
     )
 
+    email_regexes = serializers.SerializerMethodField()
+
     class Meta:
         model = CorporatePartnerCatalog
         fields = [
@@ -53,6 +56,7 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
             "name",
             "slug",
             "corporate_partner",
+            "email_regexes",
             "course_enrollment_limit",
             "user_limit",
             "is_self_enrollment",
@@ -64,7 +68,7 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
             "is_public",
             "catalog_alternative_link",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "email_regexes"]
         extra_kwargs = {
             "authorization_additional_message": {
                 "required": False,
@@ -88,6 +92,9 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
                 "Available end date cannot be before available start date."
             )
         return attrs
+
+    def get_email_regexes(self, obj):
+        return list(obj.email_regexes.all().values_list("regex", flat=True))
 
 
 class CatalogLearnerSerializer(serializers.ModelSerializer):
@@ -126,3 +133,16 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
         model = CorporatePartnerCatalogCourse
         fields = ["id", "course_overview", "position", "catalog", "course_run"]
         read_only_fields = ["id", "course_run"]
+
+
+class CatalogEmailRegexSerializer(serializers.ModelSerializer):
+    """Serializer for catalog email regex patterns."""
+
+    catalog = serializers.PrimaryKeyRelatedField(
+        queryset=CorporatePartnerCatalog.objects.all()
+    )
+
+    class Meta:
+        model = CorporatePartnerCatalogEmailRegex
+        fields = ["id", "catalog", "regex"]
+        read_only_fields = ["id"]

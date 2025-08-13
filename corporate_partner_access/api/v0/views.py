@@ -7,6 +7,7 @@ from rest_framework.response import Response
 
 from corporate_partner_access.api.v0.serializers import (
     CatalogCourseSerializer,
+    CatalogEmailRegexSerializer,
     CatalogLearnerSerializer,
     CorporatePartnerCatalogSerializer,
     CorporatePartnerSerializer,
@@ -15,6 +16,7 @@ from corporate_partner_access.models import (
     CorporatePartner,
     CorporatePartnerCatalog,
     CorporatePartnerCatalogCourse,
+    CorporatePartnerCatalogEmailRegex,
     CorporatePartnerCatalogLearner,
 )
 
@@ -90,4 +92,12 @@ class CorporatePartnerCatalogCourseViewSet(viewsets.ModelViewSet):
 
     queryset = CorporatePartnerCatalogCourse.objects.all()
     serializer_class = CatalogCourseSerializer
+    permission_classes = [IsAuthenticated]
+
+
+class CorporatePartnerCatalogEmailRegexViewSet(viewsets.ModelViewSet):
+    """ViewSet for catalog email regex patterns."""
+
+    queryset = CorporatePartnerCatalogEmailRegex.objects.all()
+    serializer_class = CatalogEmailRegexSerializer
     permission_classes = [IsAuthenticated]
