@@ -3,6 +3,7 @@
 from edx_rest_framework_extensions.permissions import IsAuthenticated
 from rest_framework import viewsets
 from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from corporate_partner_access.api.v0.serializers import (
     CatalogCourseSerializer,
@@ -48,8 +49,11 @@ class CorporatePartnerCatalogViewSet(viewsets.ModelViewSet):
         )
 
         page = self.paginate_queryset(qs)
-        serializer = CatalogLearnerSerializer(page, many=True)
-        return self.get_paginated_response(serializer.data)
+        if page is not None:
+            serializer = CatalogLearnerSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = CatalogLearnerSerializer(qs, many=True)
+        return Response(serializer.data)
 
     @action(detail=True, methods=["get"], url_path="courses")
     def courses(self, request, **kwargs):
@@ -60,8 +64,11 @@ class CorporatePartnerCatalogViewSet(viewsets.ModelViewSet):
         ).select_related("course_overview")
 
         page = self.paginate_queryset(qs)
-        serializer = CatalogCourseSerializer(page, many=True)
-        return self.get_paginated_response(serializer.data)
+        if page is not None:
+            serializer = CatalogCourseSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = CatalogCourseSerializer(qs, many=True)
+        return Response(serializer.data)
 
 
 class CorporatePartnerCatalogLearnerViewSet(viewsets.ModelViewSet):

@@ -33,13 +33,15 @@ class CorporatePartnerSerializer(serializers.ModelSerializer):
 
     def get_logo_url(self, obj):
         """Return the URL of the corporate partner's logo."""
-        return obj.logo.url if obj.logo else None
+        try:
+            return obj.logo.url
+        except (ValueError, AttributeError):
+            return None
 
 
 class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
     """Serializer for Corporate Partner Catalog data."""
 
-    learners_count = serializers.IntegerField(source="learners.count", read_only=True)
     corporate_partner = serializers.PrimaryKeyRelatedField(
         queryset=CorporatePartner.objects.all()
     )
@@ -61,7 +63,6 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
             "support_email",
             "is_public",
             "catalog_alternative_link",
-            "learners_count",
         ]
         read_only_fields = ["id"]
         extra_kwargs = {
@@ -78,6 +79,15 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
                 "allow_blank": True,
             },
         }
+
+    def validate(self, attrs):
+        start = attrs.get("available_start_date", None)
+        end = attrs.get("available_end_date", None)
+        if start and end and end < start:
+            raise serializers.ValidationError(
+                "Available end date cannot be before available start date."
+            )
+        return attrs
 
 
 class CatalogLearnerSerializer(serializers.ModelSerializer):
@@ -104,10 +114,10 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
         queryset=CourseOverview.objects.all(),
         write_only=True,
     )
-
     catalog = serializers.PrimaryKeyRelatedField(
         queryset=CorporatePartnerCatalog.objects.all(),
     )
+
     course_run = CourseOverviewSimpleSerializer(
         source="course_overview", read_only=True
     )
