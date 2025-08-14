@@ -15,9 +15,9 @@ router = DefaultRouter()
 
 router.register(r"partners", CorporatePartnerViewSet, basename="partner")
 router.register(r"catalogs", CorporatePartnerCatalogViewSet, basename="catalog")
-router.register(r"catalog-learners", CorporatePartnerCatalogLearnerViewSet, basename="catalog-learner")
-router.register(r"catalog-courses", CorporatePartnerCatalogCourseViewSet, basename="catalog-course")
-router.register(r"catalog-regex", CorporatePartnerCatalogEmailRegexViewSet, basename="catalog-regex")
+router.register(r"catalog_learners", CorporatePartnerCatalogLearnerViewSet, basename="catalog_learner")
+router.register(r"catalog_courses", CorporatePartnerCatalogCourseViewSet, basename="catalog_course")
+router.register(r"catalog_regexes", CorporatePartnerCatalogEmailRegexViewSet, basename="catalog_regexes")
 
 urlpatterns = [
     path("", include(router.urls)),
