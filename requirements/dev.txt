@@ -89,6 +89,7 @@ django==4.2.23
     #   django-waffle
     #   djangorestframework
     #   drf-jwt
+    #   drf-nested-routers
     #   edx-django-utils
     #   edx-drf-extensions
     #   edx-i18n-tools
@@ -109,6 +110,7 @@ djangorestframework==3.16.1
     # via
     #   -r requirements/quality.txt
     #   drf-jwt
+    #   drf-nested-routers
     #   edx-drf-extensions
 dnspython==2.7.0
     # via
@@ -118,6 +120,8 @@ drf-jwt==1.19.2
     # via
     #   -r requirements/quality.txt
     #   edx-drf-extensions
+drf-nested-routers==0.94.2
+    # via -r requirements/quality.txt
 edx-django-utils==8.0.0
     # via
     #   -r requirements/quality.txt

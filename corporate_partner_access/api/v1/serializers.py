@@ -18,6 +18,14 @@ User = get_user_model()
 CourseOverview = course_overview()
 
 
+class UserSimpleSerializer(serializers.ModelSerializer):
+    """Minimal serializer for user data."""
+
+    class Meta:
+        model = User
+        fields = ["id", "username", "email"]
+
+
 class CorporatePartnerSerializer(serializers.ModelSerializer):
     """Serializer for Corporate Partner data."""
 
@@ -100,17 +108,20 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
 class CatalogLearnerSerializer(serializers.ModelSerializer):
     """Minimal serializer for learners in a catalog."""
 
-    user = serializers.PrimaryKeyRelatedField(
+    user_id = serializers.PrimaryKeyRelatedField(
+        source="user",
         queryset=User.objects.all(),
-    )
-    catalog = serializers.PrimaryKeyRelatedField(
-        queryset=CorporatePartnerCatalog.objects.all(),
         write_only=True,
     )
+    catalog_id = serializers.PrimaryKeyRelatedField(
+        source="catalog",
+        queryset=CorporatePartnerCatalog.objects.all(),
+    )
+    user = UserSimpleSerializer(read_only=True)
 
     class Meta:
         model = CorporatePartnerCatalogLearner
-        fields = ["id", "active", "user", "catalog"]
+        fields = ["id", "active", "user", "catalog_id", "user_id"]
         read_only_fields = ["id"]
 
 
@@ -121,28 +132,28 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
         queryset=CourseOverview.objects.all(),
         write_only=True,
     )
-    catalog = serializers.PrimaryKeyRelatedField(
+    catalog_id = serializers.PrimaryKeyRelatedField(
+        source="catalog",
         queryset=CorporatePartnerCatalog.objects.all(),
     )
-
     course_run = CourseOverviewSimpleSerializer(
         source="course_overview", read_only=True
     )
 
     class Meta:
         model = CorporatePartnerCatalogCourse
-        fields = ["id", "course_overview", "position", "catalog", "course_run"]
+        fields = ["id", "course_overview", "position", "catalog_id", "course_run"]
         read_only_fields = ["id", "course_run"]
 
 
 class CatalogEmailRegexSerializer(serializers.ModelSerializer):
     """Serializer for catalog email regex patterns."""
 
-    catalog = serializers.PrimaryKeyRelatedField(
-        queryset=CorporatePartnerCatalog.objects.all()
+    catalog_id = serializers.PrimaryKeyRelatedField(
+        source="catalog", queryset=CorporatePartnerCatalog.objects.all()
     )
 
     class Meta:
         model = CorporatePartnerCatalogEmailRegex
-        fields = ["id", "catalog", "regex"]
+        fields = ["id", "catalog_id", "regex"]
         read_only_fields = ["id"]

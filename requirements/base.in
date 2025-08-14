@@ -9,6 +9,7 @@ edx-django-utils  # Utility functions for Django applications
 django-model-utils
 djangorestframework
 django-filter
+drf-nested-routers
 edx-opaque-keys
 edx-drf-extensions
 pillow

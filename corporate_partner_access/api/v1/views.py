@@ -3,8 +3,6 @@
 from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated
 from rest_framework import filters, viewsets
-from rest_framework.decorators import action
-from rest_framework.response import Response
 
 from corporate_partner_access.api.v1.serializers import (
     CatalogCourseSerializer,
@@ -56,53 +54,33 @@ class CorporatePartnerCatalogViewSet(viewsets.ModelViewSet):
     ordering_fields = ["name", "id", "available_start_date", "available_end_date"]
     ordering = ["name"]
 
-    @action(detail=True, methods=["get"], url_path="learners")
-    def learners(self, request, **kwargs):
-        """Return learners for a catalog."""
-        catalog = self.get_object()
-        qs = (
-            CorporatePartnerCatalogLearner.objects.filter(catalog=catalog)
-            .select_related("user")
-            .only("active", "user")
-        )
 
-        page = self.paginate_queryset(qs)
-        if page is not None:
-            serializer = CatalogLearnerSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        serializer = CatalogLearnerSerializer(qs, many=True)
-        return Response(serializer.data)
+class InjectCatalogPkMixin:
+    """
+    Mixin to inject 'catalog_pk' from URL kwargs into serializer input data.
 
-    @action(detail=True, methods=["get"], url_path="courses")
-    def courses(self, request, **kwargs):
-        """Return courses for a catalog."""
-        catalog = self.get_object()
-        qs = CorporatePartnerCatalogCourse.objects.filter(
-            catalog=catalog
-        ).select_related("course_overview")
+    The subclass should set `catalog_field_name` to the name of the field expected
+    by the serializer.
+    """
 
-        page = self.paginate_queryset(qs)
-        if page is not None:
-            serializer = CatalogCourseSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        serializer = CatalogCourseSerializer(qs, many=True)
-        return Response(serializer.data)
+    catalog_field_name = "catalog_id"
 
-    @action(detail=True, methods=["get"], url_path="email_regexes")
-    def email_regexes(self, request, **kwargs):
-        """Return email regex patterns for a catalog."""
-        catalog = self.get_object()
-        qs = CorporatePartnerCatalogEmailRegex.objects.filter(catalog=catalog)
-
-        page = self.paginate_queryset(qs)
-        if page is not None:
-            serializer = CatalogEmailRegexSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        serializer = CatalogEmailRegexSerializer(qs, many=True)
-        return Response(serializer.data)
+    def get_serializer(self, *args, **kwargs):
+        """
+        Returns the serializer instance, injecting 'catalog_pk' into the input data.
+        """
+        if "data" in kwargs and self.kwargs.get("catalog_pk"):
+            data = kwargs["data"]
+            if hasattr(data, "copy"):
+                data = data.copy()
+            data[self.catalog_field_name] = self.kwargs["catalog_pk"]
+            kwargs["data"] = data
+        return super().get_serializer(*args, **kwargs)
 
 
-class CorporatePartnerCatalogLearnerViewSet(viewsets.ModelViewSet):
+class CorporatePartnerCatalogLearnerViewSet(
+    InjectCatalogPkMixin, viewsets.ModelViewSet
+):
     """
     ViewSet for Corporate Partner Catalog Learner data.
     Provides access to corporate partner catalog learner information.
@@ -121,8 +99,14 @@ class CorporatePartnerCatalogLearnerViewSet(viewsets.ModelViewSet):
     ordering_fields = ["id", "user_id"]
     ordering = ["id"]
 
+    def get_queryset(self):
+        """Get the queryset for catalog learners."""
+        qs = self.queryset
+        catalog_pk = self.kwargs.get("catalog_pk")
+        return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
 
-class CorporatePartnerCatalogCourseViewSet(viewsets.ModelViewSet):
+
+class CorporatePartnerCatalogCourseViewSet(InjectCatalogPkMixin, viewsets.ModelViewSet):
     """
     ViewSet for Corporate Partner Catalog Course data.
     Provides access to corporate partner catalog course information.
@@ -143,8 +127,16 @@ class CorporatePartnerCatalogCourseViewSet(viewsets.ModelViewSet):
     ordering_fields = ["id", "position"]
     ordering = ["position"]
 
+    def get_queryset(self):
+        """Get the queryset for catalog courses."""
+        qs = self.queryset
+        catalog_pk = self.kwargs.get("catalog_pk")
+        return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
 
-class CorporatePartnerCatalogEmailRegexViewSet(viewsets.ModelViewSet):
+
+class CorporatePartnerCatalogEmailRegexViewSet(
+    InjectCatalogPkMixin, viewsets.ModelViewSet
+):
     """ViewSet for catalog email regex patterns."""
 
     queryset = CorporatePartnerCatalogEmailRegex.objects.all()
@@ -152,3 +144,9 @@ class CorporatePartnerCatalogEmailRegexViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["catalog"]
+
+    def get_queryset(self):
+        """Get the queryset for catalog email regex patterns."""
+        qs = self.queryset
+        catalog_pk = self.kwargs.get("catalog_pk")
+        return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
