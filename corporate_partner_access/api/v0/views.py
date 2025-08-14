@@ -60,8 +60,10 @@ class CorporatePartnerCatalogViewSet(viewsets.ModelViewSet):
     def learners(self, request, **kwargs):
         """Return learners for a catalog."""
         catalog = self.get_object()
-        qs = CorporatePartnerCatalogLearner.objects.filter(catalog=catalog).only(
-            "active", "user"
+        qs = (
+            CorporatePartnerCatalogLearner.objects.filter(catalog=catalog)
+            .select_related("user")
+            .only("active", "user")
         )
 
         page = self.paginate_queryset(qs)
@@ -84,6 +86,19 @@ class CorporatePartnerCatalogViewSet(viewsets.ModelViewSet):
             serializer = CatalogCourseSerializer(page, many=True)
             return self.get_paginated_response(serializer.data)
         serializer = CatalogCourseSerializer(qs, many=True)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["get"], url_path="email_regexes")
+    def email_regexes(self, request, **kwargs):
+        """Return email regex patterns for a catalog."""
+        catalog = self.get_object()
+        qs = CorporatePartnerCatalogEmailRegex.objects.filter(catalog=catalog)
+
+        page = self.paginate_queryset(qs)
+        if page is not None:
+            serializer = CatalogEmailRegexSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = CatalogEmailRegexSerializer(qs, many=True)
         return Response(serializer.data)
 
 
