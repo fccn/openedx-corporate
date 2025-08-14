@@ -12,3 +12,4 @@ django-filter
 edx-opaque-keys
 edx-drf-extensions
 pillow
+regex

@@ -284,6 +284,8 @@ pyyaml==6.0.2
     #   -r requirements/quality.txt
     #   code-annotations
     #   edx-i18n-tools
+regex==2025.7.34
+    # via -r requirements/quality.txt
 requests==2.32.4
     # via
     #   -r requirements/quality.txt
