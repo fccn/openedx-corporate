@@ -84,6 +84,7 @@ django==4.2.23
     #   -c https://raw.githubusercontent.com/edx/edx-lint/master/edx_lint/files/common_constraints.txt
     #   -r requirements/quality.txt
     #   django-crum
+    #   django-filter
     #   django-model-utils
     #   django-waffle
     #   djangorestframework
@@ -95,6 +96,8 @@ django-crum==0.7.9
     # via
     #   -r requirements/quality.txt
     #   edx-django-utils
+django-filter==25.1
+    # via -r requirements/quality.txt
 django-model-utils==5.0.0
     # via -r requirements/quality.txt
 django-waffle==5.0.0

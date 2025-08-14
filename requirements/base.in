@@ -8,6 +8,7 @@ openedx-atlas
 edx-django-utils  # Utility functions for Django applications
 django-model-utils
 djangorestframework
+django-filter
 edx-opaque-keys
 edx-drf-extensions
 pillow

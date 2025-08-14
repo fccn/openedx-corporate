@@ -1,7 +1,8 @@
 """Corporate Partner Access API v0 Views."""
 
+from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated
-from rest_framework import viewsets
+from rest_framework import filters, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
@@ -30,6 +31,10 @@ class CorporatePartnerViewSet(viewsets.ModelViewSet):
     queryset = CorporatePartner.objects.all()
     serializer_class = CorporatePartnerSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["code", "name"]
+    ordering_fields = ["name", "code", "id"]
+    ordering = ["name"]
 
 
 class CorporatePartnerCatalogViewSet(viewsets.ModelViewSet):
@@ -41,6 +46,15 @@ class CorporatePartnerCatalogViewSet(viewsets.ModelViewSet):
     queryset = CorporatePartnerCatalog.objects.all()  # pylint: disable=E1111
     serializer_class = CorporatePartnerCatalogSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    ]
+    filterset_fields = ["corporate_partner", "is_public"]
+    search_fields = ["name", "slug"]
+    ordering_fields = ["name", "id", "available_start_date", "available_end_date"]
+    ordering = ["name"]
 
     @action(detail=True, methods=["get"], url_path="learners")
     def learners(self, request, **kwargs):
@@ -79,9 +93,18 @@ class CorporatePartnerCatalogLearnerViewSet(viewsets.ModelViewSet):
     Provides access to corporate partner catalog learner information.
     """
 
-    queryset = CorporatePartnerCatalogLearner.objects.all()
+    queryset = CorporatePartnerCatalogLearner.objects.select_related("catalog", "user")
     serializer_class = CatalogLearnerSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    ]
+    filterset_fields = ["catalog", "active", "user"]
+    search_fields = ["user__username", "user__email"]
+    ordering_fields = ["id", "user_id"]
+    ordering = ["id"]
 
 
 class CorporatePartnerCatalogCourseViewSet(viewsets.ModelViewSet):
@@ -90,9 +113,20 @@ class CorporatePartnerCatalogCourseViewSet(viewsets.ModelViewSet):
     Provides access to corporate partner catalog course information.
     """
 
-    queryset = CorporatePartnerCatalogCourse.objects.all()
+    queryset = CorporatePartnerCatalogCourse.objects.select_related(
+        "course_overview", "catalog"
+    )
     serializer_class = CatalogCourseSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    ]
+    filterset_fields = ["catalog", "course_overview"]
+    search_fields = ["course_overview__display_name"]
+    ordering_fields = ["id", "position"]
+    ordering = ["position"]
 
 
 class CorporatePartnerCatalogEmailRegexViewSet(viewsets.ModelViewSet):
@@ -101,3 +135,5 @@ class CorporatePartnerCatalogEmailRegexViewSet(viewsets.ModelViewSet):
     queryset = CorporatePartnerCatalogEmailRegex.objects.all()
     serializer_class = CatalogEmailRegexSerializer
     permission_classes = [IsAuthenticated]
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["catalog"]

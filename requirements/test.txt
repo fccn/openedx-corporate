@@ -36,6 +36,7 @@ cryptography==45.0.6
     #   -c https://raw.githubusercontent.com/edx/edx-lint/master/edx_lint/files/common_constraints.txt
     #   -r requirements/base.txt
     #   django-crum
+    #   django-filter
     #   django-model-utils
     #   django-waffle
     #   djangorestframework
@@ -46,6 +47,8 @@ django-crum==0.7.9
     # via
     #   -r requirements/base.txt
     #   edx-django-utils
+django-filter==25.1
+    # via -r requirements/base.txt
 django-model-utils==5.0.0
     # via -r requirements/base.txt
 django-waffle==5.0.0
