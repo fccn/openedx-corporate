@@ -1,3 +1,5 @@
+"""Utility functions for corporate_partner_access, including drf-spectacular hooks."""
+
 def spectacular_filter_hook(endpoints):
     # Only include endpoints starting with /corporate_access/api/
     return [

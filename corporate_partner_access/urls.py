@@ -2,11 +2,10 @@
 URLs for corporate_partner_access.
 """
 
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
 from django.urls import include, path
 
 from corporate_partner_access import views
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
-from django.urls import reverse_lazy
 
 urlpatterns = [
     path("info/", views.info_view, name="corporate-access-info"),
