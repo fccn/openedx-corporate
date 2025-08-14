@@ -1,4 +1,4 @@
-"""Corporate Partner Access API v0 Views."""
+"""Corporate Partner Access API v1 Views."""
 
 from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated
@@ -6,7 +6,7 @@ from rest_framework import filters, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
-from corporate_partner_access.api.v0.serializers import (
+from corporate_partner_access.api.v1.serializers import (
     CatalogCourseSerializer,
     CatalogEmailRegexSerializer,
     CatalogLearnerSerializer,

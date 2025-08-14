@@ -1,4 +1,4 @@
-"""Serializer for Corporate Partner access API v0."""
+"""Serializer for Corporate Partner access API v1."""
 
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
