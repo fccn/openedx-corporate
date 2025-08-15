@@ -17,12 +17,12 @@ class CorporatePartnerAccessConfig(AppConfig):
         PluginURLs.CONFIG: {
             'lms.djangoapp': {
                 PluginURLs.NAMESPACE: "corporate_partner_access",
-                PluginURLs.REGEX: r"^corporate-access/",
+                PluginURLs.REGEX: r"^corporate_access/",
                 PluginURLs.RELATIVE_PATH: "urls",
             },
             'cms.djangoapp': {
                 PluginURLs.NAMESPACE: "corporate_partner_access",
-                PluginURLs.REGEX: r"^corporate-access/",
+                PluginURLs.REGEX: r"^corporate_access/",
                 PluginURLs.RELATIVE_PATH: "urls",
             },
         },

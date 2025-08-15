@@ -12,4 +12,13 @@ def course_overview():
     backend_function = settings.COURSE_OVERVIEW_BACKEND
     backend = import_module(backend_function)
 
-    return backend.course_overview_backend()
+    return backend.course_overview_model()
+
+
+def course_overview_base_serializer():
+    """Get course_overview_base_serializer method."""
+
+    backend_function = settings.COURSE_OVERVIEW_BACKEND
+    backend = import_module(backend_function)
+
+    return backend.course_overview_base_serializer()

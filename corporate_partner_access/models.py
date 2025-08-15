@@ -1,8 +1,8 @@
 """Models for managing course catalogs and access for corporate partners."""
 
-import re
-
+import regex
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.db import models
 
 from corporate_partner_access.edxapp_wrapper.course_module import course_overview
@@ -99,11 +99,29 @@ class CorporatePartnerCatalogEmailRegex(models.Model):
         )
 
     def clean(self):
-        """Validate the regex pattern."""
+        """Validate and normalize the regex pattern."""
+        pattern = (self.regex or "").strip()
+        if not pattern:
+            raise ValidationError("Regex pattern cannot be empty.")
+
+        # Detects if the regex contains nested quantifiers or multiple consecutive wildcards.
+        if regex.search(r'\((?:\.\*|\.\+)\)[*+{]|(\.\*.*\.\*)|(\.\+.*\.\+)', pattern):
+            raise ValidationError(f"Invalid regex, nested quantifiers detected: {pattern}")
+
+        pattern = pattern.lstrip("^").rstrip("$")
+        pattern = f"^{pattern}$"
+
         try:
-            re.compile(self.regex)
-        except re.error as exc:
-            raise ValueError(f"Invalid regex pattern: {self.regex}") from exc
+            regex.compile(pattern)
+        except regex.error as exc:
+            raise ValidationError(f"Invalid regex pattern: {pattern} ({exc})") from exc
+
+        self.regex = pattern
+
+    def save(self, *args, **kwargs):
+        """Ensure clean is called before saving."""
+        self.clean()
+        super().save(*args, **kwargs)
 
 
 class CorporatePartnerCatalogCourse(models.Model):
