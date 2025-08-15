@@ -6,7 +6,7 @@ def plugin_settings(settings):
     Add settings for the corporate_partner_access app.
     """
 
-    settings.INSTALLED_APPS += ["flex_catalog", "drf_spectacular"]
+    settings.INSTALLED_APPS += ["flex_catalog"]
     settings.REST_FRAMEWORK["DEFAULT_SCHEMA_CLASS"] = "drf_spectacular.openapi.AutoSchema"
     settings.SPECTACULAR_SETTINGS = {
         "TITLE": "Corporate Partner Access API",
