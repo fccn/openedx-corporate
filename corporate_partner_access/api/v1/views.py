@@ -35,7 +35,34 @@ class CorporatePartnerViewSet(viewsets.ModelViewSet):
     ordering = ["name"]
 
 
-class CorporatePartnerCatalogViewSet(viewsets.ModelViewSet):
+class InjectNestedFKMixin:
+    """Generic mixin to inject/override a nested FK id from URL kwargs into serializer data.
+
+    Subclasses set:
+      nested_lookup_kwarg: name of kwarg added by nested router.
+      target_field_name: serializer field to populate.
+    """
+
+    nested_lookup_kwarg = None
+    target_field_name = None
+
+    def get_serializer(self, *args, **kwargs):
+        """Inject the nested FK id into serializer data if applicable."""
+        if (
+            "data" in kwargs
+            and self.nested_lookup_kwarg
+            and self.target_field_name
+            and self.kwargs.get(self.nested_lookup_kwarg)
+        ):
+            data = kwargs["data"]
+            if hasattr(data, "copy"):
+                data = data.copy()
+            data[self.target_field_name] = self.kwargs[self.nested_lookup_kwarg]
+            kwargs["data"] = data
+        return super().get_serializer(*args, **kwargs)
+
+
+class CorporatePartnerCatalogViewSet(InjectNestedFKMixin, viewsets.ModelViewSet):
     """
     ViewSet for Corporate Partner Catalog data.
     Provides access to corporate partner catalog information.
@@ -54,33 +81,20 @@ class CorporatePartnerCatalogViewSet(viewsets.ModelViewSet):
     ordering_fields = ["name", "id", "available_start_date", "available_end_date"]
     ordering = ["name"]
 
+    # Mixin config
+    nested_lookup_kwarg = "partner_pk"
+    target_field_name = "corporate_partner"
 
-class InjectCatalogPkMixin:
-    """
-    Mixin to inject 'catalog_pk' from URL kwargs into serializer input data.
-
-    The subclass should set `catalog_field_name` to the name of the field expected
-    by the serializer.
-    """
-
-    catalog_field_name = "catalog_id"
-
-    def get_serializer(self, *args, **kwargs):
-        """
-        Returns the serializer instance, injecting 'catalog_pk' into the input data.
-        """
-        if "data" in kwargs and self.kwargs.get("catalog_pk"):
-            data = kwargs["data"]
-            if hasattr(data, "copy"):
-                data = data.copy()
-            data[self.catalog_field_name] = self.kwargs["catalog_pk"]
-            kwargs["data"] = data
-        return super().get_serializer(*args, **kwargs)
+    def get_queryset(self):
+        """Get the queryset for corporate partner catalogs."""
+        qs = super().get_queryset()
+        partner_pk = self.kwargs.get("partner_pk")
+        if partner_pk:
+            qs = qs.filter(corporate_partner_id=partner_pk)
+        return qs
 
 
-class CorporatePartnerCatalogLearnerViewSet(
-    InjectCatalogPkMixin, viewsets.ModelViewSet
-):
+class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelViewSet):
     """
     ViewSet for Corporate Partner Catalog Learner data.
     Provides access to corporate partner catalog learner information.
@@ -99,6 +113,10 @@ class CorporatePartnerCatalogLearnerViewSet(
     ordering_fields = ["id", "user_id"]
     ordering = ["id"]
 
+    # Mixin config
+    nested_lookup_kwarg = "catalog_pk"
+    target_field_name = "catalog_id"
+
     def get_queryset(self):
         """Get the queryset for catalog learners."""
         qs = self.queryset
@@ -106,7 +124,7 @@ class CorporatePartnerCatalogLearnerViewSet(
         return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
 
 
-class CorporatePartnerCatalogCourseViewSet(InjectCatalogPkMixin, viewsets.ModelViewSet):
+class CorporatePartnerCatalogCourseViewSet(InjectNestedFKMixin, viewsets.ModelViewSet):
     """
     ViewSet for Corporate Partner Catalog Course data.
     Provides access to corporate partner catalog course information.
@@ -127,6 +145,10 @@ class CorporatePartnerCatalogCourseViewSet(InjectCatalogPkMixin, viewsets.ModelV
     ordering_fields = ["id", "position"]
     ordering = ["position"]
 
+    # Mixin config
+    nested_lookup_kwarg = "catalog_pk"
+    target_field_name = "catalog_id"
+
     def get_queryset(self):
         """Get the queryset for catalog courses."""
         qs = self.queryset
@@ -135,7 +157,7 @@ class CorporatePartnerCatalogCourseViewSet(InjectCatalogPkMixin, viewsets.ModelV
 
 
 class CorporatePartnerCatalogEmailRegexViewSet(
-    InjectCatalogPkMixin, viewsets.ModelViewSet
+    InjectNestedFKMixin, viewsets.ModelViewSet
 ):
     """ViewSet for catalog email regex patterns."""
 
@@ -144,6 +166,10 @@ class CorporatePartnerCatalogEmailRegexViewSet(
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["catalog"]
+
+    # Mixin config
+    nested_lookup_kwarg = "catalog_pk"
+    target_field_name = "catalog_id"
 
     def get_queryset(self):
         """Get the queryset for catalog email regex patterns."""
