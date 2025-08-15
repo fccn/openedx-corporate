@@ -60,6 +60,7 @@ dnspython==2.7.0
 drf-jwt==1.19.2
     # via edx-drf-extensions
 drf-nested-routers==0.94.2
+    # via -r requirements/base.in
 drf-spectacular==0.28.0
     # via -r requirements/base.in
 edx-django-utils==8.0.0

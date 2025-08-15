@@ -79,6 +79,7 @@ drf-jwt==1.19.2
     #   -r requirements/base.txt
     #   edx-drf-extensions
 drf-nested-routers==0.94.2
+    # via -r requirements/base.txt
 drf-spectacular==0.28.0
     # via -r requirements/base.txt
 edx-django-utils==8.0.0
