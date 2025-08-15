@@ -38,14 +38,15 @@ class CorporatePartnerAdmin(admin.ModelAdmin):
 
     def logo_thumbnail(self, obj):
         """Display a thumbnail of the partner's logo."""
-        if obj.logo:
+        try:
             return format_html(
                 '<img src="{}" width="40" height="40" style="object-fit: cover; border-radius: 4px;"/>',
                 obj.logo.url,
             )
-        return format_html(
-            '<span style="color: #999; font-style: italic;">No logo</span>'
-        )
+        except (ValueError, AttributeError):
+            return format_html(
+                '<span style="color: #999; font-style: italic;">No logo</span>'
+            )
 
     logo_thumbnail.short_description = "Logo"
 
@@ -161,7 +162,7 @@ class CorporatePartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
         full_url = f"{add_learner_url}?catalog={obj.pk}"
 
         return format_html(
-            '<a href="{}" style="font-weight: bold;">➕ Add</a>',
+            '<a href="{}" style="font-weight: bold;"> Add Learner </a>',
             full_url,
         )
 
@@ -176,7 +177,7 @@ class CorporatePartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
         full_url = f"{add_course_url}?catalog={obj.pk}"
 
         return format_html(
-            '<a href="{}" style="font-weight: bold;">➕ Add</a>',
+            '<a href="{}" style="font-weight: bold;"> Add Course </a>',
             full_url,
         )
 
@@ -209,7 +210,7 @@ class CorporatePartnerCatalogCourseAdmin(admin.ModelAdmin):
 class CorporatePartnerCatalogLearnerAdmin(admin.ModelAdmin):
     """Admin interface for CorporatePartnerCatalogLearner model."""
 
-    list_display = ["id", "user", "catalog", "active"]
+    list_display = ["id", "user", "user_email", "catalog", "active"]
     list_filter = ["catalog__corporate_partner", "active"]
     search_fields = ["user__username", "user__email", "catalog__name"]
     ordering = ["catalog__name", "user__username"]
