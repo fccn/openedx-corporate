@@ -1,9 +1,24 @@
 """Corporate Partner Access API v1 Views."""
 
+from textwrap import dedent
+
 from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated
-from rest_framework import filters, viewsets
+from rest_framework import filters, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
+from rest_framework.response import Response
 
+try:
+    from celery.result import AsyncResult
+except ImportError:
+    # Fallback for environments without Celery
+    AsyncResult = None
+
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
+
+from corporate_partner_access.api.v1 import tasks as partner_tasks
 from corporate_partner_access.api.v1.serializers import (
     CatalogCourseSerializer,
     CatalogEmailRegexSerializer,
@@ -122,6 +137,207 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
         qs = self.queryset
         catalog_pk = self.kwargs.get("catalog_pk")
         return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
+
+    @extend_schema(
+        summary="Bulk upload learners to catalog via CSV",
+        description=dedent("""
+        Upload a CSV file to associate multiple users to a catalog asynchronously.
+
+        **CSV Format:**
+        - `username` (optional): User's username (preferred identifier)
+        - `email` (optional): User's email address (alternative to username)
+        - `active` (optional): Whether the user should be active in the catalog (defaults to True)
+
+        **CSV Example:**
+        ```csv
+        username,email,active
+        john_doe,john@example.com,True
+        jane_smith,jane@example.com,False
+        ,bob@example.com,True
+        ```
+
+        **Notes:**
+        - At least one of `username` or `email` must be provided per row
+        - If both username and email are provided, username takes precedence
+        - The `active` field accepts: True, False, 1, 0, Yes, No, Y, N, T, F
+        - Processing is done asynchronously via Celery
+        """),
+        request={
+            'multipart/form-data': {
+                'type': 'object',
+                'properties': {
+                    'file': {
+                        'type': 'string',
+                        'format': 'binary',
+                        'description': 'CSV file with learner data'
+                    }
+                },
+                'required': ['file']
+            }
+        },
+        responses={
+            202: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Task queued successfully",
+                examples=[
+                    OpenApiExample(
+                        'Success Response',
+                        value={
+                            "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "status": "processing"
+                        }
+                    )
+                ]
+            ),
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Bad request - missing file or invalid format",
+                examples=[
+                    OpenApiExample(
+                        'Missing File',
+                        value={"detail": "No file uploaded."}
+                    )
+                ]
+            )
+        },
+        tags=["Learners"]
+    )
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="bulk",
+        parser_classes=[MultiPartParser],
+    )
+    def bulk(self, request, partner_pk=None, catalog_pk=None):  # pylint: disable=unused-argument
+        """
+        Bulk upload learners to a catalog via CSV file (async).
+        CSV columns: username (or email), optional active (defaults to True)
+        Returns a Celery task ID for status tracking.
+        """
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+        # Save file content to pass to Celery (as string)
+        csv_content = file.read().decode(request.encoding or "utf-8")
+        # Enqueue Celery task
+        task = partner_tasks.bulk_upload_learners.delay(
+            csv_content=csv_content,
+            catalog_id=catalog_pk,
+        )
+        return Response({"task_id": task.id, "status": "processing"}, status=status.HTTP_202_ACCEPTED)
+
+    @extend_schema(
+        summary="Check bulk upload task status",
+        description=dedent("""
+        Check the status and results of a bulk upload task.
+
+        **Task Statuses:**
+        - `PENDING`: Task is queued but not yet started
+        - `STARTED`: Task is currently running
+        - `SUCCESS`: Task completed successfully
+        - `FAILURE`: Task failed with an error
+
+        **Response includes:**
+        - Task status and ID
+        - Results (if completed successfully)
+        - Error details (if failed)
+        """),
+        parameters=[
+            OpenApiParameter(
+                name="task_id",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description="Celery task ID returned from bulk upload endpoint",
+                required=True
+            )
+        ],
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Task status retrieved successfully",
+                examples=[
+                    OpenApiExample(
+                        'Pending Task',
+                        value={
+                            "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "status": "PENDING"
+                        }
+                    ),
+                    OpenApiExample(
+                        'Completed Task',
+                        value={
+                            "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "status": "SUCCESS",
+                            "result": {
+                                "created": [
+                                    {
+                                        "user_id": 123,
+                                        "username": "john_doe",
+                                        "email": "john@example.com",
+                                        "active": True
+                                    }
+                                ],
+                                "failed": [
+                                    {
+                                        "username": "unknown_user",
+                                        "error": "User not found"
+                                    }
+                                ]
+                            }
+                        }
+                    ),
+                    OpenApiExample(
+                        'Failed Task',
+                        value={
+                            "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "status": "FAILURE",
+                            "error": "Invalid CSV format"
+                        }
+                    )
+                ]
+            ),
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Bad request - missing task_id",
+                examples=[
+                    OpenApiExample(
+                        'Missing Task ID',
+                        value={"detail": "task_id parameter is required."}
+                    )
+                ]
+            )
+        },
+        tags=["Learners"]
+    )
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="bulk_status",
+    )
+    def bulk_status(self, request, partner_pk=None, catalog_pk=None):  # pylint: disable=unused-argument
+        """
+        Check the status of a bulk upload task by task_id.
+        Query parameter: task_id
+        """
+        if not AsyncResult:
+            return Response(
+                {"detail": "Celery not available in this environment."},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+        task_id = request.query_params.get("task_id")
+        if not task_id:
+            return Response({"detail": "task_id parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+        task_result = AsyncResult(task_id)
+        response_data = {
+            "task_id": task_id,
+            "status": task_result.status,
+        }
+        if task_result.ready():
+            if task_result.successful():
+                response_data["result"] = task_result.result
+            else:
+                response_data["error"] = str(task_result.info)
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 class CorporatePartnerCatalogCourseViewSet(InjectNestedFKMixin, viewsets.ModelViewSet):
