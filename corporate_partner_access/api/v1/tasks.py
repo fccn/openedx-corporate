@@ -9,7 +9,7 @@ try:
     from celery import shared_task
 except ImportError:
     # Fallback for test environments without Celery
-    def shared_task(bind=False, **kwargs):
+    def shared_task(bind=False, **kwargs):  # pylint: disable=unused-argument
         def decorator(func):
             return func
         return decorator

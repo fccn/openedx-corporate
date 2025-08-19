@@ -324,7 +324,6 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
                 {"detail": "Celery not available in this environment."},
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
-        
         task_id = request.query_params.get("task_id")
         if not task_id:
             return Response({"detail": "task_id parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
