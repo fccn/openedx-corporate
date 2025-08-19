@@ -147,7 +147,11 @@ class CorporatePartnerCatalogCourse(models.Model):
     """Pivot table linking catalogs to courses with ordering."""
 
     id = models.AutoField(primary_key=True)
-    catalog = models.ForeignKey("CorporatePartnerCatalog", on_delete=models.CASCADE)
+    catalog = models.ForeignKey(
+        "CorporatePartnerCatalog",
+        on_delete=models.CASCADE,
+        related_name="catalog_courses",
+    )
     course_overview = models.ForeignKey(course_overview(), on_delete=models.CASCADE)
     position = models.PositiveIntegerField(
         default=0, help_text="Ordering of the course within the catalog."
@@ -173,7 +177,11 @@ class CorporatePartnerCatalogLearner(models.Model):
     """Pivot table linking catalogs to users with active status."""
 
     id = models.AutoField(primary_key=True)
-    catalog = models.ForeignKey("CorporatePartnerCatalog", on_delete=models.CASCADE)
+    catalog = models.ForeignKey(
+        "CorporatePartnerCatalog",
+        on_delete=models.CASCADE,
+        related_name="catalog_learners",
+    )
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     active = models.BooleanField(default=True)
 
