@@ -1,8 +1,9 @@
-# schemas.py
 """Corporate Partner Access API v1 Schemas."""
 from textwrap import dedent
+
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
+
 
 def bulk_upload_schema(func):
     return extend_schema(
@@ -62,6 +63,7 @@ def bulk_upload_schema(func):
         tags=["Learners"]
     )(func)
 
+
 def bulk_status_schema(func):
     return extend_schema(
         summary="Check bulk upload task status",
@@ -93,18 +95,36 @@ def bulk_status_schema(func):
                 response=OpenApiTypes.OBJECT,
                 description="Task status retrieved successfully",
                 examples=[
-                    OpenApiExample('Pending Task', value={"task_id": "550e8400-e29b-41d4-a716-446655440000","status":"PENDING"}),
+                    OpenApiExample(
+                        'Pending Task',
+                        value={
+                            "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "status": "PENDING"
+                        }
+                    ),
                     OpenApiExample('Completed Task', value={
                         "task_id": "550e8400-e29b-41d4-a716-446655440000",
                         "status": "SUCCESS",
                         "result": {
-                            "created": [{"user_id": 123,"username":"john_doe","email":"john@example.com","active": True}],
-                            "failed": [{"username": "unknown_user","error":"User not found"}]
+                            "created": [
+                                {
+                                    "user_id": 123,
+                                    "username": "john_doe",
+                                    "email": "john@example.com",
+                                    "active": True
+                                }
+                            ],
+                            "failed": [{"username": "unknown_user", "error": "User not found"}]
                         }
                     }),
-                    OpenApiExample('Failed Task', value={
-                        "task_id": "550e8400-e29b-41d4-a716-446655440000","status":"FAILURE","error":"Invalid CSV format"
-                    })
+                    OpenApiExample(
+                        'Failed Task',
+                        value={
+                            "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "status": "FAILURE",
+                            "error": "Invalid CSV format"
+                        }
+                    )
                 ]
             ),
             400: OpenApiResponse(

@@ -13,9 +13,8 @@ except ImportError:
     # Fallback for test environments without Celery
     AsyncResult = None
 
-from corporate_partner_access.api.v1.schemas import bulk_upload_schema, bulk_status_schema
-
 from corporate_partner_access.api.v1 import tasks as partner_tasks
+from corporate_partner_access.api.v1.schemas import bulk_status_schema, bulk_upload_schema
 from corporate_partner_access.api.v1.serializers import (
     CatalogCourseSerializer,
     CatalogEmailRegexSerializer,
