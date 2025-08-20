@@ -6,6 +6,8 @@ from django.http import HttpResponse
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from corporate_partner_access.api.v1.schemas import report_schema
+
 
 class InjectNestedFKMixin:
     """Generic mixin to inject/override a nested FK id from URL kwargs into serializer data.
@@ -43,6 +45,7 @@ class ReportMixin:
 
     report_fields = ["id"]
 
+    @report_schema
     @action(detail=False, methods=["get"], url_path="report")
     def report(self, request, *args, **kwargs):
         """Return a CSV file with the selected report fields."""
