@@ -1,9 +1,9 @@
 """Serializer for Corporate Partner access API v1."""
-
 from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import serializers
@@ -35,21 +35,31 @@ class UserSimpleSerializer(serializers.ModelSerializer):
 class CorporatePartnerSerializer(serializers.ModelSerializer):
     """Serializer for Corporate Partner data."""
 
-    logo_url = serializers.SerializerMethodField()
+    logo = serializers.SerializerMethodField()
+    catalogs = serializers.IntegerField(source="catalogs_count", read_only=True)
+    courses = serializers.IntegerField(source="courses_count", read_only=True)
 
     class Meta:
         model = CorporatePartner
-        fields = ["id", "code", "name", "homepage_url", "logo", "logo_url"]
-        read_only_fields = ["id", "logo_url"]
+        fields = [
+            "id",
+            "code",
+            "name",
+            "homepage_url",
+            "logo",
+            "catalogs",
+            "courses",
+        ]
+        read_only_fields = ["id"]
         extra_kwargs = {
             "homepage_url": {"required": False, "allow_null": True},
             "logo": {"required": False, "allow_null": True, "write_only": True},
         }
 
-    def get_logo_url(self, obj):
+    def get_logo(self, obj):
         """Return the URL of the corporate partner's logo."""
         try:
-            return obj.logo.url
+            return f"{settings.LMS_ROOT_URL}{obj.logo.url}"
         except (ValueError, AttributeError):
             return None
 
@@ -62,6 +72,7 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
     )
 
     email_regexes = serializers.SerializerMethodField()
+    courses = serializers.IntegerField(source="courses_count", read_only=True)
 
     class Meta:
         model = CorporatePartnerCatalog
@@ -81,8 +92,13 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
             "support_email",
             "is_public",
             "catalog_alternative_link",
+            "courses",
         ]
-        read_only_fields = ["id", "email_regexes"]
+        read_only_fields = [
+            "id",
+            "email_regexes",
+            "courses",
+        ]
         extra_kwargs = {
             "authorization_additional_message": {
                 "required": False,
