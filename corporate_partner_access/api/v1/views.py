@@ -1,17 +1,12 @@
 """Corporate Partner Access API v1 Views."""
 
+from celery.result import AsyncResult
 from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
-
-try:
-    from celery.result import AsyncResult
-except ImportError:
-    # Fallback for test environments without Celery
-    AsyncResult = None
 
 from corporate_partner_access.api.v1 import tasks as partner_tasks
 from corporate_partner_access.api.v1.schemas import bulk_status_schema, bulk_upload_schema
@@ -170,11 +165,6 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
         Check the status of a bulk upload task by task_id.
         Query parameter: task_id
         """
-        if not AsyncResult:
-            return Response(
-                {"detail": "Celery not available in this environment."},
-                status=status.HTTP_503_SERVICE_UNAVAILABLE
-            )
         task_id = request.query_params.get("task_id")
         if not task_id:
             return Response({"detail": "task_id parameter is required."}, status=status.HTTP_400_BAD_REQUEST)

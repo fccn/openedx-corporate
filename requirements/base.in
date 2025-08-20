@@ -5,6 +5,7 @@ Django             # Web application framework
 
 
 openedx-atlas
+celery             # Task queue for async operations
 edx-django-utils  # Utility functions for Django applications
 django-model-utils
 djangorestframework
