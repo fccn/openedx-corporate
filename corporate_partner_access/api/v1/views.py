@@ -1,5 +1,6 @@
 """Corporate Partner Access API v1 Views."""
 
+from django.db.models import Count
 from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated
 from rest_framework import filters, viewsets
@@ -20,13 +21,16 @@ from corporate_partner_access.models import (
 )
 
 
-class CorporatePartnerViewSet(viewsets.ModelViewSet):
+class CorporatePartnerViewSet(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for Corporate Partner data.
     Provides access to corporate partner information.
     """
 
-    queryset = CorporatePartner.objects.all()
+    queryset = CorporatePartner.objects.annotate(
+        catalogs_count=Count("catalogs", distinct=True),
+        courses_count=Count("catalogs__courses", distinct=True),
+    )
     serializer_class = CorporatePartnerSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -67,8 +71,10 @@ class CorporatePartnerCatalogViewSet(InjectNestedFKMixin, viewsets.ModelViewSet)
     ViewSet for Corporate Partner Catalog data.
     Provides access to corporate partner catalog information.
     """
-
-    queryset = CorporatePartnerCatalog.objects.all()  # pylint: disable=E1111
+    # pylint: disable=E1111
+    queryset = CorporatePartnerCatalog.objects.annotate(
+        courses_count=Count("courses", distinct=True),
+    )
     serializer_class = CorporatePartnerCatalogSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [
