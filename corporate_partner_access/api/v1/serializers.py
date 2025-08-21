@@ -1,5 +1,7 @@
 """Serializer for Corporate Partner access API v1."""
 
+import random
+
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
@@ -34,6 +36,10 @@ class CorporatePartnerSerializer(serializers.ModelSerializer):
     catalogs = serializers.IntegerField(source="catalogs_count", read_only=True)
     courses = serializers.IntegerField(source="courses_count", read_only=True)
 
+    # TODO: Replace implementation
+    enrollments = serializers.SerializerMethodField()
+    certified = serializers.SerializerMethodField()
+
     class Meta:
         model = CorporatePartner
         fields = [
@@ -44,6 +50,8 @@ class CorporatePartnerSerializer(serializers.ModelSerializer):
             "logo",
             "catalogs",
             "courses",
+            "enrollments",
+            "certified",
         ]
         read_only_fields = ["id"]
         extra_kwargs = {
@@ -58,6 +66,15 @@ class CorporatePartnerSerializer(serializers.ModelSerializer):
         except (ValueError, AttributeError):
             return None
 
+    # TODO: Replace implementation
+    def get_enrollments(self, obj):  # pylint: disable=unused-argument
+        """Mocked enrollments count. Replace with real implementation."""
+        return random.randint(0, 10000)
+
+    def get_certified(self, obj):  # pylint: disable=unused-argument
+        """Mocked certified count. Replace with real implementation."""
+        return random.randint(0, 5000)
+
 
 class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
     """Serializer for Corporate Partner Catalog data."""
@@ -68,6 +85,11 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
 
     email_regexes = serializers.SerializerMethodField()
     courses = serializers.IntegerField(source="courses_count", read_only=True)
+
+    # TODO: Replace implementation
+    enrollments = serializers.SerializerMethodField()
+    certified = serializers.SerializerMethodField()
+    completion_rate = serializers.SerializerMethodField()
 
     class Meta:
         model = CorporatePartnerCatalog
@@ -88,6 +110,9 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
             "is_public",
             "catalog_alternative_link",
             "courses",
+            "enrollments",
+            "certified",
+            "completion_rate",
         ]
         read_only_fields = [
             "id",
@@ -120,6 +145,19 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
 
     def get_email_regexes(self, obj):
         return list(obj.email_regexes.all().values_list("regex", flat=True))
+
+    # TODO: Replace implementation
+    def get_enrollments(self, obj):  # pylint: disable=unused-argument
+        """Mocked enrollments count. Replace with real implementation."""
+        return random.randint(0, 10000)
+
+    def get_certified(self, obj):  # pylint: disable=unused-argument
+        """Mocked certified count. Replace with real implementation."""
+        return random.randint(0, 5000)
+
+    def get_completion_rate(self, obj):  # pylint: disable=unused-argument
+        """Mocked completion rate. Replace with real implementation."""
+        return random.randint(0, 100)
 
 
 class CatalogLearnerSerializer(serializers.ModelSerializer):
@@ -157,10 +195,37 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
         source="course_overview", read_only=True
     )
 
+    # TODO: Replace implementation
+    enrollments = serializers.SerializerMethodField()
+    certified = serializers.SerializerMethodField()
+    completion_rate = serializers.SerializerMethodField()
+
     class Meta:
         model = CorporatePartnerCatalogCourse
-        fields = ["id", "course_overview", "position", "catalog_id", "course_run"]
-        read_only_fields = ["id", "course_run"]
+        fields = [
+            "id",
+            "course_overview",
+            "position",
+            "catalog_id",
+            "course_run",
+            "enrollments",
+            "certified",
+            "completion_rate",
+        ]
+        read_only_fields = ["id"]
+
+    # TODO: Replace implementation
+    def get_enrollments(self, obj):  # pylint: disable=unused-argument
+        """Mocked enrollments count. Replace with real implementation."""
+        return random.randint(0, 10000)
+
+    def get_certified(self, obj):  # pylint: disable=unused-argument
+        """Mocked certified count. Replace with real implementation."""
+        return random.randint(0, 5000)
+
+    def get_completion_rate(self, obj):  # pylint: disable=unused-argument
+        """Mocked completion rate. Replace with real implementation."""
+        return random.randint(0, 100)
 
 
 class CatalogEmailRegexSerializer(serializers.ModelSerializer):
