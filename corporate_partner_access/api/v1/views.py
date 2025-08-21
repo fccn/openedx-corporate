@@ -1,9 +1,15 @@
 """Corporate Partner Access API v1 Views."""
 
+from celery.result import AsyncResult
 from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated
-from rest_framework import filters, viewsets
+from rest_framework import filters, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
+from rest_framework.response import Response
 
+from corporate_partner_access.api.v1 import tasks as partner_tasks
+from corporate_partner_access.api.v1.schemas import bulk_status_schema, bulk_upload_schema
 from corporate_partner_access.api.v1.serializers import (
     CatalogCourseSerializer,
     CatalogEmailRegexSerializer,
@@ -122,6 +128,57 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
         qs = self.queryset
         catalog_pk = self.kwargs.get("catalog_pk")
         return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
+
+    @bulk_upload_schema
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="bulk",
+        parser_classes=[MultiPartParser],
+    )
+    def bulk(self, request, partner_pk=None, catalog_pk=None):  # pylint: disable=unused-argument
+        """
+        Bulk upload learners to a catalog via CSV file (async).
+        CSV columns: username (or email), optional active (defaults to True)
+        Returns a Celery task ID for status tracking.
+        """
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+        # Save file content to pass to Celery (as string)
+        csv_content = file.read().decode(request.encoding or "utf-8")
+        # Enqueue Celery task
+        task = partner_tasks.bulk_upload_learners.delay(
+            csv_content=csv_content,
+            catalog_id=catalog_pk,
+        )
+        return Response({"task_id": task.id, "status": "processing"}, status=status.HTTP_202_ACCEPTED)
+
+    @bulk_status_schema
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="bulk_status",
+    )
+    def bulk_status(self, request, partner_pk=None, catalog_pk=None):  # pylint: disable=unused-argument
+        """
+        Check the status of a bulk upload task by task_id.
+        Query parameter: task_id
+        """
+        task_id = request.query_params.get("task_id")
+        if not task_id:
+            return Response({"detail": "task_id parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+        task_result = AsyncResult(task_id)
+        response_data = {
+            "task_id": task_id,
+            "status": task_result.status,
+        }
+        if task_result.ready():
+            if task_result.successful():
+                response_data["result"] = task_result.result
+            else:
+                response_data["error"] = str(task_result.info)
+        return Response(response_data, status=status.HTTP_200_OK)
 
 
 class CorporatePartnerCatalogCourseViewSet(InjectNestedFKMixin, viewsets.ModelViewSet):

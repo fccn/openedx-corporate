@@ -63,3 +63,7 @@ TEMPLATES = [{
 }]
 
 COURSE_OVERVIEW_BACKEND = "corporate_partner_access.test.backend_for_test"
+
+# Celery settings for testing
+CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_EAGER_PROPAGATES = True
