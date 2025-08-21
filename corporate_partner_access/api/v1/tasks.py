@@ -3,16 +3,8 @@
 import csv
 from io import StringIO
 
+from celery import shared_task
 from django.contrib.auth import get_user_model
-
-try:
-    from celery import shared_task
-except ImportError:
-    # Fallback for test environments without Celery
-    def shared_task(bind=False, **kwargs):  # pylint: disable=unused-argument
-        def decorator(func):
-            return func
-        return decorator
 
 from corporate_partner_access.models import CorporatePartnerCatalogLearner
 
