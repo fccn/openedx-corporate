@@ -11,13 +11,13 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from corporate_partner_access.api.v1 import tasks as partner_tasks
+from corporate_partner_access.api.v1.mixins import InjectNestedFKMixin, ReportMixin
 from corporate_partner_access.api.v1.schemas import (
     bulk_status_invitations_schema,
     bulk_status_learner_schema,
     bulk_upload_invitations_schema,
     bulk_upload_learner_schema,
 )
-from corporate_partner_access.api.v1.mixins import InjectNestedFKMixin, ReportMixin
 from corporate_partner_access.api.v1.serializers import (
     CatalogCourseEnrollmentAllowedCreateSerializer,
     CatalogCourseEnrollmentAllowedSerializer,
@@ -110,7 +110,14 @@ class CorporatePartnerCatalogViewSet(
     target_field_name = "corporate_partner"
 
     # Report config
-    report_fields = ["id", "name", "courses"]
+    report_fields = [
+        "id",
+        "name",
+        "courses",
+        "enrollments",
+        "certified",
+        "completion_rate",
+    ]
 
     def get_queryset(self):
         """Limit catalogs to those the user manages or views; staff see all."""
@@ -238,7 +245,15 @@ class CorporatePartnerCatalogCourseViewSet(
     target_field_name = "catalog_id"
 
     # Report config
-    report_fields = ["id", "name", "position", "course_run"]
+    report_fields = [
+        "id",
+        "name",
+        "position",
+        "course_run",
+        "enrollments",
+        "certified",
+        "completion_rate",
+    ]
 
     def get_queryset(self):
         """Get the queryset for catalog courses."""
