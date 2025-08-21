@@ -69,7 +69,14 @@ class CorporatePartnerCatalogViewSet(
     target_field_name = "corporate_partner"
 
     # Report config
-    report_fields = ["id", "name", "courses"]
+    report_fields = [
+        "id",
+        "name",
+        "courses",
+        "enrollments",
+        "certified",
+        "completion_rate",
+    ]
 
     def get_queryset(self):
         """Get the queryset for corporate partner catalogs."""
@@ -138,7 +145,15 @@ class CorporatePartnerCatalogCourseViewSet(
     target_field_name = "catalog_id"
 
     # Report config
-    report_fields = ["id", "name", "position", "course_run"]
+    report_fields = [
+        "id",
+        "name",
+        "position",
+        "course_run",
+        "enrollments",
+        "certified",
+        "completion_rate",
+    ]
 
     def get_queryset(self):
         """Get the queryset for catalog courses."""
