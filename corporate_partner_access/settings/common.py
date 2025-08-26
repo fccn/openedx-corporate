@@ -34,3 +34,7 @@ def plugin_settings(settings):
     settings.COURSE_OVERVIEW_BACKEND = (
         "corporate_partner_access.edxapp_wrapper.backends.course_module_v1"
     )
+
+    settings.SEARCH_ENGINE = (
+        "corporate_partner_access.search_engine.FlexibleCatalogCompatibleSearchEngine"
+    )
