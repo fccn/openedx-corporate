@@ -16,3 +16,4 @@ edx-drf-extensions
 pillow
 regex
 drf-spectacular
+django-crum
