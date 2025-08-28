@@ -1,9 +1,16 @@
 """Models for managing course catalogs and access for corporate partners."""
 
+import functools
+
 import regex
+from crum import get_current_user
+from django.apps import apps
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.functions import Lower
+from django.utils import timezone
 
 from corporate_partner_access.edxapp_wrapper.course_module import course_overview
 from flex_catalog.models import FlexibleCatalogModel
@@ -74,9 +81,97 @@ class CorporatePartnerCatalog(FlexibleCatalogModel):
         verbose_name_plural = "Corporate Partner Catalogs"
         ordering = ["name"]
 
+    @staticmethod
+    @functools.lru_cache(maxsize=1024)
+    def _compiled_regexes_for_catalog(catalog_id: int):
+        """
+        Get compiled regex patterns for a catalog.
+
+        Args:
+            catalog_id: The ID of the catalog
+
+        Returns:
+            Tuple of compiled regex patterns
+        """
+        # Get model dynamically to avoid circular imports
+        CatalogEmailRegex = apps.get_model(
+            'corporate_partner_access', 'CorporatePartnerCatalogEmailRegex'
+        )
+        pats = CatalogEmailRegex.objects.filter(
+            catalog_id=catalog_id
+        ).values_list("regex", flat=True)
+        compiled = []
+        for p in pats:
+            try:
+                anchored = p if p.startswith("^") or p.endswith("$") else f"^{p}$"
+                compiled.append(regex.compile(anchored, flags=regex.IGNORECASE))
+            except regex.error:
+                continue
+        return tuple(compiled)
+
+    def _effective_user(self):
+        """
+        Get the effective user for the current request.
+
+        Returns:
+            The current user or AnonymousUser if not authenticated
+        """
+        try:
+            u = get_current_user()
+        except Exception:  # pylint: disable=broad-exception-caught
+            u = None
+        # Consistent fallback: if no user or not authenticated, AnonymousUser
+        return u if getattr(u, "is_authenticated", False) else AnonymousUser()
+
+    def _email_matches(self, email: str) -> bool:
+        """
+        Check if the given email matches any regex pattern for this catalog.
+
+        Args:
+            email: The email to check
+
+        Returns:
+            True if email matches any pattern, False otherwise
+        """
+        if not email:
+            return False
+        normalized = email.casefold().strip()
+        for pat in self._compiled_regexes_for_catalog(self.id):
+            if pat.fullmatch(normalized):
+                return True
+        return False
+
     def get_course_runs(self):
         """Return all catalog course runs associated with this instance."""
-        return self.courses.all()
+        user = self._effective_user()
+        base_qs = self.courses.all()
+
+        # staff/superuser → all
+        if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
+            return base_qs
+
+        # if public catalog → all
+        if getattr(self, "is_public", False):
+            return base_qs
+
+        # if AnonymousUser → none
+        if not user.is_authenticated:
+            return course_overview().objects.none()
+
+        # If active learner → all
+        CatalogLearner = apps.get_model(
+            'corporate_partner_access', 'CorporatePartnerCatalogLearner'
+        )
+        if CatalogLearner.objects.filter(
+            catalog=self, user=user, active=True
+        ).exists():
+            return base_qs
+
+        # if email regex match → all
+        if self._email_matches(getattr(user, "email", "")):
+            return base_qs
+
+        return course_overview().objects.none()
 
 
 class CorporatePartnerCatalogEmailRegex(models.Model):
@@ -169,3 +264,174 @@ class CorporatePartnerCatalogLearner(models.Model):
     def __str__(self):
         """Return a string representation of the CorporatePartnerCatalogLearner instance."""
         return f"<CorporatePartnerCatalogLearner: {self.user.username} in {self.catalog.name}>"
+
+
+class CatalogCourseEnrollmentAllowed(models.Model):
+    """
+    Invitation to enroll in a specific course within a corporate partner catalog.
+
+    Tracks invitations sent to users (by email) to enroll in a catalog course,
+    their status (sent, accepted, declined), and metadata such as who invited
+    them and when the status changed. The `user` field may be null if the
+    invitee does not yet have an account; it will be set when a user with the
+    `invite_email` accepts or declines the invitation.
+    """
+
+    class Status(models.IntegerChoices):
+        """Possible invitation statuses."""
+
+        SENT = 10, "Sent"
+        ACCEPTED = 20, "Accepted"
+        DECLINED = 30, "Declined"
+
+    id = models.AutoField(primary_key=True)
+    catalog_course = models.ForeignKey(
+        "CorporatePartnerCatalogCourse",
+        on_delete=models.PROTECT,
+        related_name="enrollment_invites",
+    )
+    user = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text=(
+            "Linked user. May be null if no user exists for invite_email; "
+            "will be set once a user with this email accepts/declines."
+        ),
+        related_name="catalog_course_invites",
+    )
+
+    status = models.PositiveSmallIntegerField(
+        choices=Status.choices,
+        default=Status.SENT,
+        help_text="Status of the course enrollment invitation."
+    )
+
+    invite_email = models.EmailField(
+        null=True,
+        blank=True,
+        help_text="Invitation email address."
+    )
+
+    invited_at = models.DateTimeField(auto_now_add=True)
+    status_changed_at = models.DateTimeField(auto_now=True)
+
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    declined_at = models.DateTimeField(null=True, blank=True)
+
+    invited_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_enrollment_invites",
+        help_text="Who created/sent the invite."
+    )
+
+    class Meta:
+        """Database metadata and constraints for invitations."""
+
+        db_table = "cp_course_enrl_allowed"
+        indexes = [
+            models.Index(Lower("invite_email"), name="cpcea_email_ci_idx"),
+            models.Index(fields=["user"], name="cpcea_user_idx"),
+            models.Index(fields=["catalog_course", "status"], name="cpcea_course_status_idx"),
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["catalog_course", "user"],
+                name="cpcea_unique_course_user",
+                condition=models.Q(user__isnull=False),
+            ),
+            models.UniqueConstraint(
+                Lower("invite_email"), "catalog_course",
+                name="cpcea_unique_course_invite_email_ci",
+                condition=models.Q(invite_email__isnull=False),
+            ),
+            models.CheckConstraint(
+                check=models.Q(user__isnull=False) | models.Q(invite_email__isnull=False),
+                name="cpcea_user_or_email_required",
+            ),
+            models.CheckConstraint(
+                check=(
+                    (
+                        models.Q(status=10)
+                        & models.Q(accepted_at__isnull=True)
+                        & models.Q(declined_at__isnull=True)
+                    )
+                    | (
+                        models.Q(status=20)
+                        & models.Q(accepted_at__isnull=False)
+                        & models.Q(declined_at__isnull=True)
+                    )
+                    | (
+                        models.Q(status=30)
+                        & models.Q(declined_at__isnull=False)
+                        & models.Q(accepted_at__isnull=True)
+                    )
+                ),
+                name="cpcea_status_timestamp_consistency",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        """
+        Keep accepted_at / declined_at consistent with status.
+
+        Rules:
+          - SENT:      accepted_at = NULL, declined_at = NULL
+          - ACCEPTED:  accepted_at = now() if missing, declined_at = NULL
+          - DECLINED:  declined_at = now() if missing, accepted_at = NULL
+        """
+        now = timezone.now()
+        touched_fields: set[str] = set()
+
+        old_status = getattr(self, "_old_status", None)
+        if old_status is None and self.pk:
+            try:
+                old_status = type(self).objects.only("status").get(pk=self.pk).status
+            except type(self).DoesNotExist:
+                old_status = None
+
+        if self.status == self.Status.ACCEPTED:
+            desired = {
+                "accepted_at": self.accepted_at or now,
+                "declined_at": None,
+            }
+        elif self.status == self.Status.DECLINED:
+            desired = {
+                "accepted_at": None,
+                "declined_at": self.declined_at or now,
+            }
+        else:
+            desired = {
+                "accepted_at": None,
+                "declined_at": None,
+            }
+
+        for field, value in desired.items():
+            if getattr(self, field) != value:
+                setattr(self, field, value)
+                touched_fields.add(field)
+
+        status_changed = (old_status is not None and old_status != self.status)
+        if status_changed:
+            touched_fields.add("status_changed_at")
+
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            uf = set(update_fields)
+            if touched_fields:
+                uf |= touched_fields
+            if "status_changed_at" in touched_fields:
+                uf.add("status_changed_at")
+            kwargs["update_fields"] = list(uf)
+
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        """Return a readable label with course id, target email/user, and status."""
+        target = self.invite_email or getattr(self.user, "email", None) or "unknown"
+        return f"{self.catalog_course_id} → {target} [{self.get_status_display()}]"

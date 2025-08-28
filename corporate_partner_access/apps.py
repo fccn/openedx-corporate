@@ -2,6 +2,8 @@
 corporate_partner_access Django application initialization.
 """
 
+import importlib
+
 from django.apps import AppConfig
 from edx_django_utils.plugins import PluginSettings, PluginURLs
 
@@ -35,3 +37,8 @@ class CorporatePartnerAccessConfig(AppConfig):
             },
         },
     }
+
+    def ready(self):
+        """Initialize the application by importing signals module."""
+        importlib.import_module("corporate_partner_access.signals")
+        importlib.import_module("corporate_partner_access.consumers")

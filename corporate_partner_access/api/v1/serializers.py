@@ -1,10 +1,16 @@
 """Serializer for Corporate Partner access API v1."""
 
+from __future__ import annotations
+
+from typing import Any, Dict, Optional
+
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from rest_framework import serializers
 
 from corporate_partner_access.edxapp_wrapper.course_module import course_overview
 from corporate_partner_access.models import (
+    CatalogCourseEnrollmentAllowed,
     CorporatePartner,
     CorporatePartnerCatalog,
     CorporatePartnerCatalogCourse,
@@ -157,3 +163,88 @@ class CatalogEmailRegexSerializer(serializers.ModelSerializer):
         model = CorporatePartnerCatalogEmailRegex
         fields = ["id", "catalog_id", "regex"]
         read_only_fields = ["id"]
+
+
+class CatalogCourseEnrollmentAllowedSerializer(serializers.ModelSerializer):
+    """Read serializer."""
+
+    status_display = serializers.CharField(source="get_status_display", read_only=True)
+    catalog_course = serializers.PrimaryKeyRelatedField(read_only=True)
+    user = serializers.PrimaryKeyRelatedField(read_only=True)
+    invited_by = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = CatalogCourseEnrollmentAllowed
+        fields = [
+            "id",
+            "catalog_course",
+            "user",
+            "invite_email",
+            "status",
+            "status_display",
+            "invited_by",
+            "invited_at",
+            "status_changed_at",
+            "accepted_at",
+            "declined_at",
+        ]
+        read_only_fields = [
+            "id",
+            "catalog_course",
+            "user",
+            "invited_by",
+            "invited_at",
+            "status_changed_at",
+            "accepted_at",
+            "declined_at",
+            "status_display",
+        ]
+
+
+class CatalogCourseEnrollmentAllowedCreateSerializer(serializers.ModelSerializer):
+    """
+    Create serializer (only accepts `email`).
+
+    - Normalizes `email` to lowercase.
+    - If a user exists with that email, attach it to the invite.
+    - Idempotent on (catalog_course, email).
+    """
+
+    email = serializers.EmailField(write_only=True)
+
+    class Meta:
+        model = CatalogCourseEnrollmentAllowed
+        fields = ["email"]
+
+    def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
+        email = attrs.get("email", "").strip().lower()
+        if not email:
+            raise serializers.ValidationError({"email": "This field is required."})
+        attrs["email"] = email
+        return attrs
+
+    @transaction.atomic
+    def create(self, validated_data: Dict[str, Any]) -> CatalogCourseEnrollmentAllowed:
+        request = self.context.get("request")
+        catalog_course: CorporatePartnerCatalogCourse = self.context["catalog_course"]
+
+        email: str = validated_data["email"]
+
+        user: Optional[User] = User.objects.filter(email__iexact=email).first()
+
+        obj, created = CatalogCourseEnrollmentAllowed.objects.get_or_create(
+            catalog_course=catalog_course,
+            invite_email=email,
+            defaults={
+                "user": user,
+                "invited_by": request.user if request and request.user.is_authenticated else None,
+                "status": CatalogCourseEnrollmentAllowed.Status.SENT,
+            },
+        )
+
+        # If it existed and we just found the user, attach it now.
+        if not created and user and obj.user_id is None:
+            obj.user = user
+            obj.save(update_fields=["user"])
+
+        return obj
