@@ -25,7 +25,8 @@ logger = logging.getLogger("cpa.events")
 
 @receiver(CATALOG_CEA_CREATED_V1)
 def handle_catalog_cea_created(
-    sender: Any, invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any
+    sender: Any,  # pylint: disable=unused-argument
+    invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any
 ) -> None:
     """Handle creation of a CatalogCourseEnrollmentAllowed."""
     # TODO: Send email notification
@@ -34,7 +35,8 @@ def handle_catalog_cea_created(
 
 @receiver(CATALOG_CEA_UPDATED_V1)
 def handle_catalog_cea_updated(
-    sender: Any, invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any
+    sender: Any,  # pylint: disable=unused-argument
+    invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any
 ) -> None:
     """Handle updates to a CatalogCourseEnrollmentAllowed."""
     # TODO: Create catalog course enrollment
@@ -42,7 +44,10 @@ def handle_catalog_cea_updated(
 
 
 @receiver(CATALOG_CEA_ACCEPTED_V1)
-def handle_catalog_cea_accepted(sender: Any, invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any) -> None:
+def handle_catalog_cea_accepted(
+    sender: Any,  # pylint: disable=unused-argument
+    invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any
+) -> None:
     """When an invite is accepted, create/activate the enrollment (idempotent)."""
     def do_enroll() -> None:
         """
@@ -61,10 +66,14 @@ def handle_catalog_cea_accepted(sender: Any, invite: CatalogCourseEnrollmentAllo
 
 
 @receiver(CATALOG_CEA_DECLINED_V1)
-def handle_catalog_cea_declined(sender: Any, invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any) -> None:
+def handle_catalog_cea_declined(
+    sender: Any,  # pylint: disable=unused-argument
+    invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any
+) -> None:
     """When an invite is declined, run any side effect you want (logging for now)."""
     def after_commit() -> None:
-        """Handle side effects when a catalog course enrollment invite is declined.
+        """
+        Handle side effects when a catalog course enrollment invite is declined.
 
         This function is called after a CatalogCourseEnrollmentAllowed invitation is declined.
         You can implement any necessary side effects here, such as logging, notifying staff,

@@ -50,18 +50,23 @@ def _to_event_data(instance: CatalogCourseEnrollmentAllowed) -> CatalogCourseEnr
 
 
 @receiver(pre_save, sender=CatalogCourseEnrollmentAllowed)
-def _cea_stash_previous_status(sender: t.Any, instance: CatalogCourseEnrollmentAllowed, **_kwargs) -> None:
+def _cea_stash_previous_status(
+    sender: t.Any,  # pylint: disable=unused-argument
+    instance: CatalogCourseEnrollmentAllowed, **_kwargs
+) -> None:
     """Stash previous status in-memory so post_save can detect real transitions."""
     if instance.pk:
         try:
-            instance._old_status = type(instance).objects.only("status").get(pk=instance.pk).status  # noqa: SLF001
+            instance._old_status = (  # pylint: disable=protected-access
+                type(instance).objects.only("status").get(pk=instance.pk).status
+            )  # noqa: SLF001
         except type(instance).DoesNotExist:
-            instance._old_status = None  # creation-like path
+            instance._old_status = None  # pylint: disable=protected-access
 
 
 @receiver(post_save, sender=CatalogCourseEnrollmentAllowed)
 def emit_catalog_cea_events(
-    sender: t.Any,
+    sender: t.Any,  # pylint: disable=unused-argument
     instance: CatalogCourseEnrollmentAllowed,
     created: bool,
     **_kwargs,
