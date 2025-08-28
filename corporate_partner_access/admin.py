@@ -11,6 +11,7 @@ from corporate_partner_access.models import (
     CorporatePartnerCatalogCourse,
     CorporatePartnerCatalogEmailRegex,
     CorporatePartnerCatalogLearner,
+    CorporatePartnerManager,
 )
 from corporate_partner_access.services.invitations import InvitationService
 from flex_catalog.admin import CourseKeysMixin
@@ -20,7 +21,15 @@ from flex_catalog.admin import CourseKeysMixin
 class CorporatePartnerAdmin(admin.ModelAdmin):
     """Admin interface for CorporatePartner model."""
 
-    list_display = ["code", "name", "logo_thumbnail", "homepage_url", "catalog_count"]
+    inlines = []
+    list_display = [
+        "code",
+        "name",
+        "logo_thumbnail",
+        "homepage_url",
+        "catalog_count",
+        "add_manager",
+    ]
     list_filter = ["name", "code"]
     search_fields = ["name", "code", "homepage_url"]
     ordering = ["code"]
@@ -55,6 +64,21 @@ class CorporatePartnerAdmin(admin.ModelAdmin):
         """Optimize queryset with prefetch_related for catalog count."""
         queryset = super().get_queryset(request)
         return queryset.prefetch_related("catalogs")
+
+    def add_manager(self, obj):
+        """Generate a link to add a new manager to this partner."""
+        manager_model = CorporatePartnerManager
+        add_manager_url = reverse(
+            f"admin:{manager_model._meta.app_label}_{manager_model._meta.model_name}_add"
+        )
+        full_url = f"{add_manager_url}?partner={obj.pk}"
+
+        return format_html(
+            '<a href="{}" style="font-weight: bold;"> Add Manager </a>',
+            full_url,
+        )
+
+    add_manager.short_description = "Add Manager"
 
 
 class CorporatePartnerCatalogEmailRegexInline(admin.TabularInline):
@@ -224,6 +248,24 @@ class CorporatePartnerCatalogLearnerAdmin(admin.ModelAdmin):
         return obj.user.email
 
     user_email.short_description = "Email"
+
+
+@admin.register(CorporatePartnerManager)
+class CorporatePartnerManagerAdmin(admin.ModelAdmin):
+    """Admin interface for CorporatePartnerManager model."""
+
+    list_display = ["id", "partner", "user", "role", "active"]
+    list_filter = ["partner", "role", "active"]
+    search_fields = [
+        "partner__name",
+        "partner__code",
+        "user__username",
+        "user__email",
+    ]
+    ordering = ["partner__code", "user__username"]
+    raw_id_fields = ["partner", "user"]
+
+    fieldsets = (("Assignment", {"fields": ("partner", "user", "role", "active")}),)
 
 
 @admin.register(CatalogCourseEnrollmentAllowed)
