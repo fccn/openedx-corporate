@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.functions import Lower
+from django.utils import timezone
 
 from corporate_partner_access.edxapp_wrapper.course_module import course_overview
 from corporate_partner_access.helpers.current_user import safe_get_current_user
@@ -284,6 +285,61 @@ class CatalogCourseEnrollmentAllowed(models.Model):
                 name="cpcea_status_timestamp_consistency",
             ),
         ]
+
+    def save(self, *args, **kwargs):
+        """
+        Keep accepted_at / declined_at consistent with status.
+
+        Rules:
+          - SENT:      accepted_at = NULL, declined_at = NULL
+          - ACCEPTED:  accepted_at = now() if missing, declined_at = NULL
+          - DECLINED:  declined_at = now() if missing, accepted_at = NULL
+        """
+        now = timezone.now()
+        touched_fields: set[str] = set()
+
+        old_status = getattr(self, "_old_status", None)
+        if old_status is None and self.pk:
+            try:
+                old_status = type(self).objects.only("status").get(pk=self.pk).status
+            except type(self).DoesNotExist:
+                old_status = None
+
+        if self.status == self.Status.ACCEPTED:
+            desired = {
+                "accepted_at": self.accepted_at or now,
+                "declined_at": None,
+            }
+        elif self.status == self.Status.DECLINED:
+            desired = {
+                "accepted_at": None,
+                "declined_at": self.declined_at or now,
+            }
+        else:
+            desired = {
+                "accepted_at": None,
+                "declined_at": None,
+            }
+
+        for field, value in desired.items():
+            if getattr(self, field) != value:
+                setattr(self, field, value)
+                touched_fields.add(field)
+
+        status_changed = (old_status is not None and old_status != self.status)
+        if status_changed:
+            touched_fields.add("status_changed_at")
+
+        update_fields = kwargs.get("update_fields")
+        if update_fields is not None:
+            uf = set(update_fields)
+            if touched_fields:
+                uf |= touched_fields
+            if "status_changed_at" in touched_fields:
+                uf.add("status_changed_at")
+            kwargs["update_fields"] = list(uf)
+
+        super().save(*args, **kwargs)
 
     def __str__(self):
         """Return a readable label with course id, target email/user, and status."""

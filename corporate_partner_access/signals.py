@@ -10,14 +10,21 @@ from __future__ import annotations
 import typing as t
 
 from django.db import transaction
-from django.db.models.signals import post_delete, post_save
+from django.db.models.signals import post_delete, post_save, pre_save
 from django.dispatch import receiver
 
 from corporate_partner_access.events.data import CatalogCourseEnrollmentAllowedData
-from corporate_partner_access.events.signals import CATALOG_CEA_CREATED_V1, CATALOG_CEA_UPDATED_V1
-
+from corporate_partner_access.events.signals import (
+    CATALOG_CEA_ACCEPTED_V1,
+    CATALOG_CEA_CREATED_V1,
+    CATALOG_CEA_DECLINED_V1,
+    CATALOG_CEA_UPDATED_V1,
+)
 from corporate_partner_access.helpers.regex_cache import clear_email_regex_cache
-from corporate_partner_access.models import CorporatePartnerCatalogEmailRegex, CatalogCourseEnrollmentAllowed
+from corporate_partner_access.models import (
+    CatalogCourseEnrollmentAllowed,
+    CorporatePartnerCatalogEmailRegex,
+)
 
 
 @receiver([post_save, post_delete], sender=CorporatePartnerCatalogEmailRegex)
@@ -42,15 +49,45 @@ def _to_event_data(instance: CatalogCourseEnrollmentAllowed) -> CatalogCourseEnr
     )
 
 
-@receiver(post_save, sender=CatalogCourseEnrollmentAllowed)
-def emit_catalog_cea_events(_sender: t.Any, instance: CatalogCourseEnrollmentAllowed, created: bool, **_kwargs):
-    """Emit events after a CatalogCourseEnrollmentAllowed is created or updated."""
+@receiver(pre_save, sender=CatalogCourseEnrollmentAllowed)
+def _cea_stash_previous_status(sender: t.Any, instance: CatalogCourseEnrollmentAllowed, **_kwargs) -> None:
+    """Stash previous status in-memory so post_save can detect real transitions."""
+    if instance.pk:
+        try:
+            instance._old_status = type(instance).objects.only("status").get(pk=instance.pk).status  # noqa: SLF001
+        except type(instance).DoesNotExist:
+            instance._old_status = None  # creation-like path
 
-    def after_commit():
+
+@receiver(post_save, sender=CatalogCourseEnrollmentAllowed)
+def emit_catalog_cea_events(
+    sender: t.Any,
+    instance: CatalogCourseEnrollmentAllowed,
+    created: bool,
+    **_kwargs,
+) -> None:
+    """Emit CREATED/UPDATED, and ACCEPTED/DECLINED on real transitions."""
+
+    def after_commit() -> None:
         data = _to_event_data(instance)
+
         if created:
             CATALOG_CEA_CREATED_V1.send_event(invite=data)
-        else:
-            CATALOG_CEA_UPDATED_V1.send_event(invite=data)
+            return
+
+        # Always emit UPDATED for non-create saves
+        CATALOG_CEA_UPDATED_V1.send_event(invite=data)
+
+        old = getattr(instance, "_old_status", None)
+        new = instance.status
+
+        if old is None:
+            return
+
+        if old != new:
+            if new == CatalogCourseEnrollmentAllowed.Status.ACCEPTED:
+                CATALOG_CEA_ACCEPTED_V1.send_event(invite=data)
+            elif new == CatalogCourseEnrollmentAllowed.Status.DECLINED:
+                CATALOG_CEA_DECLINED_V1.send_event(invite=data)
 
     transaction.on_commit(after_commit)
