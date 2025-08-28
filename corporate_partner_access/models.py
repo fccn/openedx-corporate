@@ -76,10 +76,9 @@ class CorporatePartnerCatalog(FlexibleCatalogModel):
         related_name="enrolled_catalogs",
     )
 
-    # Managers at the catalog level (through CorporatePartnerManager)
     managers = models.ManyToManyField(
         get_user_model(),
-        through="CorporatePartnerManager",
+        through="CorporatePartnerCatalogManager",
         related_name="managed_partner_catalogs",
     )
 
@@ -187,7 +186,7 @@ class CorporatePartnerCatalogLearner(models.Model):
         return f"<CorporatePartnerCatalogLearner: {self.user.username} in {self.catalog.name}>"
 
 
-class CorporatePartnerManager(models.Model):
+class CorporatePartnerCatalogManager(models.Model):
     """Pivot table linking catalogs to managers."""
 
     id = models.AutoField(primary_key=True)
@@ -201,7 +200,7 @@ class CorporatePartnerManager(models.Model):
     active = models.BooleanField(default=True)
 
     class Meta:
-        """Meta options for CorporatePartnerManager model."""
+        """Meta options for CorporatePartnerCatalogManager model."""
 
         verbose_name = "Corporate Partner Catalog Manager"
         verbose_name_plural = "Corporate Partner Catalog Managers"
@@ -210,7 +209,7 @@ class CorporatePartnerManager(models.Model):
 
     # pylint: disable=no-member
     def __str__(self):
-        """Return a string representation of the CorporatePartnerManager instance."""
+        """Return a string representation of the CorporatePartnerCatalogManager instance."""
         return (
             f"<CorporatePartnerCatalogManager: {self.user.username} as {self.role} in {self.catalog.name}>"
         )

@@ -12,7 +12,7 @@ from .models import (
     CorporatePartnerCatalogCourse,
     CorporatePartnerCatalogEmailRegex,
     CorporatePartnerCatalogLearner,
-    CorporatePartnerManager,
+    CorporatePartnerCatalogManager,
 )
 
 
@@ -194,7 +194,7 @@ class CorporatePartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
 
     def add_manager(self, obj):
         """Generate a link to add a new manager (catalog-level)."""
-        manager_model = CorporatePartnerManager
+        manager_model = CorporatePartnerCatalogManager
         add_manager_url = reverse(
             f"admin:{manager_model._meta.app_label}_{manager_model._meta.model_name}_add"
         )
@@ -249,9 +249,9 @@ class CorporatePartnerCatalogLearnerAdmin(admin.ModelAdmin):
     user_email.short_description = "Email"
 
 
-@admin.register(CorporatePartnerManager)
-class CorporatePartnerManagerAdmin(admin.ModelAdmin):
-    """Admin interface for CorporatePartnerManager model."""
+@admin.register(CorporatePartnerCatalogManager)
+class CorporatePartnerCatalogManagerAdmin(admin.ModelAdmin):
+    """Admin interface for CorporatePartnerCatalogManager model."""
 
     list_display = ["id", "catalog", "user", "role", "active"]
     list_filter = ["catalog__corporate_partner", "catalog", "role", "active"]
