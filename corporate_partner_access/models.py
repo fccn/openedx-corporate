@@ -29,11 +29,6 @@ class CorporatePartner(models.Model):
     name = models.CharField(max_length=255)
     logo = models.ImageField(upload_to="partner_logos/", blank=True, null=True)
     homepage_url = models.URLField(blank=True, null=True)
-    managers = models.ManyToManyField(
-        get_user_model(),
-        through="CorporatePartnerManager",
-        related_name="corporate_partners",
-    )
 
     class Meta:
         """Meta options for CorporatePartner model."""
@@ -82,6 +77,13 @@ class CorporatePartnerCatalog(FlexibleCatalogModel):
         get_user_model(),
         through="CorporatePartnerCatalogLearner",
         related_name="enrolled_catalogs",
+    )
+
+    # Managers at the catalog level (through CorporatePartnerManager)
+    managers = models.ManyToManyField(
+        get_user_model(),
+        through="CorporatePartnerManager",
+        related_name="managed_partner_catalogs",
     )
 
     class Meta:
@@ -193,26 +195,29 @@ class CorporatePartnerManager(models.Model):
     """Pivot table linking catalogs to managers."""
 
     id = models.AutoField(primary_key=True)
-    partner = models.ForeignKey(
-        "CorporatePartner",
+    catalog = models.ForeignKey(
+        "CorporatePartnerCatalog",
         on_delete=models.CASCADE,
-        related_name="partner_managers",
+        related_name="catalog_managers",
     )
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     role = models.CharField(max_length=100, choices=PartnerManagerRole.CHOICES)
     active = models.BooleanField(default=True)
 
     class Meta:
-        """Meta options for CorporatePartnerCatalogManager model."""
+        """Meta options for CorporatePartnerManager model."""
 
         verbose_name = "Corporate Partner Catalog Manager"
         verbose_name_plural = "Corporate Partner Catalog Managers"
-        unique_together = ("partner", "user")
+        unique_together = ("catalog", "user")
+        indexes = [models.Index(fields=["catalog", "user"])]
 
     # pylint: disable=no-member
     def __str__(self):
-        """Return a string representation of the CorporatePartnerCatalogManager instance."""
-        return f"<CorporatePartnerCatalogManager: {self.user.username} as {self.role} in {self.partner.name}>"
+        """Return a string representation of the CorporatePartnerManager instance."""
+        return (
+            f"<CorporatePartnerCatalogManager: {self.user.username} as {self.role} in {self.catalog.name}>"
+        )
 
 
 class CatalogCourseEnrollmentAllowed(models.Model):

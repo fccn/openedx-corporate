@@ -28,7 +28,6 @@ class CorporatePartnerAdmin(admin.ModelAdmin):
         "logo_thumbnail",
         "homepage_url",
         "catalog_count",
-        "add_manager",
     ]
     list_filter = ["name", "code"]
     search_fields = ["name", "code", "homepage_url"]
@@ -65,21 +64,6 @@ class CorporatePartnerAdmin(admin.ModelAdmin):
         queryset = super().get_queryset(request)
         return queryset.prefetch_related("catalogs")
 
-    def add_manager(self, obj):
-        """Generate a link to add a new manager to this partner."""
-        manager_model = CorporatePartnerManager
-        add_manager_url = reverse(
-            f"admin:{manager_model._meta.app_label}_{manager_model._meta.model_name}_add"
-        )
-        full_url = f"{add_manager_url}?partner={obj.pk}"
-
-        return format_html(
-            '<a href="{}" style="font-weight: bold;"> Add Manager </a>',
-            full_url,
-        )
-
-    add_manager.short_description = "Add Manager"
-
 
 class CorporatePartnerCatalogEmailRegexInline(admin.TabularInline):
     """Inline admin for email regex patterns."""
@@ -106,6 +90,7 @@ class CorporatePartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
         "learner_count",
         "add_learner",
         "add_course",
+        "add_manager",
     ]
     list_filter = [
         "corporate_partner",
@@ -208,6 +193,21 @@ class CorporatePartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
 
     add_course.short_description = "Add Course"
 
+    def add_manager(self, obj):
+        """Generate a link to add a new manager (catalog-level)."""
+        manager_model = CorporatePartnerManager
+        add_manager_url = reverse(
+            f"admin:{manager_model._meta.app_label}_{manager_model._meta.model_name}_add"
+        )
+        full_url = f"{add_manager_url}?catalog={obj.pk}"
+
+        return format_html(
+            '<a href="{}" style="font-weight: bold;"> Add Manager </a>',
+            full_url,
+        )
+
+    add_manager.short_description = "Add Manager"
+
     def get_queryset(self, request):
         """Optimize queryset with select_related and prefetch_related."""
         queryset = super().get_queryset(request)
@@ -254,18 +254,18 @@ class CorporatePartnerCatalogLearnerAdmin(admin.ModelAdmin):
 class CorporatePartnerManagerAdmin(admin.ModelAdmin):
     """Admin interface for CorporatePartnerManager model."""
 
-    list_display = ["id", "partner", "user", "role", "active"]
-    list_filter = ["partner", "role", "active"]
+    list_display = ["id", "catalog", "user", "role", "active"]
+    list_filter = ["catalog__corporate_partner", "catalog", "role", "active"]
     search_fields = [
-        "partner__name",
-        "partner__code",
+        "catalog__name",
+        "catalog__corporate_partner__name",
         "user__username",
         "user__email",
     ]
-    ordering = ["partner__code", "user__username"]
-    raw_id_fields = ["partner", "user"]
+    ordering = ["catalog__corporate_partner__code", "catalog__name", "user__username"]
+    raw_id_fields = ["catalog", "user"]
 
-    fieldsets = (("Assignment", {"fields": ("partner", "user", "role", "active")}),)
+    fieldsets = (("Assignment", {"fields": ("catalog", "user", "role", "active")}),)
 
 
 @admin.register(CatalogCourseEnrollmentAllowed)
