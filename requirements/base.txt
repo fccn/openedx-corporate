@@ -11,6 +11,7 @@ asgiref==3.9.1
 attrs==25.3.0
     # via
     #   jsonschema
+    #   openedx-events
     #   referencing
 billiard==4.2.1
     # via celery
@@ -54,6 +55,8 @@ django==4.2.23
     #   drf-spectacular
     #   edx-django-utils
     #   edx-drf-extensions
+    #   openedx-events
+    #   openedx-filters
 django-crum==0.7.9
     # via
     #   -r requirements/base.in
@@ -81,16 +84,24 @@ drf-nested-routers==0.94.2
     # via -r requirements/base.in
 drf-spectacular==0.28.0
     # via -r requirements/base.in
+edx-ccx-keys==2.0.2
+    # via openedx-events
 edx-django-utils==8.0.0
     # via
     #   -r requirements/base.in
     #   edx-drf-extensions
+    #   openedx-events
 edx-drf-extensions==10.6.0
     # via -r requirements/base.in
-edx-opaque-keys==3.0.0
+edx-opaque-keys[django]==3.0.0
     # via
     #   -r requirements/base.in
+    #   edx-ccx-keys
     #   edx-drf-extensions
+    #   openedx-events
+    #   openedx-filters
+fastavro==1.12.0
+    # via openedx-events
 idna==3.10
     # via requests
 inflection==0.5.1
@@ -102,6 +113,10 @@ jsonschema-specifications==2025.4.1
 kombu==5.5.4
     # via celery
 openedx-atlas==0.7.0
+    # via -r requirements/base.in
+openedx-events==10.5.0
+    # via -r requirements/base.in
+openedx-filters==2.1.0
     # via -r requirements/base.in
 packaging==25.0
     # via
@@ -144,7 +159,9 @@ rpds-py==0.27.0
 semantic-version==2.10.0
     # via edx-drf-extensions
 six==1.17.0
-    # via python-dateutil
+    # via
+    #   edx-ccx-keys
+    #   python-dateutil
 sqlparse==0.5.3
     # via django
 stevedore==5.4.1

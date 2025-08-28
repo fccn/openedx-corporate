@@ -41,3 +41,4 @@ class CorporatePartnerAccessConfig(AppConfig):
     def ready(self):
         """Initialize the application by importing signals module."""
         importlib.import_module("corporate_partner_access.signals")
+        importlib.import_module("corporate_partner_access.consumers")
