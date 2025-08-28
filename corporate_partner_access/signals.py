@@ -33,13 +33,19 @@ def _clear_regex_cache_for_catalog(_catalog_id: int | None = None):
 
 
 @receiver(post_save, sender=CorporatePartnerCatalogEmailRegex)
-def on_regex_saved(sender: t.Any, instance, **_kwargs):
+def on_regex_saved(
+    sender: t.Any,  # pylint: disable=unused-argument
+    instance, **_kwargs
+):
     """Clear cache when a regex pattern is saved."""
     _clear_regex_cache_for_catalog(instance.catalog_id)
 
 
 @receiver(post_delete, sender=CorporatePartnerCatalogEmailRegex)
-def on_regex_deleted(sender: t.Any, instance, **_kwargs):
+def on_regex_deleted(
+    sender: t.Any,  # pylint: disable=unused-argument
+    instance, **_kwargs
+):
     """Clear cache when a regex pattern is deleted."""
     _clear_regex_cache_for_catalog(instance.catalog_id)
 
@@ -59,18 +65,23 @@ def _to_event_data(instance: CatalogCourseEnrollmentAllowed) -> CatalogCourseEnr
 
 
 @receiver(pre_save, sender=CatalogCourseEnrollmentAllowed)
-def _cea_stash_previous_status(sender: t.Any, instance: CatalogCourseEnrollmentAllowed, **_kwargs) -> None:
+def _cea_stash_previous_status(
+    sender: t.Any,  # pylint: disable=unused-argument
+    instance: CatalogCourseEnrollmentAllowed, **_kwargs
+) -> None:
     """Stash previous status in-memory so post_save can detect real transitions."""
     if instance.pk:
         try:
-            instance._old_status = type(instance).objects.only("status").get(pk=instance.pk).status  # noqa: SLF001
+            instance._old_status = (  # pylint: disable=protected-access
+                type(instance).objects.only("status").get(pk=instance.pk).status
+            )  # noqa: SLF001
         except type(instance).DoesNotExist:
-            instance._old_status = None  # creation-like path
+            instance._old_status = None  # pylint: disable=protected-access
 
 
 @receiver(post_save, sender=CatalogCourseEnrollmentAllowed)
 def emit_catalog_cea_events(
-    sender: t.Any,
+    sender: t.Any,  # pylint: disable=unused-argument
     instance: CatalogCourseEnrollmentAllowed,
     created: bool,
     **_kwargs,
