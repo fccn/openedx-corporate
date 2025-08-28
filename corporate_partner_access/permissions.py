@@ -2,7 +2,7 @@
 
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
-from corporate_partner_access.models import CorporatePartnerCatalogManager, PartnerManagerRole
+from corporate_partner_access.models import CatalogManagerRole, CorporatePartnerCatalogManager
 
 
 class IsPartnerCatalogManager(BasePermission):
@@ -38,9 +38,9 @@ class IsPartnerCatalogManager(BasePermission):
             return True
 
         roles = set(qs.values_list("role", flat=True))
-        if PartnerManagerRole.PARTNER_MANAGER in roles:
+        if CatalogManagerRole.CATALOG_MANAGER in roles:
             return True
-        if PartnerManagerRole.PARTNER_VIEWER in roles:
+        if CatalogManagerRole.CATALOG_VIEWER in roles:
             return request.method in SAFE_METHODS
 
         return False

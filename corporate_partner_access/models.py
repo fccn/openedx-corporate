@@ -12,12 +12,12 @@ from corporate_partner_access.services.allowed_courses import CatalogAllowedCour
 from flex_catalog.models import FlexibleCatalogModel
 
 
-class PartnerManagerRole:
-    PARTNER_MANAGER = "partner_manager"
-    PARTNER_VIEWER = "partner_viewer"
+class CatalogManagerRole:
+    CATALOG_MANAGER = "catalog_manager"
+    CATALOG_VIEWER = "catalog_viewer"
     CHOICES = (
-        (PARTNER_MANAGER, "Partner Manager"),
-        (PARTNER_VIEWER, "Partner Viewer"),
+        (CATALOG_MANAGER, "Catalog Manager"),
+        (CATALOG_VIEWER, "Catalog Viewer"),
     )
 
 
@@ -200,7 +200,7 @@ class CorporatePartnerCatalogManager(models.Model):
         related_name="catalog_managers",
     )
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
-    role = models.CharField(max_length=100, choices=PartnerManagerRole.CHOICES)
+    role = models.CharField(max_length=100, choices=CatalogManagerRole.CHOICES)
     active = models.BooleanField(default=True)
 
     class Meta:
