@@ -2,7 +2,7 @@
 
 from rest_framework.permissions import SAFE_METHODS, BasePermission
 
-from corporate_partner_access.models import CorporatePartnerManager, PartnerManagerRole
+from corporate_partner_access.models import CorporatePartnerCatalogManager, PartnerManagerRole
 
 
 class IsPartnerCatalogManager(BasePermission):
@@ -29,7 +29,7 @@ class IsPartnerCatalogManager(BasePermission):
         catalog_pk = view.kwargs.get("catalog_pk")
         partner_pk = view.kwargs.get("partner_pk")
 
-        qs = CorporatePartnerManager.objects.filter(user=user, active=True)
+        qs = CorporatePartnerCatalogManager.objects.filter(user=user, active=True)
         if catalog_pk:
             qs = qs.filter(catalog_id=catalog_pk)
         elif partner_pk:
