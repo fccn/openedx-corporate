@@ -5,7 +5,7 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
 
 
-def bulk_upload_schema(func):
+def bulk_upload_learner_schema(func):
     return extend_schema(
         summary="Bulk upload learners to catalog via CSV",
         description=dedent("""
@@ -64,7 +64,7 @@ def bulk_upload_schema(func):
     )(func)
 
 
-def bulk_status_schema(func):
+def bulk_status_learner_schema(func):
     return extend_schema(
         summary="Check bulk upload task status",
         description=dedent("""
@@ -134,4 +134,139 @@ def bulk_status_schema(func):
             ),
         },
         tags=["Learners"]
+    )(func)
+
+
+def bulk_upload_invitations_schema(func):
+    return extend_schema(
+        summary="Bulk upload invitations to catalog course via CSV",
+        description=dedent("""
+        Upload a CSV file to invite multiple users to a catalog course asynchronously.
+
+        **CSV Format:**
+        - `email`: User's email address
+
+        **CSV Example:**
+        ```csv
+        email
+        john@example.com
+        jane@example.com
+        ```
+
+        **Notes:**
+        - Processing is done asynchronously via Celery
+        """),
+        request={
+            'multipart/form-data': {
+                'type': 'object',
+                'properties': {
+                    'file': {
+                        'type': 'string',
+                        'format': 'binary',
+                        'description': 'CSV file with learner data'
+                    }
+                },
+                'required': ['file']
+            }
+        },
+        responses={
+            202: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Task queued successfully",
+                examples=[
+                    OpenApiExample(
+                        'Success Response',
+                        value={"task_id": "550e8400-e29b-41d4-a716-446655440000", "status": "processing"}
+                    )
+                ]
+            ),
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Bad request - missing file or invalid format",
+                examples=[OpenApiExample('Missing File', value={"detail": "No file uploaded."})]
+            )
+        },
+        tags=["Invitations"]
+    )(func)
+
+
+def bulk_status_invitations_schema(func):
+    return extend_schema(
+        summary="Check bulk invitations upload task status",
+        description=dedent("""
+        Check the status and results of a bulk upload task.
+
+        **Task Statuses:**
+        - `PENDING`: Task is queued but not yet started
+        - `STARTED`: Task is currently running
+        - `SUCCESS`: Task completed successfully
+        - `FAILURE`: Task failed with an error
+
+        **Response includes:**
+        - Task status and ID
+        - Results (if completed successfully)
+        - Error details (if failed)
+        """),
+        parameters=[
+            OpenApiParameter(
+                name="task_id",
+                type=OpenApiTypes.UUID,
+                location=OpenApiParameter.QUERY,
+                description="Celery task ID returned from bulk upload endpoint",
+                required=True,
+            )
+        ],
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Task status retrieved successfully",
+                examples=[
+                    OpenApiExample(
+                        'Pending Task',
+                        value={
+                            "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "status": "PENDING"
+                        }
+                    ),
+                    OpenApiExample('Completed Task', value={
+                        "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                        "status": "SUCCESS",
+                        "result": {
+                            "created": [
+                                {
+                                    "id": 1,
+                                    "email": "john@example.com",
+                                    "catalog_course_id": 1,
+                                    "status": 10,
+                                    "status_display": "Sent",
+                                    "created_now": True,
+                                }
+                            ],
+                            "failed": [
+                                {
+                                    "email": "john@example.com",
+                                    "catalog_course_id": 1,
+                                    "error": "Error message",
+                                    "row": {"email": "john@example.com"},
+                                }
+                            ]
+                        }
+                    }),
+                    OpenApiExample(
+                        'Failed Task',
+                        value={
+                            "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                            "status": "FAILURE",
+                            "error": "Invalid CSV format"
+                        }
+                    )
+                ]
+            ),
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Bad request - missing task_id",
+                examples=[OpenApiExample('Missing Task ID', value={"detail": "task_id parameter is required."})]
+            ),
+        },
+        tags=["Invitations"]
     )(func)

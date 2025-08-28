@@ -1,16 +1,24 @@
 """Corporate Partner Access API v1 Views."""
 
 from celery.result import AsyncResult
+from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated
-from rest_framework import filters, status, viewsets
+from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from corporate_partner_access.api.v1 import tasks as partner_tasks
-from corporate_partner_access.api.v1.schemas import bulk_status_schema, bulk_upload_schema
+from corporate_partner_access.api.v1.schemas import (
+    bulk_status_invitations_schema,
+    bulk_status_learner_schema,
+    bulk_upload_invitations_schema,
+    bulk_upload_learner_schema,
+)
 from corporate_partner_access.api.v1.serializers import (
+    CatalogCourseEnrollmentAllowedCreateSerializer,
+    CatalogCourseEnrollmentAllowedSerializer,
     CatalogCourseSerializer,
     CatalogEmailRegexSerializer,
     CatalogLearnerSerializer,
@@ -18,6 +26,7 @@ from corporate_partner_access.api.v1.serializers import (
     CorporatePartnerSerializer,
 )
 from corporate_partner_access.models import (
+    CatalogCourseEnrollmentAllowed,
     CorporatePartner,
     CorporatePartnerCatalog,
     CorporatePartnerCatalogCourse,
@@ -129,7 +138,7 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
         catalog_pk = self.kwargs.get("catalog_pk")
         return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
 
-    @bulk_upload_schema
+    @bulk_upload_learner_schema
     @action(
         detail=False,
         methods=["post"],
@@ -154,7 +163,7 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
         )
         return Response({"task_id": task.id, "status": "processing"}, status=status.HTTP_202_ACCEPTED)
 
-    @bulk_status_schema
+    @bulk_status_learner_schema
     @action(
         detail=False,
         methods=["get"],
@@ -233,3 +242,101 @@ class CorporatePartnerCatalogEmailRegexViewSet(
         qs = self.queryset
         catalog_pk = self.kwargs.get("catalog_pk")
         return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
+
+
+class CatalogCourseEnrollmentAllowedViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """
+    /partners/{partner_pk}/catalogs/{catalog_pk}/courses/{course_pk}/invites/
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get_catalog_course(self) -> CorporatePartnerCatalogCourse:
+        course_pk = self.kwargs["course_pk"]
+        return CorporatePartnerCatalogCourse.objects.get(pk=course_pk)
+
+    def get_queryset(self):
+        return CatalogCourseEnrollmentAllowed.objects.select_related(
+            "catalog_course", "user", "invited_by"
+        ).filter(catalog_course_id=self.kwargs["course_pk"])
+
+    def get_serializer_class(self):
+        if self.action in ("create"):
+            return CatalogCourseEnrollmentAllowedCreateSerializer
+        return CatalogCourseEnrollmentAllowedSerializer
+
+    def get_serializer_context(self):
+        ctx = super().get_serializer_context()
+        if self.action in ("create"):
+            ctx["catalog_course"] = self.get_catalog_course()
+        return ctx
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        """
+        Create one invite (idempotent on (course, invite_email) lowercased).
+        Body: {"emaill": "..."}
+        """
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        obj = serializer.save()
+
+        out = CatalogCourseEnrollmentAllowedSerializer(obj, context=self.get_serializer_context())
+
+        headers = self.get_success_headers(out.data)
+        return Response(out.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    @bulk_upload_invitations_schema
+    @action(
+        detail=False,
+        methods=["post"],
+        url_path="bulk",
+        parser_classes=[MultiPartParser],
+    )
+    def bulk(self, request, partner_pk=None, catalog_pk=None, course_pk=None):  # pylint: disable=unused-argument
+        """
+        Bulk upload invitations to a catalog course via CSV file (async).
+        CSV columns: email
+        Returns a Celery task ID for status tracking.
+        """
+        file = request.FILES.get("file")
+        if not file:
+            return Response({"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+
+        csv_content = file.read().decode(request.encoding or "utf-8")
+        task = partner_tasks.bulk_upload_invitations.delay(
+            csv_content=csv_content,
+            catalog_course_id=course_pk,
+            invited_by_id=request.user.id
+        )
+        return Response({"task_id": task.id, "status": "processing"}, status=status.HTTP_202_ACCEPTED)
+
+    @bulk_status_invitations_schema
+    @action(
+        detail=False,
+        methods=["get"],
+        url_path="bulk_status",
+    )
+    def bulk_status(self, request, partner_pk=None, catalog_pk=None, course_pk=None):  # pylint: disable=unused-argument
+        """
+        Check the status of a bulk upload task by task_id.
+        Query parameter: task_id
+        """
+        task_id = request.query_params.get("task_id")
+        if not task_id:
+            return Response({"detail": "task_id parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+        task_result = AsyncResult(task_id)
+        response_data = {
+            "task_id": task_id,
+            "status": task_result.status,
+        }
+        if task_result.ready():
+            if task_result.successful():
+                response_data["result"] = task_result.result
+            else:
+                response_data["error"] = str(task_result.info)
+        return Response(response_data, status=status.HTTP_200_OK)
