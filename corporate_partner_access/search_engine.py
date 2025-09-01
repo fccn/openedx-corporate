@@ -22,7 +22,7 @@ from django.conf import settings
 from opaque_keys.edx.keys import CourseKey
 from search.search_engine_base import SearchEngine  # third-party import before first-party
 
-from corporate_partner_access.policy.aggregate import allowed_courses_qs_for_current_user
+from corporate_partner_access.services.catalogs_aggregate import allowed_courses_qs_for_current_user
 
 
 def _load_engine_class() -> type:

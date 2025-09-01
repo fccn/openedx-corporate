@@ -1,16 +1,13 @@
 """Models for managing course catalogs and access for corporate partners."""
 
-import functools
-
 import regex
-from crum import get_current_user
-from django.apps import apps
 from django.contrib.auth import get_user_model
-from django.contrib.auth.models import AnonymousUser
 from django.core.exceptions import ValidationError
 from django.db import models
 
 from corporate_partner_access.edxapp_wrapper.course_module import course_overview
+from corporate_partner_access.helpers.current_user import safe_get_current_user
+from corporate_partner_access.services.allowed_courses import CatalogAllowedCoursesService
 from flex_catalog.models import FlexibleCatalogModel
 
 
@@ -79,97 +76,10 @@ class CorporatePartnerCatalog(FlexibleCatalogModel):
         verbose_name_plural = "Corporate Partner Catalogs"
         ordering = ["name"]
 
-    @staticmethod
-    @functools.lru_cache(maxsize=1024)
-    def _compiled_regexes_for_catalog(catalog_id: int):
-        """
-        Get compiled regex patterns for a catalog.
-
-        Args:
-            catalog_id: The ID of the catalog
-
-        Returns:
-            Tuple of compiled regex patterns
-        """
-        # Get model dynamically to avoid circular imports
-        CatalogEmailRegex = apps.get_model(
-            'corporate_partner_access', 'CorporatePartnerCatalogEmailRegex'
-        )
-        pats = CatalogEmailRegex.objects.filter(
-            catalog_id=catalog_id
-        ).values_list("regex", flat=True)
-        compiled = []
-        for p in pats:
-            try:
-                anchored = p if p.startswith("^") or p.endswith("$") else f"^{p}$"
-                compiled.append(regex.compile(anchored, flags=regex.IGNORECASE))
-            except regex.error:
-                continue
-        return tuple(compiled)
-
-    def _effective_user(self):
-        """
-        Get the effective user for the current request.
-
-        Returns:
-            The current user or AnonymousUser if not authenticated
-        """
-        try:
-            u = get_current_user()
-        except Exception:  # pylint: disable=broad-exception-caught
-            u = None
-        # Consistent fallback: if no user or not authenticated, AnonymousUser
-        return u if getattr(u, "is_authenticated", False) else AnonymousUser()
-
-    def _email_matches(self, email: str) -> bool:
-        """
-        Check if the given email matches any regex pattern for this catalog.
-
-        Args:
-            email: The email to check
-
-        Returns:
-            True if email matches any pattern, False otherwise
-        """
-        if not email:
-            return False
-        normalized = email.casefold().strip()
-        for pat in self._compiled_regexes_for_catalog(self.id):
-            if pat.fullmatch(normalized):
-                return True
-        return False
-
     def get_course_runs(self):
         """Return all catalog course runs associated with this instance."""
-        user = self._effective_user()
-        base_qs = self.courses.all()
-
-        # staff/superuser → all
-        if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
-            return base_qs
-
-        # if public catalog → all
-        if getattr(self, "is_public", False):
-            return base_qs
-
-        # if AnonymousUser → none
-        if not user.is_authenticated:
-            return course_overview().objects.none()
-
-        # If active learner → all
-        CatalogLearner = apps.get_model(
-            'corporate_partner_access', 'CorporatePartnerCatalogLearner'
-        )
-        if CatalogLearner.objects.filter(
-            catalog=self, user=user, active=True
-        ).exists():
-            return base_qs
-
-        # if email regex match → all
-        if self._email_matches(getattr(user, "email", "")):
-            return base_qs
-
-        return course_overview().objects.none()
+        user = safe_get_current_user()
+        return CatalogAllowedCoursesService.course_runs_for_user(catalog=self, user=user)
 
 
 class CorporatePartnerCatalogEmailRegex(models.Model):
