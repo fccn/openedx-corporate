@@ -8,6 +8,10 @@ amqp==5.3.1
     # via
     #   -r requirements/test.txt
     #   kombu
+annotated-types==0.7.0
+    # via
+    #   -r requirements/test.txt
+    #   pydantic
 asgiref==3.9.1
     # via
     #   -r requirements/test.txt
@@ -20,16 +24,24 @@ attrs==25.3.0
     # via
     #   -r requirements/test.txt
     #   jsonschema
+    #   openedx-events
     #   referencing
 billiard==4.2.1
     # via
     #   -r requirements/test.txt
     #   celery
+camel-converter[pydantic]==4.0.1
+    # via
+    #   -r requirements/test.txt
+    #   meilisearch
 celery==5.5.3
-    # via -r requirements/test.txt
+    # via
+    #   -r requirements/test.txt
+    #   event-tracking
 certifi==2025.8.3
     # via
     #   -r requirements/test.txt
+    #   elasticsearch
     #   requests
 cffi==1.17.1
     # via
@@ -67,7 +79,10 @@ click-repl==0.3.0
     #   -r requirements/test.txt
     #   celery
 code-annotations==2.3.0
-    # via edx-lint
+    # via
+    #   -r requirements/test.txt
+    #   edx-lint
+    #   edx-toggles
 coverage[toml]==7.9.2
     # via
     #   -r requirements/test.txt
@@ -92,10 +107,15 @@ django==4.2.23
     #   drf-spectacular
     #   edx-django-utils
     #   edx-drf-extensions
+    #   edx-search
+    #   edx-toggles
+    #   event-tracking
+    #   openedx-events
 django-crum==0.7.9
     # via
     #   -r requirements/test.txt
     #   edx-django-utils
+    #   edx-toggles
 django-filter==25.1
     # via -r requirements/test.txt
 django-model-utils==5.0.0
@@ -105,6 +125,7 @@ django-waffle==5.0.0
     #   -r requirements/test.txt
     #   edx-django-utils
     #   edx-drf-extensions
+    #   edx-toggles
 djangorestframework==3.16.1
     # via
     #   -r requirements/test.txt
@@ -124,18 +145,47 @@ drf-nested-routers==0.94.2
     # via -r requirements/test.txt
 drf-spectacular==0.28.0
     # via -r requirements/test.txt
+edx-ccx-keys==2.0.2
+    # via
+    #   -r requirements/test.txt
+    #   openedx-events
 edx-django-utils==8.0.0
     # via
     #   -r requirements/test.txt
     #   edx-drf-extensions
+    #   edx-toggles
+    #   event-tracking
+    #   openedx-events
 edx-drf-extensions==10.6.0
     # via -r requirements/test.txt
 edx-lint==5.6.0
     # via -r requirements/quality.in
-edx-opaque-keys==3.0.0
+edx-opaque-keys[django]==3.0.0
     # via
     #   -r requirements/test.txt
+    #   edx-ccx-keys
     #   edx-drf-extensions
+    #   openedx-events
+edx-search==4.1.3
+    # via -r requirements/test.txt
+edx-toggles==5.4.1
+    # via
+    #   -r requirements/test.txt
+    #   edx-search
+    #   event-tracking
+elasticsearch==7.9.1
+    # via
+    #   -c https://raw.githubusercontent.com/edx/edx-lint/master/edx_lint/files/common_constraints.txt
+    #   -r requirements/test.txt
+    #   edx-search
+event-tracking==3.3.0
+    # via
+    #   -r requirements/test.txt
+    #   edx-search
+fastavro==1.12.0
+    # via
+    #   -r requirements/test.txt
+    #   openedx-events
 idna==3.10
     # via
     #   -r requirements/test.txt
@@ -153,7 +203,9 @@ isort==6.0.1
     #   -r requirements/quality.in
     #   pylint
 jinja2==3.1.6
-    # via code-annotations
+    # via
+    #   -r requirements/test.txt
+    #   code-annotations
 jsonschema==4.25.0
     # via
     #   -r requirements/test.txt
@@ -167,11 +219,21 @@ kombu==5.5.4
     #   -r requirements/test.txt
     #   celery
 markupsafe==3.0.2
-    # via jinja2
+    # via
+    #   -r requirements/test.txt
+    #   jinja2
 mccabe==0.7.0
     # via pylint
+meilisearch==0.37.0
+    # via
+    #   -r requirements/test.txt
+    #   edx-search
 openedx-atlas==0.7.0
     # via -r requirements/test.txt
+openedx-events==10.5.0
+    # via
+    #   -r requirements/test.txt
+    #   event-tracking
 packaging==25.0
     # via
     #   -c requirements/constraints.txt
@@ -205,6 +267,14 @@ pycparser==2.22
     # via
     #   -r requirements/test.txt
     #   cffi
+pydantic==2.11.7
+    # via
+    #   -r requirements/test.txt
+    #   camel-converter
+pydantic-core==2.33.2
+    # via
+    #   -r requirements/test.txt
+    #   pydantic
 pydocstyle==6.3.0
     # via -r requirements/quality.in
 pygments==2.19.2
@@ -234,6 +304,7 @@ pymongo==4.14.0
     # via
     #   -r requirements/test.txt
     #   edx-opaque-keys
+    #   event-tracking
 pynacl==1.5.0
     # via
     #   -r requirements/test.txt
@@ -252,7 +323,13 @@ python-dateutil==2.9.0.post0
     #   -r requirements/test.txt
     #   celery
 python-slugify==8.0.4
-    # via code-annotations
+    # via
+    #   -r requirements/test.txt
+    #   code-annotations
+pytz==2025.2
+    # via
+    #   -r requirements/test.txt
+    #   event-tracking
 pyyaml==6.0.2
     # via
     #   -r requirements/test.txt
@@ -269,6 +346,7 @@ requests==2.32.4
     # via
     #   -r requirements/test.txt
     #   edx-drf-extensions
+    #   meilisearch
 rpds-py==0.27.0
     # via
     #   -r requirements/test.txt
@@ -281,7 +359,9 @@ semantic-version==2.10.0
 six==1.17.0
     # via
     #   -r requirements/test.txt
+    #   edx-ccx-keys
     #   edx-lint
+    #   event-tracking
     #   python-dateutil
 snowballstemmer==3.0.1
     # via pydocstyle
@@ -296,14 +376,23 @@ stevedore==5.4.1
     #   edx-django-utils
     #   edx-opaque-keys
 text-unidecode==1.3
-    # via python-slugify
+    # via
+    #   -r requirements/test.txt
+    #   python-slugify
 tomlkit==0.13.3
     # via pylint
 typing-extensions==4.14.1
     # via
     #   -r requirements/test.txt
     #   edx-opaque-keys
+    #   pydantic
+    #   pydantic-core
     #   referencing
+    #   typing-inspection
+typing-inspection==0.4.1
+    # via
+    #   -r requirements/test.txt
+    #   pydantic
 tzdata==2025.2
     # via
     #   -r requirements/test.txt
@@ -315,6 +404,7 @@ uritemplate==4.2.0
 urllib3==2.5.0
     # via
     #   -r requirements/test.txt
+    #   elasticsearch
     #   requests
 vine==5.1.0
     # via

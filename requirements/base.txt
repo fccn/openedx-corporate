@@ -55,7 +55,9 @@ django==4.2.23
     #   edx-django-utils
     #   edx-drf-extensions
 django-crum==0.7.9
-    # via edx-django-utils
+    # via
+    #   -r requirements/base.in
+    #   edx-django-utils
 django-filter==25.1
     # via -r requirements/base.in
 django-model-utils==5.0.0

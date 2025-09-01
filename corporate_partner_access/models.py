@@ -6,6 +6,8 @@ from django.core.exceptions import ValidationError
 from django.db import models
 
 from corporate_partner_access.edxapp_wrapper.course_module import course_overview
+from corporate_partner_access.helpers.current_user import safe_get_current_user
+from corporate_partner_access.services.allowed_courses import CatalogAllowedCoursesService
 from flex_catalog.models import FlexibleCatalogModel
 
 
@@ -76,7 +78,8 @@ class CorporatePartnerCatalog(FlexibleCatalogModel):
 
     def get_course_runs(self):
         """Return all catalog course runs associated with this instance."""
-        return self.courses.all()
+        user = safe_get_current_user()
+        return CatalogAllowedCoursesService.course_runs_for_user(catalog=self, user=user)
 
 
 class CorporatePartnerCatalogEmailRegex(models.Model):

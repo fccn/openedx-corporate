@@ -17,7 +17,7 @@ def plugin_settings(settings):
         "DESCRIPTION": "API documentation for Corporate Partner Access endpoints.",
         "VERSION": "1.0.0",
         "PREPROCESSING_HOOKS": [
-            "corporate_partner_access.utils.spectacular_filter_hook",
+            "corporate_partner_access.helpers.spectacular.spectacular_filter_hook",
         ],
     }
 
@@ -33,4 +33,8 @@ def plugin_settings(settings):
 
     settings.COURSE_OVERVIEW_BACKEND = (
         "corporate_partner_access.edxapp_wrapper.backends.course_module_v1"
+    )
+
+    settings.SEARCH_ENGINE = (
+        "corporate_partner_access.search_engine.FlexibleCatalogCompatibleSearchEngine"
     )
