@@ -341,3 +341,58 @@ class CatalogCourseEnrollmentAllowed(models.Model):
         """Return a readable label with course id, target email/user, and status."""
         target = self.invite_email or getattr(self.user, "email", None) or "unknown"
         return f"{self.catalog_course_id} → {target} [{self.get_status_display()}]"
+
+
+class CatalogCourseEnrollment(models.Model):
+    """
+    Represents a user's enrollment in a specific catalog course.
+
+    This model links a user to a CorporatePartnerCatalogCourse, indicating that the user
+    is enrolled in that course as part of a corporate partner's catalog. The `active` field
+    denotes whether the enrollment is currently active or has been deactivated (e.g., due to
+    withdrawal or removal). Uniqueness is enforced so that a user can only have one enrollment
+    per catalog course.
+
+    Fields:
+        id: Primary key for the enrollment.
+        user: Reference to the enrolled user.
+        catalog_course: Reference to the catalog course.
+        active: Boolean indicating if the enrollment is active.
+
+    Constraints:
+        - Unique constraint on (user, catalog_course) to prevent duplicate enrollments.
+        - Indexed for efficient lookup by user, catalog_course, and active status.
+    """
+
+    id = models.AutoField(primary_key=True)
+    user = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        related_name="catalog_course_enrollments",
+    )
+    catalog_course = models.ForeignKey(
+        "CorporatePartnerCatalogCourse",
+        on_delete=models.CASCADE,
+        related_name="enrollments",
+    )
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        """Meta options for CatalogCourseEnrollment model."""
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "catalog_course"],
+                name="cpcea_unique_user_catalog_course_enrollment"
+            )
+        ]
+        indexes = [
+            models.Index(fields=["user"]),
+            models.Index(fields=["catalog_course"]),
+            models.Index(fields=["user", "active"]),
+        ]
+
+    def __str__(self):
+        """Return a readable string representation of the CatalogCourseEnrollment instance."""
+        state = "active" if self.active else "inactive"
+        return f"Enrollment(user_id={self.user_id}, catalog_course_id={self.catalog_course_id}, {state})"
