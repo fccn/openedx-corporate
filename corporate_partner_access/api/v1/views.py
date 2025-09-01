@@ -24,6 +24,7 @@ from corporate_partner_access.api.v1.serializers import (
     CatalogLearnerSerializer,
     CorporatePartnerCatalogSerializer,
     CorporatePartnerSerializer,
+    InvitationSelfActionSerializer,
 )
 from corporate_partner_access.models import (
     CatalogCourseEnrollmentAllowed,
@@ -33,6 +34,8 @@ from corporate_partner_access.models import (
     CorporatePartnerCatalogEmailRegex,
     CorporatePartnerCatalogLearner,
 )
+from corporate_partner_access.policies.invitations import can_user_act_on_invitation
+from corporate_partner_access.services.invitations import InvitationService
 
 
 class CorporatePartnerViewSet(viewsets.ModelViewSet):
@@ -340,3 +343,45 @@ class CatalogCourseEnrollmentAllowedViewSet(
             else:
                 response_data["error"] = str(task_result.info)
         return Response(response_data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="accept")
+    def accept(self, request, *args, **kwargs):
+        """
+        Accept this specific invitation (detail action).
+        Only the invited user can act (linked user or matching invite_email).
+        """
+        invitation = self.get_object()
+
+        serializer_in = InvitationSelfActionSerializer(data=request.data)
+        serializer_in.is_valid(raise_exception=True)
+
+        if not can_user_act_on_invitation(request.user, invitation):
+            return Response({"detail": "Not allowed to act on this invitation."}, status=status.HTTP_403_FORBIDDEN)
+
+        InvitationService.apply_status_as_user(
+            invitation, request.user, CatalogCourseEnrollmentAllowed.Status.ACCEPTED
+        )
+
+        serializer_out = CatalogCourseEnrollmentAllowedSerializer(invitation, context=self.get_serializer_context())
+        return Response(serializer_out.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="decline")
+    def decline(self, request, *args, **kwargs):
+        """
+        Decline this specific invitation (detail action).
+        Only the invited user can act (linked user or matching invite_email).
+        """
+        invitation = self.get_object()
+
+        serializer_in = InvitationSelfActionSerializer(data=request.data)
+        serializer_in.is_valid(raise_exception=True)
+
+        if not can_user_act_on_invitation(request.user, invitation):
+            return Response({"detail": "Not allowed to act on this invitation."}, status=status.HTTP_403_FORBIDDEN)
+
+        InvitationService.apply_status_as_user(
+            invitation, request.user, CatalogCourseEnrollmentAllowed.Status.DECLINED
+        )
+
+        serializer_out = CatalogCourseEnrollmentAllowedSerializer(invitation, context=self.get_serializer_context())
+        return Response(serializer_out.data, status=status.HTTP_200_OK)

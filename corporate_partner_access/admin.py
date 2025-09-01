@@ -1,12 +1,10 @@
 """Admin configuration for Corporate Partner Access models."""
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.urls import reverse
 from django.utils.html import format_html
 
-from flex_catalog.admin import CourseKeysMixin
-
-from .models import (
+from corporate_partner_access.models import (
     CatalogCourseEnrollmentAllowed,
     CorporatePartner,
     CorporatePartnerCatalog,
@@ -14,6 +12,8 @@ from .models import (
     CorporatePartnerCatalogEmailRegex,
     CorporatePartnerCatalogLearner,
 )
+from corporate_partner_access.services.invitations import InvitationService
+from flex_catalog.admin import CourseKeysMixin
 
 
 @admin.register(CorporatePartner)
@@ -241,6 +241,8 @@ class CatalogCourseEnrollmentAllowedAdmin(admin.ModelAdmin):
         "declined_at",
     )
 
+    actions = ("mark_accepted", "mark_declined", "mark_sent")
+
     list_filter = (
         "status",
     )
@@ -280,3 +282,21 @@ class CatalogCourseEnrollmentAllowedAdmin(admin.ModelAdmin):
         if obj.invite_email:
             obj.invite_email = obj.invite_email.strip().lower()
         super().save_model(request, obj, form, change)
+
+    def mark_accepted(self, request, queryset):
+        """Admin action to mark selected invitations as ACCEPTED."""
+        for invite in queryset:
+            InvitationService.accept(invite)
+        self.message_user(request, "Selected invites marked as ACCEPTED.", level=messages.SUCCESS)
+
+    def mark_declined(self, request, queryset):
+        """Admin action to mark selected invitations as DECLINED."""
+        for invite in queryset:
+            InvitationService.decline(invite)
+        self.message_user(request, "Selected invites marked as DECLINED.", level=messages.SUCCESS)
+
+    def mark_sent(self, request, queryset):
+        """Admin action to mark selected invitations as SENT."""
+        for invite in queryset:
+            InvitationService.mark_sent(invite)
+        self.message_user(request, "Selected invites marked as SENT.", level=messages.SUCCESS)

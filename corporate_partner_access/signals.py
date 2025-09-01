@@ -21,10 +21,7 @@ from corporate_partner_access.events.signals import (
     CATALOG_CEA_UPDATED_V1,
 )
 from corporate_partner_access.helpers.regex_cache import clear_email_regex_cache
-from corporate_partner_access.models import (
-    CatalogCourseEnrollmentAllowed,
-    CorporatePartnerCatalogEmailRegex,
-)
+from corporate_partner_access.models import CatalogCourseEnrollmentAllowed, CorporatePartnerCatalogEmailRegex
 
 
 @receiver([post_save, post_delete], sender=CorporatePartnerCatalogEmailRegex)

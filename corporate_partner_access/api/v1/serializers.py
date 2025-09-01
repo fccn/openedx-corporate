@@ -248,3 +248,18 @@ class CatalogCourseEnrollmentAllowedCreateSerializer(serializers.ModelSerializer
             obj.save(update_fields=["user"])
 
         return obj
+
+
+class InvitationSelfActionSerializer(serializers.Serializer):
+    """
+    Input schema for accept/decline endpoints.
+    No fields for now; kept for future extensibility (e.g., consent flags).
+    """
+
+    def create(self, validated_data):
+        """No-op: this serializer is not used to create DB objects."""
+        return validated_data
+
+    def update(self, instance, validated_data):
+        """No-op: this serializer does not mutate instances directly."""
+        return instance
