@@ -60,7 +60,6 @@ class CorporatePartnerSerializer(serializers.ModelSerializer):
     catalogs = serializers.IntegerField(source="catalogs_count", read_only=True)
     courses = serializers.IntegerField(source="courses_count", read_only=True)
     enrollments = serializers.IntegerField(source="total_enrollments", read_only=True)
-
     certified = serializers.IntegerField(source="certified_count", read_only=True)
 
     class Meta:
@@ -76,7 +75,7 @@ class CorporatePartnerSerializer(serializers.ModelSerializer):
             "enrollments",
             "certified",
         ]
-        read_only_fields = ["id", "code"]
+        read_only_fields = ["id"]
         extra_kwargs = {
             "homepage_url": {"required": False, "allow_null": True},
             "logo": {"required": False, "allow_null": True, "write_only": True},
@@ -101,8 +100,6 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
     courses = serializers.IntegerField(source="courses_count", read_only=True)
     enrollments = serializers.IntegerField(source="total_enrollments", read_only=True)
     certified = serializers.IntegerField(source="certified_count", read_only=True)
-
-    # TODO: Replace implementation
     completion_rate = serializers.SerializerMethodField()
 
     class Meta:
@@ -132,7 +129,8 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
             "id",
             "email_regexes",
             "courses",
-        , "slug"]
+            "slug",
+        ]
         extra_kwargs = {
             "authorization_additional_message": {
                 "required": False,
