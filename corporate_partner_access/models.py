@@ -33,22 +33,6 @@ class CorporatePartner(models.Model):
         """Return a string representation of the CorporatePartner instance."""
         return f"<CorporatePartner: {self.name} (Code: {self.code})>"
 
-    def save(self, *args, **kwargs):
-        """Save and generate a code for the corporate partner."""
-        current_code = self.code
-
-        if not current_code:
-            name_value = str(self.name or "partner")
-            slug = slugify(name_value)
-            current = CorporatePartner.objects.filter(code__startswith=slug).count()
-
-            if current > 0:
-                slug = f"{slug}-{current + 1}"
-
-            self.code = slug
-
-        super().save(*args, **kwargs)
-
 
 class CorporatePartnerCatalog(FlexibleCatalogModel):
     """Catalog model for corporate partners."""
