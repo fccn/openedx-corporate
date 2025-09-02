@@ -4,6 +4,7 @@ import regex
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import models
+from django.db.models.functions import Lower
 
 from corporate_partner_access.edxapp_wrapper.course_module import course_overview
 from corporate_partner_access.helpers.current_user import safe_get_current_user
@@ -172,3 +173,127 @@ class CorporatePartnerCatalogLearner(models.Model):
     def __str__(self):
         """Return a string representation of the CorporatePartnerCatalogLearner instance."""
         return f"<CorporatePartnerCatalogLearner: {self.user.username} in {self.catalog.name}>"
+
+
+class CatalogCourseEnrollmentAllowed(models.Model):
+    """
+    Invitation to enroll in a specific course within a corporate partner catalog.
+
+    Tracks invitations sent to users (by email) to enroll in a catalog course,
+    their status (sent, accepted, declined), and metadata such as who invited
+    them and when the status changed. The `user` field may be null if the
+    invitee does not yet have an account; it will be set when a user with the
+    `invite_email` accepts or declines the invitation.
+    """
+
+    class Status(models.IntegerChoices):
+        """Possible invitation statuses."""
+
+        SENT = 10, "Sent"
+        ACCEPTED = 20, "Accepted"
+        DECLINED = 30, "Declined"
+
+    id = models.AutoField(primary_key=True)
+    catalog_course = models.ForeignKey(
+        "CorporatePartnerCatalogCourse",
+        on_delete=models.PROTECT,
+        related_name="enrollment_invites",
+    )
+    user = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        help_text=(
+            "Linked user. May be null if no user exists for invite_email; "
+            "will be set once a user with this email accepts/declines."
+        ),
+        related_name="catalog_course_invites",
+    )
+
+    status = models.PositiveSmallIntegerField(
+        choices=Status.choices,
+        default=Status.SENT,
+        help_text="Status of the course enrollment invitation."
+    )
+
+    invite_email = models.EmailField(
+        null=True,
+        blank=True,
+        help_text="Invitation email address."
+    )
+
+    invited_at = models.DateTimeField(auto_now_add=True)
+    status_changed_at = models.DateTimeField(auto_now=True)
+
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    declined_at = models.DateTimeField(null=True, blank=True)
+
+    invited_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_enrollment_invites",
+        help_text="Who created/sent the invite."
+    )
+
+    class Meta:
+        """Database metadata and constraints for invitations."""
+
+        db_table = "cp_course_enrl_allowed"
+        indexes = [
+            models.Index(Lower("invite_email"), name="cpcea_email_ci_idx"),
+            models.Index(fields=["user"], name="cpcea_user_idx"),
+            models.Index(fields=["catalog_course", "status"], name="cpcea_course_status_idx"),
+        ]
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=["catalog_course", "user"],
+                name="cpcea_unique_course_user",
+                condition=models.Q(user__isnull=False),
+            ),
+            models.UniqueConstraint(
+                Lower("invite_email"), "catalog_course",
+                name="cpcea_unique_course_invite_email_ci",
+                condition=models.Q(invite_email__isnull=False),
+            ),
+            models.CheckConstraint(
+                check=models.Q(user__isnull=False) | models.Q(invite_email__isnull=False),
+                name="cpcea_user_or_email_required",
+            ),
+            models.CheckConstraint(
+                check=(
+                    (
+                        models.Q(status=10)
+                        & models.Q(accepted_at__isnull=True)
+                        & models.Q(declined_at__isnull=True)
+                    )
+                    | (
+                        models.Q(status=20)
+                        & models.Q(accepted_at__isnull=False)
+                        & models.Q(declined_at__isnull=True)
+                    )
+                    | (
+                        models.Q(status=30)
+                        & models.Q(declined_at__isnull=False)
+                        & models.Q(accepted_at__isnull=True)
+                    )
+                ),
+                name="cpcea_status_timestamp_consistency",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        """
+        Thin save: status/timestamp business rules are enforced via InvitationService.
+
+        Note: Database changes should be handled via InvitationService.apply_status(...) instead.
+        """
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        """Return a readable label with course id, target email/user, and status."""
+        target = self.invite_email or getattr(self.user, "email", None) or "unknown"
+        return f"{self.catalog_course_id} → {target} [{self.get_status_display()}]"

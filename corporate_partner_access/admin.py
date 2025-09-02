@@ -1,18 +1,19 @@
 """Admin configuration for Corporate Partner Access models."""
 
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.urls import reverse
 from django.utils.html import format_html
 
-from flex_catalog.admin import CourseKeysMixin
-
-from .models import (
+from corporate_partner_access.models import (
+    CatalogCourseEnrollmentAllowed,
     CorporatePartner,
     CorporatePartnerCatalog,
     CorporatePartnerCatalogCourse,
     CorporatePartnerCatalogEmailRegex,
     CorporatePartnerCatalogLearner,
 )
+from corporate_partner_access.services.invitations import InvitationService
+from flex_catalog.admin import CourseKeysMixin
 
 
 @admin.register(CorporatePartner)
@@ -223,3 +224,79 @@ class CorporatePartnerCatalogLearnerAdmin(admin.ModelAdmin):
         return obj.user.email
 
     user_email.short_description = "Email"
+
+
+@admin.register(CatalogCourseEnrollmentAllowed)
+class CatalogCourseEnrollmentAllowedAdmin(admin.ModelAdmin):
+    """Admin configuration for catalog course enrollment invitations."""
+
+    list_display = (
+        "id",
+        "catalog_course",
+        "target_email",
+        "status_badge",
+        "invited_by",
+        "invited_at",
+        "accepted_at",
+        "declined_at",
+    )
+
+    actions = ("mark_accepted", "mark_declined", "mark_sent")
+
+    list_filter = (
+        "status",
+    )
+
+    raw_id_fields = ["catalog_course", "user"]
+
+    ordering = ("-invited_at",)
+    date_hierarchy = "invited_at"
+
+    readonly_fields = ("invited_at", "accepted_at", "declined_at", "status_changed_at")
+
+    def target_email(self, obj):
+        """Show invite_email if present, otherwise user.email."""
+        return obj.invite_email or (obj.user and obj.user.email) or "—"
+    target_email.short_description = "Target Email"
+
+    def status_badge(self, obj):
+        """Render a colored badge for status."""
+        # Map Status enum values to colors
+        colors = {
+            obj.Status.SENT: "#64748b",      # gray-ish
+            obj.Status.ACCEPTED: "#16a34a",  # green
+            obj.Status.DECLINED: "#dc2626",  # red
+        }
+        color = colors.get(obj.status, "#334155")
+        label = obj.get_status_display()
+        return format_html(
+            '<span style="padding:2px 8px;border-radius:12px;background:{};color:white;font-weight:600;">{}</span>',
+            color,
+            label,
+        )
+    status_badge.short_description = "Status"
+    status_badge.admin_order_field = "status"
+
+    def save_model(self, request, obj, form, change):
+        """Normalize invite_email to lowercase on save."""
+        if obj.invite_email:
+            obj.invite_email = obj.invite_email.strip().lower()
+        super().save_model(request, obj, form, change)
+
+    def mark_accepted(self, request, queryset):
+        """Admin action to mark selected invitations as ACCEPTED."""
+        for invite in queryset:
+            InvitationService.accept(invite)
+        self.message_user(request, "Selected invites marked as ACCEPTED.", level=messages.SUCCESS)
+
+    def mark_declined(self, request, queryset):
+        """Admin action to mark selected invitations as DECLINED."""
+        for invite in queryset:
+            InvitationService.decline(invite)
+        self.message_user(request, "Selected invites marked as DECLINED.", level=messages.SUCCESS)
+
+    def mark_sent(self, request, queryset):
+        """Admin action to mark selected invitations as SENT."""
+        for invite in queryset:
+            InvitationService.mark_sent(invite)
+        self.message_user(request, "Selected invites marked as SENT.", level=messages.SUCCESS)
