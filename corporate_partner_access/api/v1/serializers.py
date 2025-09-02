@@ -40,7 +40,7 @@ class CorporatePartnerSerializer(serializers.ModelSerializer):
     class Meta:
         model = CorporatePartner
         fields = ["id", "code", "name", "homepage_url", "logo", "logo_url"]
-        read_only_fields = ["id", "logo_url"]
+        read_only_fields = ["id", "logo_url", "code"]
         extra_kwargs = {
             "homepage_url": {"required": False, "allow_null": True},
             "logo": {"required": False, "allow_null": True, "write_only": True},
@@ -82,7 +82,7 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
             "is_public",
             "catalog_alternative_link",
         ]
-        read_only_fields = ["id", "email_regexes"]
+        read_only_fields = ["id", "email_regexes", "slug"]
         extra_kwargs = {
             "authorization_additional_message": {
                 "required": False,

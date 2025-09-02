@@ -5,6 +5,7 @@ from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.functions import Lower
+from django.utils.text import slugify
 
 from corporate_partner_access.edxapp_wrapper.course_module import course_overview
 from corporate_partner_access.helpers.current_user import safe_get_current_user
@@ -82,6 +83,22 @@ class CorporatePartnerCatalog(FlexibleCatalogModel):
         user = safe_get_current_user()
         return CatalogAllowedCoursesService.course_runs_for_user(catalog=self, user=user)
 
+    def save(self, *args, **kwargs):
+        """Save and generate a slug for the corporate partner catalog."""
+        current_slug = self.slug
+
+        if not current_slug:
+            name_value = str(self.name or "catalog")
+            current_slug = slugify(name_value)
+            current = CorporatePartnerCatalog.objects.filter(slug__startswith=current_slug).count()
+
+            if current > 0:
+                current_slug = f"{current_slug}-{current + 1}"
+
+            self.slug = current_slug
+
+        super().save(*args, **kwargs)
+
 
 class CorporatePartnerCatalogEmailRegex(models.Model):
     """Regex pattern for validating emails for a partner's catalog."""
@@ -146,7 +163,9 @@ class CorporatePartnerCatalogCourse(models.Model):
         unique_together = ("catalog", "course_overview")
         ordering = ["position"]
         indexes = [
-            models.Index(fields=["catalog", "course_overview"], name="catalog_course_idx"),
+            models.Index(
+                fields=["catalog", "course_overview"], name="catalog_course_idx"
+            ),
         ]
 
     def __str__(self):
@@ -214,13 +233,11 @@ class CatalogCourseEnrollmentAllowed(models.Model):
     status = models.PositiveSmallIntegerField(
         choices=Status.choices,
         default=Status.SENT,
-        help_text="Status of the course enrollment invitation."
+        help_text="Status of the course enrollment invitation.",
     )
 
     invite_email = models.EmailField(
-        null=True,
-        blank=True,
-        help_text="Invitation email address."
+        null=True, blank=True, help_text="Invitation email address."
     )
 
     invited_at = models.DateTimeField(auto_now_add=True)
@@ -235,7 +252,7 @@ class CatalogCourseEnrollmentAllowed(models.Model):
         null=True,
         blank=True,
         related_name="sent_enrollment_invites",
-        help_text="Who created/sent the invite."
+        help_text="Who created/sent the invite.",
     )
 
     class Meta:
@@ -245,7 +262,9 @@ class CatalogCourseEnrollmentAllowed(models.Model):
         indexes = [
             models.Index(Lower("invite_email"), name="cpcea_email_ci_idx"),
             models.Index(fields=["user"], name="cpcea_user_idx"),
-            models.Index(fields=["catalog_course", "status"], name="cpcea_course_status_idx"),
+            models.Index(
+                fields=["catalog_course", "status"], name="cpcea_course_status_idx"
+            ),
         ]
 
         constraints = [
@@ -255,12 +274,14 @@ class CatalogCourseEnrollmentAllowed(models.Model):
                 condition=models.Q(user__isnull=False),
             ),
             models.UniqueConstraint(
-                Lower("invite_email"), "catalog_course",
+                Lower("invite_email"),
+                "catalog_course",
                 name="cpcea_unique_course_invite_email_ci",
                 condition=models.Q(invite_email__isnull=False),
             ),
             models.CheckConstraint(
-                check=models.Q(user__isnull=False) | models.Q(invite_email__isnull=False),
+                check=models.Q(user__isnull=False)
+                | models.Q(invite_email__isnull=False),
                 name="cpcea_user_or_email_required",
             ),
             models.CheckConstraint(
