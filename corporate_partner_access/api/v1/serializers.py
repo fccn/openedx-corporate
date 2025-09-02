@@ -76,7 +76,7 @@ class CorporatePartnerSerializer(serializers.ModelSerializer):
             "enrollments",
             "certified",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "code"]
         extra_kwargs = {
             "homepage_url": {"required": False, "allow_null": True},
             "logo": {"required": False, "allow_null": True, "write_only": True},
@@ -132,7 +132,7 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
             "id",
             "email_regexes",
             "courses",
-        ]
+        , "slug"]
         extra_kwargs = {
             "authorization_additional_message": {
                 "required": False,
