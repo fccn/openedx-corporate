@@ -28,7 +28,7 @@ def course_mode_model():
     return _backend().course_mode_model()
 
 
-def enroll_user(*, user, course_key, mode=None, check_access=True):
+def enroll_user(*, user, course_key, mode=None, check_access=False):
     """
     Idempotent enroll operation. Backend hides signature/path differences between releases.
     """

@@ -13,6 +13,17 @@ from corporate_partner_access.policies.catalogs import can_user_see_catalog_cour
 
 
 class CatalogAllowedCoursesService:
+    """
+    Service class for determining which course runs a user is allowed to see for a specific catalog.
+
+    This class provides static methods to:
+      - Retrieve a queryset of course runs visible to a user for a given catalog,
+        based on catalog visibility and user eligibility policies.
+      - Retrieve a list of course run IDs the user is allowed to access for a catalog.
+
+    All logic is policy-driven and does not use selectors; it operates directly on catalog.courses.
+    """
+
     @staticmethod
     def course_runs_for_user(*, catalog, user):
         """

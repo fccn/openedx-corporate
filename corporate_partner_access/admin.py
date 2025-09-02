@@ -4,8 +4,6 @@ from django.contrib import admin, messages
 from django.urls import reverse
 from django.utils.html import format_html
 
-from flex_catalog.admin import CourseKeysMixin
-
 from corporate_partner_access.models import (
     CatalogCourseEnrollment,
     CatalogCourseEnrollmentAllowed,
@@ -345,6 +343,7 @@ class CatalogCourseEnrollmentAllowedAdmin(admin.ModelAdmin):
         for invite in queryset:
             InvitationService.mark_sent(invite)
         self.message_user(request, "Selected invites marked as SENT.", level=messages.SUCCESS)
+
 
 @admin.register(CatalogCourseEnrollment)
 class CatalogCourseEnrollmentAdmin(admin.ModelAdmin):

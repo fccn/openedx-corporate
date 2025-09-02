@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from typing import Iterable, Optional
 
+from django.contrib.auth import get_user_model
 from django.db import transaction
 
 from corporate_partner_access.helpers.email import normalize_email
@@ -39,6 +40,9 @@ class InvitationService:
 
         touched = set(update_fields or [])
         old_status = invitation.status
+
+        invitation.user = get_user_model().objects.get(email=invitation.invite_email)
+        touched.add("user")
 
         # Update status (and ensure status_changed_at is persisted on transitions)
         if old_status != new_status:

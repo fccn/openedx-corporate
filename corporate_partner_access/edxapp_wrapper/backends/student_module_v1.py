@@ -14,7 +14,7 @@ def course_mode_model():
     return CourseMode
 
 
-def enroll_user(*, user, course_key, mode=None):
+def enroll_user(*, user, course_key, mode=None, check_access=False):
     """
     Wrap CourseEnrollment.enroll(...) so callers don't depend on exact signature.
     The underlying call is idempotent (create/reactivate/no-op).
@@ -24,6 +24,7 @@ def enroll_user(*, user, course_key, mode=None):
         user=user,
         course_key=course_key,
         mode=chosen_mode,
+        check_access=check_access,
     )
 
 
