@@ -9,7 +9,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('corporate_partner_access', '0002_catalogcourseenrollmentallowed_and_more'),
+        ('corporate_partner_access', '0003_add_manager_models_and_roles'),
     ]
 
     operations = [
