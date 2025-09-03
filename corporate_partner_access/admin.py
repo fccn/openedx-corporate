@@ -5,6 +5,7 @@ from django.urls import reverse
 from django.utils.html import format_html
 
 from corporate_partner_access.models import (
+    CatalogCourseEnrollment,
     CatalogCourseEnrollmentAllowed,
     CorporatePartner,
     CorporatePartnerCatalog,
@@ -342,3 +343,38 @@ class CatalogCourseEnrollmentAllowedAdmin(admin.ModelAdmin):
         for invite in queryset:
             InvitationService.mark_sent(invite)
         self.message_user(request, "Selected invites marked as SENT.", level=messages.SUCCESS)
+
+
+@admin.register(CatalogCourseEnrollment)
+class CatalogCourseEnrollmentAdmin(admin.ModelAdmin):
+    """Admin interface for CatalogCourseEnrollment model."""
+
+    list_display = (
+        "id",
+        "user_id",
+        "user_username",
+        "catalog_course_id",
+        "is_active"
+    )
+
+    list_filter = ("active",)
+
+    raw_id_fields = ("user", "catalog_course")
+    list_select_related = ("user", "catalog_course")
+
+    def is_active(self, obj):
+        """Return whether the enrollment is active (for boolean display in admin)."""
+        return obj.active
+    is_active.boolean = True
+    is_active.short_description = "Active"
+
+    def user_username(self, obj):
+        """Return the username of the user associated with this enrollment."""
+        return getattr(obj.user, "username", obj.user_id)
+    user_username.admin_order_field = "user__username"
+    user_username.short_description = "Username"
+
+    def get_queryset(self, request):
+        """Return the queryset for the admin changelist, with related user and catalog_course prefetched."""
+        qs = super().get_queryset(request)
+        return qs.select_related("user", "catalog_course")

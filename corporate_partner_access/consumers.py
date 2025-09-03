@@ -19,6 +19,7 @@ from corporate_partner_access.events.signals import (
     CATALOG_CEA_DECLINED_V1,
     CATALOG_CEA_UPDATED_V1,
 )
+from corporate_partner_access.services.workflows import accept_invite_workflow
 
 logger = logging.getLogger("cpa.events")
 
@@ -49,20 +50,20 @@ def handle_catalog_cea_accepted(
     invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any
 ) -> None:
     """When an invite is accepted, create/activate the enrollment (idempotent)."""
-    def do_enroll() -> None:
+    def run_workflow() -> None:
         """
-        Create or activate the enrollment for the user in the catalog course when an invite is accepted.
+        Handle side effects when a catalog course enrollment invite is accepted.
 
-        This function should ensure that the user is enrolled in the appropriate course as specified
-        by the accepted invitation. It should be idempotent, so repeated calls do not create duplicate
-        enrollments or side effects.
-
-        Side effects such as sending notifications or updating related models can also be handled here.
+        This function is called after a CatalogCourseEnrollmentAllowed invitation is accepted.
+        It triggers the workflow to ensure the user is enrolled in the corresponding catalog course,
+        creating the enrollment if it does not already exist. This operation is idempotent.
         """
-        # TODO: implement accepted-specific side effects if/when needed.
-        logger.info("CEA ACCEPTED: id=%s email=%s user_id=%s", invite.id, invite.invite_email, invite.user_id)
+        accept_invite_workflow(
+            user_id=invite.user_id,
+            catalog_course_id=invite.catalog_course_id,
+        )
 
-    transaction.on_commit(do_enroll)
+    transaction.on_commit(run_workflow)
 
 
 @receiver(CATALOG_CEA_DECLINED_V1)
