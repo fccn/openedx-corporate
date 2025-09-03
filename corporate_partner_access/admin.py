@@ -11,6 +11,7 @@ from corporate_partner_access.models import (
     CorporatePartnerCatalogCourse,
     CorporatePartnerCatalogEmailRegex,
     CorporatePartnerCatalogLearner,
+    CorporatePartnerCatalogManager,
 )
 from corporate_partner_access.services.invitations import InvitationService
 from flex_catalog.admin import CourseKeysMixin
@@ -20,7 +21,14 @@ from flex_catalog.admin import CourseKeysMixin
 class CorporatePartnerAdmin(admin.ModelAdmin):
     """Admin interface for CorporatePartner model."""
 
-    list_display = ["code", "name", "logo_thumbnail", "homepage_url", "catalog_count"]
+    inlines = []
+    list_display = [
+        "code",
+        "name",
+        "logo_thumbnail",
+        "homepage_url",
+        "catalog_count",
+    ]
     list_filter = ["name", "code"]
     search_fields = ["name", "code", "homepage_url"]
     ordering = ["code"]
@@ -82,6 +90,7 @@ class CorporatePartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
         "learner_count",
         "add_learner",
         "add_course",
+        "add_manager",
     ]
     list_filter = [
         "corporate_partner",
@@ -184,6 +193,21 @@ class CorporatePartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
 
     add_course.short_description = "Add Course"
 
+    def add_manager(self, obj):
+        """Generate a link to add a new manager (catalog-level)."""
+        manager_model = CorporatePartnerCatalogManager
+        add_manager_url = reverse(
+            f"admin:{manager_model._meta.app_label}_{manager_model._meta.model_name}_add"
+        )
+        full_url = f"{add_manager_url}?catalog={obj.pk}"
+
+        return format_html(
+            '<a href="{}" style="font-weight: bold;"> Add Manager </a>',
+            full_url,
+        )
+
+    add_manager.short_description = "Add Manager"
+
     def get_queryset(self, request):
         """Optimize queryset with select_related and prefetch_related."""
         queryset = super().get_queryset(request)
@@ -224,6 +248,24 @@ class CorporatePartnerCatalogLearnerAdmin(admin.ModelAdmin):
         return obj.user.email
 
     user_email.short_description = "Email"
+
+
+@admin.register(CorporatePartnerCatalogManager)
+class CorporatePartnerCatalogManagerAdmin(admin.ModelAdmin):
+    """Admin interface for CorporatePartnerCatalogManager model."""
+
+    list_display = ["id", "catalog", "user", "role", "active"]
+    list_filter = ["catalog__corporate_partner", "catalog", "role", "active"]
+    search_fields = [
+        "catalog__name",
+        "catalog__corporate_partner__name",
+        "user__username",
+        "user__email",
+    ]
+    ordering = ["catalog__corporate_partner__code", "catalog__name", "user__username"]
+    raw_id_fields = ["catalog", "user"]
+
+    fieldsets = (("Assignment", {"fields": ("catalog", "user", "role", "active")}),)
 
 
 @admin.register(CatalogCourseEnrollmentAllowed)

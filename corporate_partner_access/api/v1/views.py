@@ -34,6 +34,7 @@ from corporate_partner_access.models import (
     CorporatePartnerCatalogEmailRegex,
     CorporatePartnerCatalogLearner,
 )
+from corporate_partner_access.permissions import IsPartnerCatalogManager
 from corporate_partner_access.policies.invitations import can_user_act_on_invitation
 from corporate_partner_access.services.invitations import InvitationService
 
@@ -46,11 +47,33 @@ class CorporatePartnerViewSet(viewsets.ModelViewSet):
 
     queryset = CorporatePartner.objects.all()
     serializer_class = CorporatePartnerSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsPartnerCatalogManager]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["code", "name"]
     ordering_fields = ["name", "code", "id"]
     ordering = ["name"]
+
+    def get_queryset(self):
+        """
+        Limit non-staff users to partners where they are active members.
+        Staff/superusers see all.
+        """
+        qs = super().get_queryset()
+        user = self.request.user
+
+        if user.is_staff or user.is_superuser:
+            return qs
+
+        managed_partner_ids = (
+            CorporatePartnerCatalog.objects.filter(
+                catalog_managers__user=user,
+                catalog_managers__active=True,
+            )
+            .values_list("corporate_partner_id", flat=True)
+            .distinct()
+        )
+
+        return qs.filter(id__in=managed_partner_ids)
 
 
 class InjectNestedFKMixin:
@@ -88,7 +111,7 @@ class CorporatePartnerCatalogViewSet(InjectNestedFKMixin, viewsets.ModelViewSet)
 
     queryset = CorporatePartnerCatalog.objects.all()  # pylint: disable=E1111
     serializer_class = CorporatePartnerCatalogSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsPartnerCatalogManager]
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
@@ -104,12 +127,20 @@ class CorporatePartnerCatalogViewSet(InjectNestedFKMixin, viewsets.ModelViewSet)
     target_field_name = "corporate_partner"
 
     def get_queryset(self):
-        """Get the queryset for corporate partner catalogs."""
+        """Limit catalogs to those the user manages or views; staff see all."""
         qs = super().get_queryset()
+        user = self.request.user
         partner_pk = self.kwargs.get("partner_pk")
         if partner_pk:
             qs = qs.filter(corporate_partner_id=partner_pk)
-        return qs
+
+        if user.is_staff or user.is_superuser:
+            return qs
+
+        return qs.filter(
+            catalog_managers__user=user,
+            catalog_managers__active=True,
+        ).distinct()
 
 
 class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelViewSet):
@@ -120,7 +151,7 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
 
     queryset = CorporatePartnerCatalogLearner.objects.select_related("catalog", "user")
     serializer_class = CatalogLearnerSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsPartnerCatalogManager]
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
@@ -203,7 +234,7 @@ class CorporatePartnerCatalogCourseViewSet(InjectNestedFKMixin, viewsets.ModelVi
         "course_overview", "catalog"
     )
     serializer_class = CatalogCourseSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsPartnerCatalogManager]
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
@@ -232,7 +263,7 @@ class CorporatePartnerCatalogEmailRegexViewSet(
 
     queryset = CorporatePartnerCatalogEmailRegex.objects.all()
     serializer_class = CatalogEmailRegexSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsPartnerCatalogManager]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["catalog"]
 
