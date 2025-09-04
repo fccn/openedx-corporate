@@ -2,7 +2,8 @@
 
 from celery.result import AsyncResult
 from django.db import transaction
-from django.db.models import Count
+from django.db.models import Count, Q, Sum
+from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated
 from rest_framework import filters, mixins, status, viewsets
@@ -52,6 +53,13 @@ class CorporatePartnerViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = CorporatePartner.objects.annotate(
         catalogs_count=Count("catalogs", distinct=True),
         courses_count=Count("catalogs__courses", distinct=True),
+        total_enrollments=Coalesce(
+            Sum(
+                "catalogs__catalog_courses__enrollments",
+                filter=Q(catalogs__catalog_courses__enrollments__active=True),
+                distinct=True,
+            ), 0
+        ),
     )
     serializer_class = CorporatePartnerSerializer
     permission_classes = [IsPartnerCatalogManager]
@@ -94,6 +102,13 @@ class CorporatePartnerCatalogViewSet(
     # pylint: disable=E1111
     queryset = CorporatePartnerCatalog.objects.annotate(
         courses_count=Count("courses", distinct=True),
+        total_enrollments=Coalesce(
+            Sum(
+                "catalog_courses__enrollments",
+                filter=Q(catalog_courses__enrollments__active=True),
+                distinct=True,
+            ), 0
+        ),
     )
     serializer_class = CorporatePartnerCatalogSerializer
     permission_classes = [IsPartnerCatalogManager]
@@ -174,7 +189,9 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
         url_path="bulk",
         parser_classes=[MultiPartParser],
     )
-    def bulk(self, request, partner_pk=None, catalog_pk=None):  # pylint: disable=unused-argument
+    def bulk(
+        self, request, partner_pk=None, catalog_pk=None
+    ):  # pylint: disable=unused-argument
         """
         Bulk upload learners to a catalog via CSV file (async).
         CSV columns: username (or email), optional active (defaults to True)
@@ -182,7 +199,9 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
         """
         file = request.FILES.get("file")
         if not file:
-            return Response({"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST
+            )
         # Save file content to pass to Celery (as string)
         csv_content = file.read().decode(request.encoding or "utf-8")
         # Enqueue Celery task
@@ -190,7 +209,10 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
             csv_content=csv_content,
             catalog_id=catalog_pk,
         )
-        return Response({"task_id": task.id, "status": "processing"}, status=status.HTTP_202_ACCEPTED)
+        return Response(
+            {"task_id": task.id, "status": "processing"},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
     @bulk_status_learner_schema
     @action(
@@ -198,14 +220,19 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
         methods=["get"],
         url_path="bulk_status",
     )
-    def bulk_status(self, request, partner_pk=None, catalog_pk=None):  # pylint: disable=unused-argument
+    def bulk_status(
+        self, request, partner_pk=None, catalog_pk=None
+    ):  # pylint: disable=unused-argument
         """
         Check the status of a bulk upload task by task_id.
         Query parameter: task_id
         """
         task_id = request.query_params.get("task_id")
         if not task_id:
-            return Response({"detail": "task_id parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "task_id parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         task_result = AsyncResult(task_id)
         response_data = {
             "task_id": task_id,
@@ -261,7 +288,15 @@ class CorporatePartnerCatalogCourseViewSet(
         """Get the queryset for catalog courses."""
         qs = self.queryset
         catalog_pk = self.kwargs.get("catalog_pk")
-        return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
+        qs = qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
+
+        return qs.annotate(
+            enrollments_count=Count(
+                "enrollments",
+                filter=Q(enrollments__active=True),
+                distinct=True,
+            )
+        )
 
 
 class CorporatePartnerCatalogEmailRegexViewSet(
@@ -327,7 +362,9 @@ class CatalogCourseEnrollmentAllowedViewSet(
         serializer.is_valid(raise_exception=True)
         obj = serializer.save()
 
-        out = CatalogCourseEnrollmentAllowedSerializer(obj, context=self.get_serializer_context())
+        out = CatalogCourseEnrollmentAllowedSerializer(
+            obj, context=self.get_serializer_context()
+        )
 
         headers = self.get_success_headers(out.data)
         return Response(out.data, status=status.HTTP_201_CREATED, headers=headers)
@@ -339,7 +376,9 @@ class CatalogCourseEnrollmentAllowedViewSet(
         url_path="bulk",
         parser_classes=[MultiPartParser],
     )
-    def bulk(self, request, partner_pk=None, catalog_pk=None, course_pk=None):  # pylint: disable=unused-argument
+    def bulk(
+        self, request, partner_pk=None, catalog_pk=None, course_pk=None
+    ):  # pylint: disable=unused-argument
         """
         Bulk upload invitations to a catalog course via CSV file (async).
         CSV columns: email
@@ -347,15 +386,20 @@ class CatalogCourseEnrollmentAllowedViewSet(
         """
         file = request.FILES.get("file")
         if not file:
-            return Response({"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST
+            )
 
         csv_content = file.read().decode(request.encoding or "utf-8")
         task = partner_tasks.bulk_upload_invitations.delay(
             csv_content=csv_content,
             catalog_course_id=course_pk,
-            invited_by_id=request.user.id
+            invited_by_id=request.user.id,
         )
-        return Response({"task_id": task.id, "status": "processing"}, status=status.HTTP_202_ACCEPTED)
+        return Response(
+            {"task_id": task.id, "status": "processing"},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
     @bulk_status_invitations_schema
     @action(
@@ -363,14 +407,19 @@ class CatalogCourseEnrollmentAllowedViewSet(
         methods=["get"],
         url_path="bulk_status",
     )
-    def bulk_status(self, request, partner_pk=None, catalog_pk=None, course_pk=None):  # pylint: disable=unused-argument
+    def bulk_status(
+        self, request, partner_pk=None, catalog_pk=None, course_pk=None
+    ):  # pylint: disable=unused-argument
         """
         Check the status of a bulk upload task by task_id.
         Query parameter: task_id
         """
         task_id = request.query_params.get("task_id")
         if not task_id:
-            return Response({"detail": "task_id parameter is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"detail": "task_id parameter is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         task_result = AsyncResult(task_id)
         response_data = {
             "task_id": task_id,
@@ -395,13 +444,18 @@ class CatalogCourseEnrollmentAllowedViewSet(
         serializer_in.is_valid(raise_exception=True)
 
         if not can_user_act_on_invitation(request.user, invitation):
-            return Response({"detail": "Not allowed to act on this invitation."}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "Not allowed to act on this invitation."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         InvitationService.apply_status_as_user(
             invitation, request.user, CatalogCourseEnrollmentAllowed.Status.ACCEPTED
         )
 
-        serializer_out = CatalogCourseEnrollmentAllowedSerializer(invitation, context=self.get_serializer_context())
+        serializer_out = CatalogCourseEnrollmentAllowedSerializer(
+            invitation, context=self.get_serializer_context()
+        )
         return Response(serializer_out.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], url_path="decline")
@@ -416,18 +470,24 @@ class CatalogCourseEnrollmentAllowedViewSet(
         serializer_in.is_valid(raise_exception=True)
 
         if not can_user_act_on_invitation(request.user, invitation):
-            return Response({"detail": "Not allowed to act on this invitation."}, status=status.HTTP_403_FORBIDDEN)
+            return Response(
+                {"detail": "Not allowed to act on this invitation."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
 
         InvitationService.apply_status_as_user(
             invitation, request.user, CatalogCourseEnrollmentAllowed.Status.DECLINED
         )
 
-        serializer_out = CatalogCourseEnrollmentAllowedSerializer(invitation, context=self.get_serializer_context())
+        serializer_out = CatalogCourseEnrollmentAllowedSerializer(
+            invitation, context=self.get_serializer_context()
+        )
         return Response(serializer_out.data, status=status.HTTP_200_OK)
 
 
-class CatalogCourseEnrollmentViewSet(viewsets.ReadOnlyModelViewSet, InjectNestedFKMixin):
-
+class CatalogCourseEnrollmentViewSet(
+    viewsets.ReadOnlyModelViewSet, InjectNestedFKMixin
+):
     """
     ViewSet for Catalog Course Enrollments.
     Provides read-only access to enrollments in a specific catalog course.

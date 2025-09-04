@@ -54,9 +54,9 @@ class CorporatePartnerSerializer(serializers.ModelSerializer):
     logo = serializers.SerializerMethodField()
     catalogs = serializers.IntegerField(source="catalogs_count", read_only=True)
     courses = serializers.IntegerField(source="courses_count", read_only=True)
+    enrollments = serializers.IntegerField(source="total_enrollments", read_only=True)
 
     # TODO: Replace implementation
-    enrollments = serializers.SerializerMethodField()
     certified = serializers.SerializerMethodField()
 
     class Meta:
@@ -86,10 +86,6 @@ class CorporatePartnerSerializer(serializers.ModelSerializer):
             return None
 
     # TODO: Replace implementation
-    def get_enrollments(self, obj):  # pylint: disable=unused-argument
-        """Mocked enrollments count. Replace with real implementation."""
-        return random.randint(0, 10000)
-
     def get_certified(self, obj):  # pylint: disable=unused-argument
         """Mocked certified count. Replace with real implementation."""
         return random.randint(0, 5000)
@@ -104,9 +100,9 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
 
     email_regexes = serializers.SerializerMethodField()
     courses = serializers.IntegerField(source="courses_count", read_only=True)
+    enrollments = serializers.IntegerField(source="total_enrollments", read_only=True)
 
     # TODO: Replace implementation
-    enrollments = serializers.SerializerMethodField()
     certified = serializers.SerializerMethodField()
     completion_rate = serializers.SerializerMethodField()
 
@@ -166,10 +162,6 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
         return list(obj.email_regexes.all().values_list("regex", flat=True))
 
     # TODO: Replace implementation
-    def get_enrollments(self, obj):  # pylint: disable=unused-argument
-        """Mocked enrollments count. Replace with real implementation."""
-        return random.randint(0, 10000)
-
     def get_certified(self, obj):  # pylint: disable=unused-argument
         """Mocked certified count. Replace with real implementation."""
         return random.randint(0, 5000)
@@ -213,9 +205,9 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
     course_run = CourseOverviewSimpleSerializer(
         source="course_overview", read_only=True
     )
+    enrollments = serializers.IntegerField(source="enrollments_count", read_only=True)
 
     # TODO: Replace implementation
-    enrollments = serializers.SerializerMethodField()
     certified = serializers.SerializerMethodField()
     completion_rate = serializers.SerializerMethodField()
 
@@ -234,10 +226,6 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
     # TODO: Replace implementation
-    def get_enrollments(self, obj):  # pylint: disable=unused-argument
-        """Mocked enrollments count. Replace with real implementation."""
-        return random.randint(0, 10000)
-
     def get_certified(self, obj):  # pylint: disable=unused-argument
         """Mocked certified count. Replace with real implementation."""
         return random.randint(0, 5000)
