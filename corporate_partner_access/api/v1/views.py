@@ -21,6 +21,7 @@ from corporate_partner_access.api.v1.schemas import (
 from corporate_partner_access.api.v1.serializers import (
     CatalogCourseEnrollmentAllowedCreateSerializer,
     CatalogCourseEnrollmentAllowedSerializer,
+    CatalogCourseEnrollmentSerializer,
     CatalogCourseSerializer,
     CatalogEmailRegexSerializer,
     CatalogLearnerSerializer,
@@ -29,6 +30,7 @@ from corporate_partner_access.api.v1.serializers import (
     InvitationSelfActionSerializer,
 )
 from corporate_partner_access.models import (
+    CatalogCourseEnrollment,
     CatalogCourseEnrollmentAllowed,
     CorporatePartner,
     CorporatePartnerCatalog,
@@ -422,3 +424,34 @@ class CatalogCourseEnrollmentAllowedViewSet(
 
         serializer_out = CatalogCourseEnrollmentAllowedSerializer(invitation, context=self.get_serializer_context())
         return Response(serializer_out.data, status=status.HTTP_200_OK)
+
+
+class CatalogCourseEnrollmentViewSet(viewsets.ReadOnlyModelViewSet, InjectNestedFKMixin):
+
+    """
+    ViewSet for Catalog Course Enrollments.
+    Provides read-only access to enrollments in a specific catalog course.
+    """
+
+    queryset = CatalogCourseEnrollment.objects.select_related("user", "catalog_course")
+    serializer_class = CatalogCourseEnrollmentSerializer
+    permission_classes = [IsPartnerCatalogManager]
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    ]
+    filterset_fields = ["catalog_course", "user"]
+    search_fields = ["user__username", "user__email"]
+    ordering_fields = ["id", "user_id"]
+    ordering = ["id"]
+
+    # Mixin config
+    nested_lookup_kwarg = "course_pk"
+    target_field_name = "catalog_course_id"
+
+    def get_queryset(self):
+        """Get the queryset for catalog course enrollments."""
+        qs = self.queryset
+        course_pk = self.kwargs.get("course_pk")
+        return qs.filter(catalog_course_id=course_pk) if course_pk else qs

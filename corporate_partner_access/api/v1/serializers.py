@@ -1,4 +1,5 @@
 """Serializer for Corporate Partner access API v1."""
+
 from __future__ import annotations
 
 import random
@@ -11,6 +12,7 @@ from rest_framework import serializers
 
 from corporate_partner_access.edxapp_wrapper.course_module import course_overview
 from corporate_partner_access.models import (
+    CatalogCourseEnrollment,
     CatalogCourseEnrollmentAllowed,
     CorporatePartner,
     CorporatePartnerCatalog,
@@ -28,9 +30,22 @@ CourseOverview = course_overview()
 class UserSimpleSerializer(serializers.ModelSerializer):
     """Minimal serializer for user data."""
 
+    full_name = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ["id", "username", "email"]
+        fields = ["id", "username", "email", "full_name"]
+
+    def get_full_name(self, obj):
+        """Return the user's full name, or username/email if full name is not set."""
+        first = getattr(obj, "first_name", "") or ""
+        last = getattr(obj, "last_name", "") or ""
+        full = (first + " " + last).strip()
+
+        if not full:
+            full = getattr(obj, "username", "") or getattr(obj, "email", "") or ""
+
+        return full or None
 
 
 class CorporatePartnerSerializer(serializers.ModelSerializer):
@@ -245,6 +260,23 @@ class CatalogEmailRegexSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
 
+class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
+    """Serializer for enrollments in a catalog course."""
+
+    user = UserSimpleSerializer(read_only=True)
+    catalog_course = serializers.PrimaryKeyRelatedField(read_only=True)
+
+    class Meta:
+        model = CatalogCourseEnrollment
+        fields = [
+            "id",
+            "user",
+            "catalog_course",
+            "active",
+        ]
+        read_only_fields = ["id", "user", "catalog_course"]
+
+
 class CatalogCourseEnrollmentAllowedSerializer(serializers.ModelSerializer):
     """Read serializer."""
 
@@ -317,7 +349,9 @@ class CatalogCourseEnrollmentAllowedCreateSerializer(serializers.ModelSerializer
             invite_email=email,
             defaults={
                 "user": user,
-                "invited_by": request.user if request and request.user.is_authenticated else None,
+                "invited_by": (
+                    request.user if request and request.user.is_authenticated else None
+                ),
                 "status": CatalogCourseEnrollmentAllowed.Status.SENT,
             },
         )
