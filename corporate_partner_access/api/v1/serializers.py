@@ -1,9 +1,8 @@
 """Serializer for Corporate Partner access API v1."""
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
-
 import random
+from typing import Any, Dict, Optional
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
