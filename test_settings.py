@@ -62,7 +62,8 @@ TEMPLATES = [{
     },
 }]
 
-COURSE_OVERVIEW_BACKEND = "corporate_partner_access.test.backend_for_test"
+COURSE_OVERVIEW_BACKEND = "corporate_partner_access.test.course_overview_backend"
+CERTIFICATES_MODULE_BACKEND = "corporate_partner_access.test.certificates_backend"
 
 # Celery settings for testing
 CELERY_TASK_ALWAYS_EAGER = True

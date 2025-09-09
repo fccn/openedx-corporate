@@ -1,4 +1,4 @@
-"""This file contains all the necessary backends in a test scenario."""
+"""This file contains all the necessary backends in a test scenario for course overview."""
 
 from django.db import models
 from rest_framework import serializers
