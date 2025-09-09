@@ -41,6 +41,11 @@ from corporate_partner_access.models import (
 )
 from corporate_partner_access.permissions import IsPartnerCatalogManager
 from corporate_partner_access.policies.invitations import can_user_act_on_invitation
+from corporate_partner_access.services.certificates import (
+    annotate_catalog_certified_count,
+    annotate_course_certified_count,
+    annotate_partner_certified_count,
+)
 from corporate_partner_access.services.invitations import InvitationService
 
 
@@ -50,17 +55,7 @@ class CorporatePartnerViewSet(viewsets.ReadOnlyModelViewSet):
     Provides access to corporate partner information.
     """
 
-    queryset = CorporatePartner.objects.annotate(
-        catalogs_count=Count("catalogs", distinct=True),
-        courses_count=Count("catalogs__courses", distinct=True),
-        total_enrollments=Coalesce(
-            Sum(
-                "catalogs__catalog_courses__enrollments",
-                filter=Q(catalogs__catalog_courses__enrollments__active=True),
-                distinct=True,
-            ), 0
-        ),
-    )
+    queryset = CorporatePartner.objects.all()
     serializer_class = CorporatePartnerSerializer
     permission_classes = [IsPartnerCatalogManager]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -73,22 +68,33 @@ class CorporatePartnerViewSet(viewsets.ReadOnlyModelViewSet):
         Limit non-staff users to partners where they are active members.
         Staff/superusers see all.
         """
-        qs = super().get_queryset()
+        qs = self.queryset
         user = self.request.user
-
-        if user.is_staff or user.is_superuser:
-            return qs
-
-        managed_partner_ids = (
-            CorporatePartnerCatalog.objects.filter(
-                catalog_managers__user=user,
-                catalog_managers__active=True,
+        if not (user.is_staff or user.is_superuser):
+            managed_partner_ids = (
+                CorporatePartnerCatalog.objects.filter(
+                    catalog_managers__user=user,
+                    catalog_managers__active=True,
+                )
+                .values_list("corporate_partner_id", flat=True)
+                .distinct()
             )
-            .values_list("corporate_partner_id", flat=True)
-            .distinct()
-        )
+            qs = qs.filter(id__in=managed_partner_ids)
 
-        return qs.filter(id__in=managed_partner_ids)
+        qs = qs.annotate(
+            catalogs_count=Count("catalogs", distinct=True),
+            courses_count=Count("catalogs__courses", distinct=True),
+            total_enrollments=Coalesce(
+                Sum(
+                    "catalogs__catalog_courses__enrollments",
+                    filter=Q(catalogs__catalog_courses__enrollments__active=True),
+                    distinct=True,
+                ),
+                0,
+            ),
+        )
+        qs = annotate_partner_certified_count(qs)
+        return qs
 
 
 class CorporatePartnerCatalogViewSet(
@@ -100,16 +106,7 @@ class CorporatePartnerCatalogViewSet(
     """
 
     # pylint: disable=E1111
-    queryset = CorporatePartnerCatalog.objects.annotate(
-        courses_count=Count("courses", distinct=True),
-        total_enrollments=Coalesce(
-            Sum(
-                "catalog_courses__enrollments",
-                filter=Q(catalog_courses__enrollments__active=True),
-                distinct=True,
-            ), 0
-        ),
-    )
+    queryset = CorporatePartnerCatalog.objects.all()
     serializer_class = CorporatePartnerCatalogSerializer
     permission_classes = [IsPartnerCatalogManager]
     filter_backends = [
@@ -138,19 +135,31 @@ class CorporatePartnerCatalogViewSet(
 
     def get_queryset(self):
         """Limit catalogs to those the user manages or views; staff see all."""
-        qs = super().get_queryset()
+        qs = self.queryset
         user = self.request.user
         partner_pk = self.kwargs.get("partner_pk")
         if partner_pk:
             qs = qs.filter(corporate_partner_id=partner_pk)
 
-        if user.is_staff or user.is_superuser:
-            return qs
+        if not (user.is_staff or user.is_superuser):
+            qs = qs.filter(
+                catalog_managers__user=user,
+                catalog_managers__active=True,
+            ).distinct()
 
-        return qs.filter(
-            catalog_managers__user=user,
-            catalog_managers__active=True,
-        ).distinct()
+        qs = qs.annotate(
+            courses_count=Count("courses", distinct=True),
+            total_enrollments=Coalesce(
+                Sum(
+                    "catalog_courses__enrollments",
+                    filter=Q(catalog_courses__enrollments__active=True),
+                    distinct=True,
+                ),
+                0,
+            ),
+        )
+        qs = annotate_catalog_certified_count(qs)
+        return qs
 
 
 class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelViewSet):
@@ -287,16 +296,22 @@ class CorporatePartnerCatalogCourseViewSet(
     def get_queryset(self):
         """Get the queryset for catalog courses."""
         qs = self.queryset
+
         catalog_pk = self.kwargs.get("catalog_pk")
         qs = qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
 
-        return qs.annotate(
+        partner_pk = self.kwargs.get("partner_pk")
+        qs = qs.filter(catalog__corporate_partner_id=partner_pk) if partner_pk else qs
+
+        qs = qs.annotate(
             enrollments_count=Count(
                 "enrollments",
                 filter=Q(enrollments__active=True),
                 distinct=True,
             )
         )
+        qs = annotate_course_certified_count(qs)
+        return qs
 
 
 class CorporatePartnerCatalogEmailRegexViewSet(
