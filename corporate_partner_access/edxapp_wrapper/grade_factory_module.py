@@ -1,10 +1,12 @@
 """Grade factory wrapper module providing indirection via settings backend."""
 
 from importlib import import_module
+
 from django.conf import settings
 
 
 def _backend():
+    """Return the backend module for grade factory operations."""
     path = getattr(
         settings,
         "GRADE_FACTORY_MODULE_BACKEND",

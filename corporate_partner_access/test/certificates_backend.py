@@ -1,5 +1,6 @@
 """This file contains all the necessary backends in a test scenario for certificates."""
 
+
 class CertiticateStatusedMock:
     """Mock class to enable unit testing."""
 
@@ -9,6 +10,7 @@ class CertiticateStatusedMock:
 
     PASSED_STATUSES = [ACTIVE]
 
+
 class GeneratedCertificateMock:
     """Mock class to enable unit testing."""
 
@@ -17,10 +19,12 @@ class GeneratedCertificateMock:
         self.course_id = course_id
         self.status = status
 
+
 def generated_certificate_model():
     """Fake generated_certificate_model class."""
     return GeneratedCertificateMock
 
-def certificate_statuses_model():   
+
+def certificate_statuses_model():
     """Fake certificate_statuses_model class."""
     return CertiticateStatusedMock
