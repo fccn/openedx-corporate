@@ -20,6 +20,8 @@ from corporate_partner_access.models import (
     CorporatePartnerCatalogEmailRegex,
     CorporatePartnerCatalogLearner,
 )
+from corporate_partner_access.services.assessments import get_assessments_counts
+from corporate_partner_access.services.progress import compute_progress_percent
 from flex_catalog.serializers import CourseOverviewSimpleSerializer
 
 User = get_user_model()
@@ -236,6 +238,9 @@ class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
 
     user = UserSimpleSerializer(read_only=True)
     catalog_course = serializers.PrimaryKeyRelatedField(read_only=True)
+    progress = serializers.SerializerMethodField()
+    completed_assessments = serializers.SerializerMethodField()
+    pending_assessments = serializers.SerializerMethodField()
 
     class Meta:
         model = CatalogCourseEnrollment
@@ -244,8 +249,38 @@ class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
             "user",
             "catalog_course",
             "active",
+            "progress",
+            "completed_assessments",
+            "pending_assessments",
         ]
         read_only_fields = ["id", "user", "catalog_course"]
+
+    def get_progress(self, obj):
+        """Return user's progress percent in this course run."""
+        key = self._course_key_str(obj)
+        if not key:
+            return None
+        return compute_progress_percent(course_key_str=key, user=obj.user)
+
+    def get_completed_assessments(self, obj):
+        """Return count of completed graded assessments for this user in this course run."""
+        key = self._course_key_str(obj)
+        if not key:
+            return None
+        result = get_assessments_counts(key, obj.user)
+        return result.get("completed")
+
+    def get_pending_assessments(self, obj):
+        """Return count of pending graded assessments for this user in this course run."""
+        key = self._course_key_str(obj)
+        if not key:
+            return None
+        result = get_assessments_counts(key, obj.user)
+        return result.get("pending")
+
+    def _course_key_str(self, obj):
+        co = getattr(obj.catalog_course, "course_overview", None)
+        return str(co.id)
 
 
 class CatalogCourseEnrollmentAllowedSerializer(serializers.ModelSerializer):
