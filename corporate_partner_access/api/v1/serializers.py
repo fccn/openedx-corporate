@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import random
 from typing import Any, Dict, Optional
 
 from django.conf import settings
@@ -21,7 +20,11 @@ from corporate_partner_access.models import (
     CorporatePartnerCatalogLearner,
 )
 from corporate_partner_access.services.assessments import get_assessments_counts
-from corporate_partner_access.services.progress import compute_progress_percent
+from corporate_partner_access.services.progress import (
+    compute_catalog_completion_rate,
+    compute_catalog_course_completion_rate,
+    compute_progress_percent_by_user,
+)
 from flex_catalog.serializers import CourseOverviewSimpleSerializer
 
 User = get_user_model()
@@ -157,10 +160,9 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
     def get_email_regexes(self, obj):
         return list(obj.email_regexes.all().values_list("regex", flat=True))
 
-    # TODO: Replace implementation
-    def get_completion_rate(self, obj):  # pylint: disable=unused-argument
-        """Mocked completion rate. Replace with real implementation."""
-        return random.randint(0, 100)
+    def get_completion_rate(self, obj):
+        rate_statistics = compute_catalog_completion_rate(obj.id)
+        return rate_statistics.get("completion_rate")
 
 
 class CatalogLearnerSerializer(serializers.ModelSerializer):
@@ -215,9 +217,9 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ["id"]
 
-    def get_completion_rate(self, obj):  # pylint: disable=unused-argument
-        """Mocked completion rate. Replace with real implementation."""
-        return random.randint(0, 100)
+    def get_completion_rate(self, obj):
+        rate_statistics = compute_catalog_course_completion_rate(obj.id)
+        return rate_statistics.get("completion_rate")
 
 
 class CatalogEmailRegexSerializer(serializers.ModelSerializer):
@@ -260,7 +262,7 @@ class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
         key = self._course_key_str(obj)
         if not key:
             return None
-        return compute_progress_percent(course_key_str=key, user=obj.user)
+        return compute_progress_percent_by_user(course_key_str=key, user=obj.user)
 
     def get_completed_assessments(self, obj):
         """Return count of completed graded assessments for this user in this course run."""
