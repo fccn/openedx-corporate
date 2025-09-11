@@ -2,7 +2,7 @@
 
 from celery.result import AsyncResult
 from django.db import transaction
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, Q
 from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated
@@ -85,7 +85,7 @@ class CorporatePartnerViewSet(viewsets.ReadOnlyModelViewSet):
             catalogs_count=Count("catalogs", distinct=True),
             courses_count=Count("catalogs__courses", distinct=True),
             total_enrollments=Coalesce(
-                Sum(
+                Count(
                     "catalogs__catalog_courses__enrollments",
                     filter=Q(catalogs__catalog_courses__enrollments__active=True),
                     distinct=True,
@@ -150,7 +150,7 @@ class CorporatePartnerCatalogViewSet(
         qs = qs.annotate(
             courses_count=Count("courses", distinct=True),
             total_enrollments=Coalesce(
-                Sum(
+                Count(
                     "catalog_courses__enrollments",
                     filter=Q(catalog_courses__enrollments__active=True),
                     distinct=True,
