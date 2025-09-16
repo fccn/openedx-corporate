@@ -4,18 +4,26 @@ from __future__ import annotations
 
 from typing import Any, Dict, Optional
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import serializers
 
 from corporate_partner_access.edxapp_wrapper.course_module import course_overview
 from corporate_partner_access.models import (
+    CatalogCourseEnrollment,
     CatalogCourseEnrollmentAllowed,
     CorporatePartner,
     CorporatePartnerCatalog,
     CorporatePartnerCatalogCourse,
     CorporatePartnerCatalogEmailRegex,
     CorporatePartnerCatalogLearner,
+)
+from corporate_partner_access.services.assessments import get_assessments_counts
+from corporate_partner_access.services.progress import (
+    compute_catalog_completion_rate,
+    compute_catalog_course_completion_rate,
+    compute_progress_percent_by_user,
 )
 from flex_catalog.serializers import CourseOverviewSimpleSerializer
 
@@ -27,29 +35,57 @@ CourseOverview = course_overview()
 class UserSimpleSerializer(serializers.ModelSerializer):
     """Minimal serializer for user data."""
 
+    full_name = serializers.SerializerMethodField()
+
     class Meta:
         model = User
-        fields = ["id", "username", "email"]
+        fields = ["id", "username", "email", "full_name"]
+
+    def get_full_name(self, obj):
+        """Return the user's full name, or username/email if full name is not set."""
+        first = getattr(obj, "first_name", "") or ""
+        last = getattr(obj, "last_name", "") or ""
+        full = (first + " " + last).strip()
+
+        if not full:
+            full = getattr(obj, "username", "") or getattr(obj, "email", "") or ""
+
+        return full or None
 
 
 class CorporatePartnerSerializer(serializers.ModelSerializer):
     """Serializer for Corporate Partner data."""
 
-    logo_url = serializers.SerializerMethodField()
+    logo = serializers.SerializerMethodField()
+    catalogs = serializers.IntegerField(source="catalogs_count", read_only=True)
+    courses = serializers.IntegerField(source="courses_count", read_only=True)
+    enrollments = serializers.IntegerField(source="total_enrollments", read_only=True)
+
+    certified = serializers.IntegerField(source="certified_count", read_only=True)
 
     class Meta:
         model = CorporatePartner
-        fields = ["id", "code", "name", "homepage_url", "logo", "logo_url"]
-        read_only_fields = ["id", "logo_url"]
+        fields = [
+            "id",
+            "code",
+            "name",
+            "homepage_url",
+            "logo",
+            "catalogs",
+            "courses",
+            "enrollments",
+            "certified",
+        ]
+        read_only_fields = ["id"]
         extra_kwargs = {
             "homepage_url": {"required": False, "allow_null": True},
             "logo": {"required": False, "allow_null": True, "write_only": True},
         }
 
-    def get_logo_url(self, obj):
+    def get_logo(self, obj):
         """Return the URL of the corporate partner's logo."""
         try:
-            return obj.logo.url
+            return f"{settings.LMS_ROOT_URL}{obj.logo.url}"
         except (ValueError, AttributeError):
             return None
 
@@ -62,6 +98,12 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
     )
 
     email_regexes = serializers.SerializerMethodField()
+    courses = serializers.IntegerField(source="courses_count", read_only=True)
+    enrollments = serializers.IntegerField(source="total_enrollments", read_only=True)
+    certified = serializers.IntegerField(source="certified_count", read_only=True)
+
+    # TODO: Replace implementation
+    completion_rate = serializers.SerializerMethodField()
 
     class Meta:
         model = CorporatePartnerCatalog
@@ -81,8 +123,16 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
             "support_email",
             "is_public",
             "catalog_alternative_link",
+            "courses",
+            "enrollments",
+            "certified",
+            "completion_rate",
         ]
-        read_only_fields = ["id", "email_regexes"]
+        read_only_fields = [
+            "id",
+            "email_regexes",
+            "courses",
+        ]
         extra_kwargs = {
             "authorization_additional_message": {
                 "required": False,
@@ -109,6 +159,10 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
 
     def get_email_regexes(self, obj):
         return list(obj.email_regexes.all().values_list("regex", flat=True))
+
+    def get_completion_rate(self, obj):
+        rate_statistics = compute_catalog_completion_rate(obj.id)
+        return rate_statistics.get("completion_rate")
 
 
 class CatalogLearnerSerializer(serializers.ModelSerializer):
@@ -145,11 +199,27 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
     course_run = CourseOverviewSimpleSerializer(
         source="course_overview", read_only=True
     )
+    enrollments = serializers.IntegerField(source="enrollments_count", read_only=True)
+    certified = serializers.IntegerField(source="certified_count", read_only=True)
+    completion_rate = serializers.SerializerMethodField()
 
     class Meta:
         model = CorporatePartnerCatalogCourse
-        fields = ["id", "course_overview", "position", "catalog_id", "course_run"]
-        read_only_fields = ["id", "course_run"]
+        fields = [
+            "id",
+            "course_overview",
+            "position",
+            "catalog_id",
+            "course_run",
+            "enrollments",
+            "certified",
+            "completion_rate",
+        ]
+        read_only_fields = ["id"]
+
+    def get_completion_rate(self, obj):
+        rate_statistics = compute_catalog_course_completion_rate(obj.id)
+        return rate_statistics.get("completion_rate")
 
 
 class CatalogEmailRegexSerializer(serializers.ModelSerializer):
@@ -163,6 +233,56 @@ class CatalogEmailRegexSerializer(serializers.ModelSerializer):
         model = CorporatePartnerCatalogEmailRegex
         fields = ["id", "catalog_id", "regex"]
         read_only_fields = ["id"]
+
+
+class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
+    """Serializer for enrollments in a catalog course."""
+
+    user = UserSimpleSerializer(read_only=True)
+    catalog_course = serializers.PrimaryKeyRelatedField(read_only=True)
+    progress = serializers.SerializerMethodField()
+    completed_assessments = serializers.SerializerMethodField()
+    pending_assessments = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CatalogCourseEnrollment
+        fields = [
+            "id",
+            "user",
+            "catalog_course",
+            "active",
+            "progress",
+            "completed_assessments",
+            "pending_assessments",
+        ]
+        read_only_fields = ["id", "user", "catalog_course"]
+
+    def get_progress(self, obj):
+        """Return user's progress percent in this course run."""
+        key = self._course_key_str(obj)
+        if not key:
+            return None
+        return compute_progress_percent_by_user(course_key_str=key, user=obj.user)
+
+    def get_completed_assessments(self, obj):
+        """Return count of completed graded assessments for this user in this course run."""
+        key = self._course_key_str(obj)
+        if not key:
+            return None
+        result = get_assessments_counts(key, obj.user)
+        return result.get("completed")
+
+    def get_pending_assessments(self, obj):
+        """Return count of pending graded assessments for this user in this course run."""
+        key = self._course_key_str(obj)
+        if not key:
+            return None
+        result = get_assessments_counts(key, obj.user)
+        return result.get("pending")
+
+    def _course_key_str(self, obj):
+        co = getattr(obj.catalog_course, "course_overview", None)
+        return str(co.id)
 
 
 class CatalogCourseEnrollmentAllowedSerializer(serializers.ModelSerializer):
@@ -237,7 +357,9 @@ class CatalogCourseEnrollmentAllowedCreateSerializer(serializers.ModelSerializer
             invite_email=email,
             defaults={
                 "user": user,
-                "invited_by": request.user if request and request.user.is_authenticated else None,
+                "invited_by": (
+                    request.user if request and request.user.is_authenticated else None
+                ),
                 "status": CatalogCourseEnrollmentAllowed.Status.SENT,
             },
         )

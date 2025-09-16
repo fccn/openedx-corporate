@@ -7,6 +7,7 @@ from rest_framework_nested.routers import NestedDefaultRouter
 
 from corporate_partner_access.api.v1.views import (
     CatalogCourseEnrollmentAllowedViewSet,
+    CatalogCourseEnrollmentViewSet,
     CorporatePartnerCatalogCourseViewSet,
     CorporatePartnerCatalogEmailRegexViewSet,
     CorporatePartnerCatalogLearnerViewSet,
@@ -35,10 +36,14 @@ courses_router.register(
     CatalogCourseEnrollmentAllowedViewSet,
     basename="partner-catalog-course-invites",
 )
-
+courses_router.register(
+    r"enrollments",
+    CatalogCourseEnrollmentViewSet,
+    basename="partner-catalog-course-enrollments",
+)
 urlpatterns = [
     path("", include(router.urls)),
     path("", include(partners_router.urls)),
     path("", include(catalogs_router.urls)),
-    path("", include(courses_router.urls)),  # <- include the third-level router
+    path("", include(courses_router.urls)),
 ]

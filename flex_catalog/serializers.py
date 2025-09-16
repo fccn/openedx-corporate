@@ -17,7 +17,14 @@ class CourseOverviewSimpleSerializer(serializers.ModelSerializer):
         """Meta class for CourseOverviewSimpleSerializer."""
 
         model = CourseOverview
-        fields = ["id", "display_name"]
+        fields = [
+            "id",
+            "display_name",
+            "start",
+            "end",
+            "enrollment_start",
+            "enrollment_end",
+        ]
 
 
 class FlexibleCatalogModelSerializer(serializers.ModelSerializer):
