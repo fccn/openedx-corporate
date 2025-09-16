@@ -12,7 +12,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from corporate_partner_access.api.v1 import tasks as partner_tasks
-from corporate_partner_access.api.v1.mixins import InjectNestedFKMixin, ReportMixin
+from corporate_partner_access.api.v1.mixins import InjectNestedFKMixin
 from corporate_partner_access.api.v1.schemas import (
     bulk_status_invitations_schema,
     bulk_status_learner_schema,
@@ -98,7 +98,7 @@ class CorporatePartnerViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class CorporatePartnerCatalogViewSet(
-    InjectNestedFKMixin, viewsets.ModelViewSet, ReportMixin
+    InjectNestedFKMixin, viewsets.ModelViewSet
 ):
     """
     ViewSet for Corporate Partner Catalog data.
@@ -122,16 +122,6 @@ class CorporatePartnerCatalogViewSet(
     # Mixin config
     nested_lookup_kwarg = "partner_pk"
     target_field_name = "corporate_partner"
-
-    # Report config
-    report_fields = [
-        "id",
-        "name",
-        "courses",
-        "enrollments",
-        "certified",
-        "completion_rate",
-    ]
 
     def get_queryset(self):
         """Limit catalogs to those the user manages or views; staff see all."""
@@ -256,7 +246,7 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
 
 
 class CorporatePartnerCatalogCourseViewSet(
-    InjectNestedFKMixin, viewsets.ModelViewSet, ReportMixin
+    InjectNestedFKMixin, viewsets.ModelViewSet,
 ):
     """
     ViewSet for Corporate Partner Catalog Course data.
@@ -281,17 +271,6 @@ class CorporatePartnerCatalogCourseViewSet(
     # Mixin config
     nested_lookup_kwarg = "catalog_pk"
     target_field_name = "catalog_id"
-
-    # Report config
-    report_fields = [
-        "id",
-        "name",
-        "position",
-        "course_run",
-        "enrollments",
-        "certified",
-        "completion_rate",
-    ]
 
     def get_queryset(self):
         """Get the queryset for catalog courses."""
