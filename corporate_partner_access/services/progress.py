@@ -13,6 +13,7 @@ from corporate_partner_access.models import (
 
 COURSE_COMPLETION_TTL = getattr(settings, "CP_COURSE_COMPLETION_TTL", 120)
 CATALOG_COMPLETION_TTL = getattr(settings, "CP_CATALOG_COMPLETION_TTL", 180)
+PROGRESS_COMPLETION_THRESHOLD = 99.999
 
 
 def compute_progress_percent_by_user(course_key_str: str, user) -> float | None:
@@ -61,7 +62,7 @@ def compute_catalog_course_completion_rate(
         total += 1
         progress = compute_progress_percent_by_user(course_key_str, enrollment.user)
 
-        if progress >= 99.999:
+        if progress >= PROGRESS_COMPLETION_THRESHOLD:
             completed += 1
 
     completion_rate = (completed / total) * 100.0 if total > 0 else 0.0
@@ -104,7 +105,7 @@ def compute_catalog_completion_rate(catalog_id: str, skip_cache: bool = False):
     for learner in learners_qs:
         if all(
             (progress := compute_progress_percent_by_user(ck, learner.user))
-            and progress >= 99.999
+            and progress >= PROGRESS_COMPLETION_THRESHOLD
             for ck in course_keys
         ):
             learners_completed_all += 1
