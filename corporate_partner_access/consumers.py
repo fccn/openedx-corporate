@@ -12,6 +12,8 @@ from typing import Any
 from django.db import transaction
 from django.dispatch import receiver
 
+from openedx_events.learning.signals import COURSE_ENROLLMENT_CREATED
+from openedx_events.learning.data import CourseEnrollmentData
 from corporate_partner_access.events.data import CatalogCourseEnrollmentAllowedData
 from corporate_partner_access.events.signals import (
     CATALOG_CEA_ACCEPTED_V1,
@@ -20,6 +22,7 @@ from corporate_partner_access.events.signals import (
     CATALOG_CEA_UPDATED_V1,
 )
 from corporate_partner_access.services.workflows import accept_invite_workflow
+from corporate_partner_access.tasks import ensure_catalog_enrollment_task
 
 logger = logging.getLogger("cpa.events")
 
@@ -50,6 +53,8 @@ def handle_catalog_cea_accepted(
     invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any
 ) -> None:
     """When an invite is accepted, create/activate the enrollment (idempotent)."""
+    
+
     def run_workflow() -> None:
         """
         Handle side effects when a catalog course enrollment invite is accepted.
@@ -84,3 +89,18 @@ def handle_catalog_cea_declined(
         logger.info("CEA DECLINED: id=%s email=%s user_id=%s", invite.id, invite.invite_email, invite.user_id)
 
     transaction.on_commit(after_commit)
+
+
+@receiver(COURSE_ENROLLMENT_CREATED)
+def handle_course_enrollment_created(
+    sender: Any,  # pylint: disable=unused-argument
+    enrollment: CourseEnrollmentData, **_kwargs: Any
+) -> None:
+    user_id = int(enrollment.user.id)
+    course_id = str(enrollment.course.course_key)
+
+    transaction.on_commit(lambda: ensure_catalog_enrollment_task.apply_async(
+        args=[user_id, course_id],
+        countdown=120,
+        task_id=f"ensure-catalog-enrollment:{user_id}:{course_id}",
+    ))

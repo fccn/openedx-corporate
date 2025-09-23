@@ -1,51 +1,66 @@
 """
-Provides services for managing user enrollments in edX platform courses.
-
-This module contains functions to ensure that users are properly enrolled in edX platform courses
-associated with corporate partners. It uses wrapper modules to interact with edX app models and APIs,
-avoiding direct imports from edX-platform code.
+Services to enroll a user in edX (LMS) from a CorporatePartnerCatalogCourse,
+setting the enrollment attribute cpa/catalog_id. No return value.
 """
 
 from __future__ import annotations
-
 import logging
-from typing import Any, Optional, Tuple
-
 from django.contrib.auth import get_user_model
-
-from corporate_partner_access.edxapp_wrapper.student_module import course_enrollment_model, enroll_user
+from corporate_partner_access.edxapp_wrapper.enrollment_api import add_enrollment
 from corporate_partner_access.models import CorporatePartnerCatalogCourse
 
 logger = logging.getLogger(__name__)
 
+def ensure_edx_platform_enrollment(*, user_id: int, catalog_course_id: str) -> None:
+    """
+    Ensures that a user is enrolled in the edX platform course corresponding to the given
+    CorporatePartnerCatalogCourse, and sets the enrollment attribute 'cpa/catalog_id'.
 
-def ensure_edx_platform_enrollment(
-    *,
-    user_id: int,
-    catalog_course_id: str,
-    mode: Optional[str] = None,
-) -> Tuple[Any, bool]:
+    This function is idempotent and can be called multiple times for the same user and course.
+    It will create the enrollment if it does not exist, and update the enrollment attributes
+    as needed.
+
+    Args:
+        user_id (int): The ID of the user to enroll.
+        catalog_course_id (str): The ID of the CorporatePartnerCatalogCourse.
+
+    Returns:
+        None
+
+    Raises:
+        Exception: If enrollment creation or update fails.
     """
-    Ensure the user is enrolled in edx-platform for `course_key_str`.
-    Uses the student wrapper; no direct imports from edx-platform in services.
-    """
+
     User = get_user_model()
-    user = User.objects.only("id").get(pk=user_id)
+    user = User.objects.only("id", "username").get(pk=user_id)
 
-    catalog_course = CorporatePartnerCatalogCourse.objects.get(id=catalog_course_id)
-    course_key = catalog_course.course_overview.id
-
-    CourseEnrollment = course_enrollment_model()
-
-    had_active_before = CourseEnrollment.objects.filter(
-        user=user, course_id=course_key, is_active=True
-    ).exists()
-
-    enrollment = enroll_user(user=user, course_key=course_key, mode=mode)
-
-    created = not had_active_before
-    logger.info(
-        "LMS enrollment ensured: user_id=%s course=%s mode=%s created=%s is_active=%s",
-        user_id, course_key, mode or "auto", created, getattr(enrollment, "is_active", True)
+    cc = (
+        CorporatePartnerCatalogCourse.objects
+        .select_related("course_overview", "catalog")
+        .only("id", "course_overview__id", "catalog__id", "catalog_id")
+        .get(id=catalog_course_id)
     )
-    return enrollment, created
+
+    course_id = str(cc.course_overview.id)
+    catalog_id = str(getattr(cc, "catalog_id", None) or cc.catalog.id)
+
+    payload = {
+        "username": user.username,
+        "course_id": course_id,
+        "enrollment_attributes": [
+            {"namespace": "cpa", "name": "catalog_id", "value": catalog_id}
+        ],
+    }
+
+    try:
+        add_enrollment(**payload)
+        logger.info(
+            "Enrollment ensured (user_id=%s, course_id=%s, catalog_id=%s)",
+            user_id, course_id, catalog_id
+        )
+    except Exception:
+        logger.exception(
+            "Failed to ensure enrollment (user_id=%s, course_id=%s, catalog_id=%s)",
+            user_id, course_id, catalog_id
+        )
+        raise
