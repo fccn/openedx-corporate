@@ -2,16 +2,16 @@
 This module provides services for managing enrollments in catalog courses for corporate partners.
 """
 from __future__ import annotations
+
 from typing import Optional, Tuple
+
 from django.db import IntegrityError, transaction
 
-from corporate_partner_access.models import (
-    CatalogCourseEnrollment,
-    CorporatePartnerCatalogCourse,
-)
 from corporate_partner_access.edxapp_wrapper.student_module import course_enrollment_model
+from corporate_partner_access.models import CatalogCourseEnrollment, CorporatePartnerCatalogCourse
 
 CourseEnrollment = course_enrollment_model()
+
 
 def add_catalog_course_enrollment(
     *, user_id: int, catalog_course_id: int
@@ -70,7 +70,7 @@ def ensure_catalog_enrollment_exists(
     Ensures a CatalogCourseEnrollment exists for the given user and course.
 
     This function looks up the course enrollment, extracts the catalog_id from the enrollment
-    attributes, finds the corresponding CorporatePartnerCatalogCourse, and creates a 
+    attributes, finds the corresponding CorporatePartnerCatalogCourse, and creates a
     CatalogCourseEnrollment if it doesn't already exist.
 
     Args:
@@ -113,4 +113,4 @@ def ensure_catalog_enrollment_exists(
     if not catalog_course_id:
         return None, False
 
-    add_catalog_course_enrollment(user_id=user_id, catalog_course_id=catalog_course_id)
+    return add_catalog_course_enrollment(user_id=user_id, catalog_course_id=catalog_course_id)

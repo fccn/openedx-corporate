@@ -3,9 +3,8 @@ Factory functions to access CourseEnrollment/CourseMode and stable operations
 (e.g., enroll_user) via a pluggable backend.
 """
 
-from typing import Optional, List, Dict, Any
-
 from importlib import import_module
+from typing import Any, Dict, List, Optional
 
 from django.conf import settings
 

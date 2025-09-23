@@ -11,9 +11,9 @@ from typing import Any
 
 from django.db import transaction
 from django.dispatch import receiver
-
-from openedx_events.learning.signals import COURSE_ENROLLMENT_CREATED
 from openedx_events.learning.data import CourseEnrollmentData
+from openedx_events.learning.signals import COURSE_ENROLLMENT_CREATED
+
 from corporate_partner_access.events.data import CatalogCourseEnrollmentAllowedData
 from corporate_partner_access.events.signals import (
     CATALOG_CEA_ACCEPTED_V1,
@@ -53,7 +53,6 @@ def handle_catalog_cea_accepted(
     invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any
 ) -> None:
     """When an invite is accepted, create/activate the enrollment (idempotent)."""
-    
 
     def run_workflow() -> None:
         """
@@ -96,6 +95,7 @@ def handle_course_enrollment_created(
     sender: Any,  # pylint: disable=unused-argument
     enrollment: CourseEnrollmentData, **_kwargs: Any
 ) -> None:
+    """Ensure a CatalogCourseEnrollment exists when a CourseEnrollment is created."""
     user_id = int(enrollment.user.id)
     course_id = str(enrollment.course.course_key)
 
