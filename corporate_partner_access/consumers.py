@@ -12,7 +12,7 @@ from typing import Any
 from django.db import transaction
 from django.dispatch import receiver
 from openedx_events.learning.data import CourseEnrollmentData
-from openedx_events.learning.signals import COURSE_ENROLLMENT_CREATED
+from openedx_events.learning.signals import COURSE_ENROLLMENT_CREATED, COURSE_UNENROLLMENT_COMPLETED
 
 from corporate_partner_access.events.data import CatalogCourseEnrollmentAllowedData
 from corporate_partner_access.events.signals import (
@@ -22,7 +22,7 @@ from corporate_partner_access.events.signals import (
     CATALOG_CEA_UPDATED_V1,
 )
 from corporate_partner_access.services.workflows import accept_invite_workflow
-from corporate_partner_access.tasks import ensure_catalog_enrollment_task
+from corporate_partner_access.tasks import deactivate_catalog_enrollment_task, ensure_catalog_enrollment_task
 
 logger = logging.getLogger("cpa.events")
 
@@ -103,4 +103,20 @@ def handle_course_enrollment_created(
         args=[user_id, course_id],
         countdown=120,
         task_id=f"ensure-catalog-enrollment:{user_id}:{course_id}",
+    ))
+
+
+@receiver(COURSE_UNENROLLMENT_COMPLETED)
+def handle_course_unenrollment_completed(
+    sender: Any,  # pylint: disable=unused-argument
+    enrollment: CourseEnrollmentData, **_kwargs: Any
+) -> None:
+    """Deactivate catalog enrollment when user unenrolls from the underlying course."""
+    user_id = int(enrollment.user.id)
+    course_id = str(enrollment.course.course_key)
+
+    transaction.on_commit(lambda: deactivate_catalog_enrollment_task.apply_async(
+        args=[user_id, course_id],
+        countdown=120,
+        task_id=f"deactivate-catalog-enrollment:{user_id}:{course_id}",
     ))

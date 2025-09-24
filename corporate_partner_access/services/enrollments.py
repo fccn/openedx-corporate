@@ -63,31 +63,15 @@ def ensure_catalog_enrollment_exists_by_catalog_course(
     add_catalog_course_enrollment(user_id=user_id, catalog_course_id=catalog_course_id)
 
 
-def ensure_catalog_enrollment_exists(
-    *, user_id: int, course_id: str
-) -> Tuple[Optional[CatalogCourseEnrollment], bool]:
+def get_catalog_course_id(*, user_id: int, course_id: str) -> Optional[int]:
+    """Return catalog_course_id linked to the user's CourseEnrollment via cpa.catalog_id attribute.
+
+    Returns None if the platform course enrollment, the attribute, or the catalog mapping doesn't exist.
     """
-    Ensures a CatalogCourseEnrollment exists for the given user and course.
-
-    This function looks up the course enrollment, extracts the catalog_id from the enrollment
-    attributes, finds the corresponding CorporatePartnerCatalogCourse, and creates a
-    CatalogCourseEnrollment if it doesn't already exist.
-
-    Args:
-        user_id (int): The ID of the user to enroll.
-        course_id (str): The ID of the course to find the catalog enrollment for.
-
-    Returns:
-        Tuple[Optional[CatalogCourseEnrollment], bool]: A tuple containing the CatalogCourseEnrollment object (or None)
-        and a boolean indicating whether the enrollment was created (True) or already existed (False).
-        Returns (None, False) if the course enrollment doesn't exist, has no catalog_id attribute,
-        or no matching CorporatePartnerCatalogCourse is found.
-    """
-
     try:
         ce = CourseEnrollment.objects.get(user_id=user_id, course_id=course_id)
     except CourseEnrollment.DoesNotExist:
-        return None, False
+        return None
 
     catalog_id_raw = (
         ce.attributes
@@ -96,7 +80,7 @@ def ensure_catalog_enrollment_exists(
           .first()
     )
     if not catalog_id_raw:
-        return None, False
+        return None
 
     catalog_id_str = str(catalog_id_raw).strip()
     try:
@@ -104,13 +88,49 @@ def ensure_catalog_enrollment_exists(
     except (TypeError, ValueError):
         catalog_id_lookup = catalog_id_str
 
-    catalog_course_id = (
+    return (
         CorporatePartnerCatalogCourse.objects
         .filter(course_overview__id=course_id, catalog_id=catalog_id_lookup)
         .values_list("id", flat=True)
         .first()
     )
+
+
+def set_catalog_enrollment_active(
+    *, user_id: int, course_id: str, active: bool
+) -> Tuple[Optional[CatalogCourseEnrollment], bool]:
+    """Create/update CatalogCourseEnrollment setting desired active state."""
+    catalog_course_id = get_catalog_course_id(user_id=user_id, course_id=course_id)
     if not catalog_course_id:
         return None, False
 
-    return add_catalog_course_enrollment(user_id=user_id, catalog_course_id=catalog_course_id)
+    if active:
+        obj, created = add_catalog_course_enrollment(user_id=user_id, catalog_course_id=catalog_course_id)
+        if obj and not obj.active:
+            obj.active = True
+            obj.save(update_fields=["active"])
+        return obj, created
+
+    try:
+        obj = CatalogCourseEnrollment.objects.get(user_id=user_id, catalog_course_id=catalog_course_id)
+    except CatalogCourseEnrollment.DoesNotExist:
+        return None, False
+    if obj.active:
+        obj.active = False
+        obj.save(update_fields=["active"])
+        return obj, True
+    return obj, False
+
+
+def ensure_catalog_enrollment_exists(
+    *, user_id: int, course_id: str
+) -> Tuple[Optional[CatalogCourseEnrollment], bool]:
+    """Ensure enrollment exists & active. Wrapper over set_catalog_enrollment_active(active=True)."""
+    return set_catalog_enrollment_active(user_id=user_id, course_id=course_id, active=True)
+
+
+def deactivate_catalog_enrollment(
+    *, user_id: int, course_id: str
+) -> Tuple[Optional[CatalogCourseEnrollment], bool]:
+    """Deactivate enrollment (no creation). Wrapper over set_catalog_enrollment_active(active=False)."""
+    return set_catalog_enrollment_active(user_id=user_id, course_id=course_id, active=False)
