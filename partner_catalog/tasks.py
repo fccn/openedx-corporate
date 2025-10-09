@@ -2,10 +2,7 @@
 
 from celery import shared_task
 
-from partner_catalog.services.enrollments import (
-    deactivate_catalog_enrollment,
-    ensure_catalog_enrollment_exists,
-)
+from partner_catalog.services.enrollments import deactivate_catalog_enrollment, ensure_catalog_enrollment_exists
 
 
 @shared_task(bind=True, max_retries=5, default_retry_delay=60, acks_late=True)

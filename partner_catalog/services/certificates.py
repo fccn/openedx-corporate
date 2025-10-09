@@ -3,10 +3,7 @@
 from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Subquery, Value, When
 from django.db.models.functions import Coalesce
 
-from partner_catalog.edxapp_wrapper.certificates_module import (
-    certificate_statuses_model,
-    generated_certificate_model,
-)
+from partner_catalog.edxapp_wrapper.certificates_module import certificate_statuses_model, generated_certificate_model
 from partner_catalog.models import (
     CatalogCourseEnrollment,
     CorporatePartnerCatalogCourse,

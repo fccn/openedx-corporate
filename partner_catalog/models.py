@@ -6,10 +6,10 @@ from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models.functions import Lower
 
+from flex_catalog.models import FlexibleCatalogModel
 from partner_catalog.edxapp_wrapper.course_module import course_overview
 from partner_catalog.helpers.current_user import safe_get_current_user
 from partner_catalog.services.allowed_courses import CatalogAllowedCoursesService
-from flex_catalog.models import FlexibleCatalogModel
 
 
 class CatalogManagerRole:

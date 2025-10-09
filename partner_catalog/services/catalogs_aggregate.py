@@ -15,9 +15,9 @@ from typing import Set
 from django.conf import settings
 from django.core.cache import cache
 
+from flex_catalog.models import FlexibleCatalogModel
 from partner_catalog.edxapp_wrapper.course_module import course_overview
 from partner_catalog.helpers.current_user import safe_get_current_user
-from flex_catalog.models import FlexibleCatalogModel
 
 logger = logging.getLogger(__name__)
 CourseOverview = course_overview()

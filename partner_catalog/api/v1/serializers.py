@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.db import transaction
 from rest_framework import serializers
 
+from flex_catalog.serializers import CourseOverviewSimpleSerializer
 from partner_catalog.edxapp_wrapper.course_module import course_overview
 from partner_catalog.models import (
     CatalogCourseEnrollment,
@@ -25,7 +26,6 @@ from partner_catalog.services.progress import (
     compute_catalog_course_completion_rate,
     compute_progress_percent_by_user,
 )
-from flex_catalog.serializers import CourseOverviewSimpleSerializer
 
 User = get_user_model()
 

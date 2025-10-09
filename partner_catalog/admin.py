@@ -4,6 +4,7 @@ from django.contrib import admin, messages
 from django.urls import reverse
 from django.utils.html import format_html
 
+from flex_catalog.admin import CourseKeysMixin
 from partner_catalog.models import (
     CatalogCourseEnrollment,
     CatalogCourseEnrollmentAllowed,
@@ -15,7 +16,6 @@ from partner_catalog.models import (
     CorporatePartnerCatalogManager,
 )
 from partner_catalog.services.invitations import InvitationService
-from flex_catalog.admin import CourseKeysMixin
 
 
 @admin.register(CorporatePartner)
