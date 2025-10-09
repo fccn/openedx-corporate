@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Package metadata for corporate_partner_access.
+Package metadata for partner_catalog.
 """
 import os
 import re
@@ -117,7 +117,7 @@ def is_requirement(line):
     return line and line.strip() and not line.startswith(("-r", "#", "-e", "git+", "-c"))
 
 
-VERSION = get_version('corporate_partner_access', '__init__.py')
+VERSION = get_version('partner_catalog', '__init__.py')
 
 if sys.argv[-1] == 'tag':
     print("Tagging the version on github:")
@@ -129,7 +129,7 @@ README = open(os.path.join(os.path.dirname(__file__), 'README.rst'), encoding="u
 CHANGELOG = open(os.path.join(os.path.dirname(__file__), 'CHANGELOG.rst'), encoding="utf8").read()
 
 setup(
-    name='corporate-partner-access',
+    name='partner-catalog',
     version=VERSION,
     description="""One-line description for README and other doc files.""",
     long_description=README + '\n\n' + CHANGELOG,
@@ -137,8 +137,8 @@ setup(
     author_email='oscm@openedx.org',
     packages=find_packages(
         include=[
-            'corporate_partner_access',
-            'corporate_partner_access.*',
+            'partner_catalog',
+            'partner_catalog.*',
             'flex_catalog',
             'flex_catalog.*'
         ],
@@ -164,10 +164,10 @@ setup(
     ],
     entry_points={
         'lms.djangoapp': [
-                'corporate_partner_access = corporate_partner_access.apps:CorporatePartnerAccessConfig',
+                'partner_catalog = partner_catalog.apps:PartnerCatalogConfig',
             ],
         'cms.djangoapp': [
-            'corporate_partner_access = corporate_partner_access.apps:CorporatePartnerAccessConfig',
+            'partner_catalog = partner_catalog.apps:PartnerCatalogConfig',
         ]
     },
 )

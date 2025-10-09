@@ -74,13 +74,13 @@ selfcheck: ## check that the Makefile is well-formed
 ## Localization targets
 
 extract_translations: ## extract strings to be translated, outputting .mo files
-	cd corporate_partner_access && i18n_tool extract --no-segment
+	cd partner_catalog && i18n_tool extract --no-segment
 
 compile_translations: ## compile translation files, outputting .po files for each supported language
-	cd corporate_partner_access && i18n_tool generate
+	cd partner_catalog && i18n_tool generate
 
 detect_changed_source_translations:
-	cd corporate_partner_access && i18n_tool changed
+	cd partner_catalog && i18n_tool changed
 
 ifeq ($(OPENEDX_ATLAS_PULL),)
 pull_translations: ## Pull translations from Transifex
@@ -88,15 +88,15 @@ pull_translations: ## Pull translations from Transifex
 else
 # Experimental: OEP-58 Pulls translations using atlas
 pull_translations:
-	find corporate_partner_access/conf/locale -mindepth 1 -maxdepth 1 -type d -exec rm -r {} \;
-	atlas pull $(OPENEDX_ATLAS_ARGS) translations/corporate-partner-access/corporate_partner_access/conf/locale:corporate_partner_access/conf/locale
+	find partner_catalog/conf/locale -mindepth 1 -maxdepth 1 -type d -exec rm -r {} \;
+	atlas pull $(OPENEDX_ATLAS_ARGS) translations/partner-catalog/partner_catalog/conf/locale:partner_catalog/conf/locale
 	python manage.py compilemessages
 
 	@echo "Translations have been pulled via Atlas and compiled."
 endif
 
 dummy_translations: ## generate dummy translation (.po) files
-	cd corporate_partner_access && i18n_tool dummy
+	cd partner_catalog && i18n_tool dummy
 
 build_dummy_translations: extract_translations dummy_translations compile_translations ## generate and compile dummy translation files
 

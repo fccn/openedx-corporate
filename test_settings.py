@@ -33,14 +33,14 @@ INSTALLED_APPS = (
     'django.contrib.messages',
     'django.contrib.sessions',
     'flex_catalog',
-    'corporate_partner_access',
+    'partner_catalog',
 )
 
 LOCALE_PATHS = [
-    root('corporate_partner_access', 'conf', 'locale'),
+    root('partner_catalog', 'conf', 'locale'),
 ]
 
-ROOT_URLCONF = 'corporate_partner_access.urls'
+ROOT_URLCONF = 'partner_catalog.urls'
 
 SECRET_KEY = 'insecure-secret-key'
 
@@ -62,9 +62,10 @@ TEMPLATES = [{
     },
 }]
 
-COURSE_OVERVIEW_BACKEND = "corporate_partner_access.test.course_overview_backend"
-CERTIFICATES_MODULE_BACKEND = "corporate_partner_access.test.certificates_backend"
-GRADE_FACTORY_MODULE_BACKEND = "corporate_partner_access.test.grade_factory_backend"
+COURSE_OVERVIEW_BACKEND = "partner_catalog.test.course_overview_backend"
+CERTIFICATES_MODULE_BACKEND = "partner_catalog.test.certificates_backend"
+GRADE_FACTORY_MODULE_BACKEND = "partner_catalog.test.grade_factory_backend"
+STUDENT_MODULE_BACKEND = "partner_catalog.test.student_module_backend"
 
 # Celery settings for testing
 CELERY_TASK_ALWAYS_EAGER = True

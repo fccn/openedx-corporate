@@ -1,7 +1,7 @@
 [run]
 branch = True
 data_file = .coverage
-source=corporate_partner_access
+source=partner_catalog
 omit =
     test_settings.py
     */migrations/*

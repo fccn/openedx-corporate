@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Tests for the `corporate-partner-access` models module.
+Tests for the `partner-catalog` models module.
 """
 
 import pytest
