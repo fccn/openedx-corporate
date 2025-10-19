@@ -207,7 +207,7 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
         return Response(response_data, status=status.HTTP_200_OK)
 
 
-class CorporatePartnerCatalogCourseViewSet(
+class CatalogCourseViewSet(
     InjectNestedFKMixin, viewsets.ModelViewSet,
 ):
     """
@@ -242,7 +242,7 @@ class CorporatePartnerCatalogCourseViewSet(
         qs = qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
 
         partner_pk = self.kwargs.get("partner_pk")
-        qs = qs.filter(catalog__corporate_partner_id=partner_pk) if partner_pk else qs
+        qs = qs.filter(catalog__partner_id=partner_pk) if partner_pk else qs
 
         qs = qs.annotate(
             enrollments_count=Count(
@@ -255,7 +255,7 @@ class CorporatePartnerCatalogCourseViewSet(
         return qs
 
 
-class CorporatePartnerCatalogEmailRegexViewSet(
+class CatalogEmailRegexViewSet(
     InjectNestedFKMixin, viewsets.ModelViewSet
 ):
     """ViewSet for catalog email regex patterns."""
