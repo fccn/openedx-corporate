@@ -391,18 +391,24 @@ class CatalogLearnerInvitationAdmin(admin.ModelAdmin):
     raw_id_fields = ["catalog", "user"]
     date_hierarchy = "invited_at"
 
-    readonly_fields = [
-        "catalog",
-        "invite_email",
-        "user",
-        "invited_by_display",
-        "invited_at",
-        "status_display",
-        "accepted_at",
-        "declined_at",
-        "removed_at",
-        "removed_by_display",
-    ]
+    def get_readonly_fields(self, request, obj=None):
+        """No readonly fields when creating, all readonly when viewing."""
+        if obj is None:
+            # Creating new invitation
+            return []
+
+        return [
+            "catalog",
+            "invite_email",
+            "user",
+            "invited_by_display",
+            "invited_at",
+            "status_display",
+            "accepted_at",
+            "declined_at",
+            "removed_at",
+            "removed_by_display",
+        ]
 
     def has_change_permission(self, request, obj=None):
         """Disable editing invitations - they can only be viewed."""
