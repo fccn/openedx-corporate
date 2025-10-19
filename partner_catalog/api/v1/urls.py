@@ -1,12 +1,10 @@
 """Partner Catalog API v1 URLs."""
 
-# partner_catalog/api/v1/urls.py
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 from rest_framework_nested.routers import NestedDefaultRouter
 
 from partner_catalog.api.v1.views import (
-    CatalogCourseEnrollmentAllowedViewSet,
     CatalogCourseEnrollmentViewSet,
     CorporatePartnerCatalogCourseViewSet,
     CorporatePartnerCatalogEmailRegexViewSet,
@@ -29,13 +27,7 @@ catalogs_router.register(
     basename="partner-catalog-email-regexes",
 )
 
-# NEW: invites nested under courses
 courses_router = NestedDefaultRouter(catalogs_router, r"courses", lookup="course")
-courses_router.register(
-    r"invites",
-    CatalogCourseEnrollmentAllowedViewSet,
-    basename="partner-catalog-course-invites",
-)
 courses_router.register(
     r"enrollments",
     CatalogCourseEnrollmentViewSet,

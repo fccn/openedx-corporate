@@ -10,7 +10,7 @@ import logging
 from django.contrib.auth import get_user_model
 
 from partner_catalog.edxapp_wrapper.enrollment_api import add_enrollment
-from partner_catalog.models import CorporatePartnerCatalogCourse
+from partner_catalog.models import CatalogCourse
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +39,7 @@ def ensure_edx_platform_enrollment(*, user_id: int, catalog_course_id: str) -> N
     user = User.objects.only("id", "username").get(pk=user_id)
 
     cc = (
-        CorporatePartnerCatalogCourse.objects
+        CatalogCourse.objects
         .select_related("course_overview", "catalog")
         .only("id", "course_overview__id", "catalog__id", "catalog_id")
         .get(id=catalog_course_id)

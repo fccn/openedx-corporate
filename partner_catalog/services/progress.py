@@ -5,11 +5,7 @@ from django.core.cache import cache
 from opaque_keys.edx.keys import CourseKey
 
 from partner_catalog.edxapp_wrapper.courseware_module import get_course_blocks_completion_summary
-from partner_catalog.models import (
-    CatalogCourseEnrollment,
-    CorporatePartnerCatalogCourse,
-    CorporatePartnerCatalogLearner,
-)
+from partner_catalog.models import CatalogCourse, CatalogCourseEnrollment, CatalogLearner
 
 COURSE_COMPLETION_TTL = getattr(settings, "CP_COURSE_COMPLETION_TTL", 120)
 CATALOG_COMPLETION_TTL = getattr(settings, "CP_CATALOG_COMPLETION_TTL", 180)
@@ -46,7 +42,7 @@ def compute_catalog_course_completion_rate(
         if cached is not None:
             return cached
 
-    catalog_course = CorporatePartnerCatalogCourse.objects.filter(
+    catalog_course = CatalogCourse.objects.filter(
         id=catalog_course_id
     ).first()
     course_key_str = str(catalog_course.course_overview.id)
@@ -90,13 +86,13 @@ def compute_catalog_completion_rate(catalog_id: str, skip_cache: bool = False):
         if cached is not None:
             return cached
 
-    courses_qs = CorporatePartnerCatalogCourse.objects.select_related(
+    courses_qs = CatalogCourse.objects.select_related(
         "course_overview"
     ).filter(catalog_id=catalog_id)
 
     course_keys = [str(c.course_overview.id) for c in courses_qs]
 
-    learners_qs = CorporatePartnerCatalogLearner.objects.select_related("user").filter(
+    learners_qs = CatalogLearner.objects.select_related("user").filter(
         catalog_id=catalog_id, active=True
     )
     total_learners = learners_qs.count()

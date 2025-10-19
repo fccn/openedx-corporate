@@ -1,52 +1,39 @@
 """Partner Catalog API v1 Views."""
 
 from celery.result import AsyncResult
-from django.db import transaction
 from django.db.models import Count, Q
 from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
-from edx_rest_framework_extensions.permissions import IsAuthenticated
-from rest_framework import filters, mixins, status, viewsets
+from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from partner_catalog.api.v1 import tasks as partner_tasks
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
-from partner_catalog.api.v1.schemas import (
-    bulk_status_invitations_schema,
-    bulk_status_learner_schema,
-    bulk_upload_invitations_schema,
-    bulk_upload_learner_schema,
-)
+from partner_catalog.api.v1.schemas import bulk_status_learner_schema, bulk_upload_learner_schema
 from partner_catalog.api.v1.serializers import (
-    CatalogCourseEnrollmentAllowedCreateSerializer,
-    CatalogCourseEnrollmentAllowedSerializer,
     CatalogCourseEnrollmentSerializer,
     CatalogCourseSerializer,
     CatalogEmailRegexSerializer,
     CatalogLearnerSerializer,
     CorporatePartnerCatalogSerializer,
     CorporatePartnerSerializer,
-    InvitationSelfActionSerializer,
 )
 from partner_catalog.models import (
+    CatalogCourse,
     CatalogCourseEnrollment,
-    CatalogCourseEnrollmentAllowed,
-    CorporatePartner,
-    CorporatePartnerCatalog,
-    CorporatePartnerCatalogCourse,
-    CorporatePartnerCatalogEmailRegex,
-    CorporatePartnerCatalogLearner,
+    CatalogEmailRegex,
+    CatalogLearner,
+    Partner,
+    PartnerCatalog,
 )
 from partner_catalog.permissions import IsPartnerCatalogManager
-from partner_catalog.policies.invitations import can_user_act_on_invitation
 from partner_catalog.services.certificates import (
     annotate_catalog_certified_count,
     annotate_course_certified_count,
     annotate_partner_certified_count,
 )
-from partner_catalog.services.invitations import InvitationService
 
 
 class CorporatePartnerViewSet(viewsets.ReadOnlyModelViewSet):
@@ -55,7 +42,7 @@ class CorporatePartnerViewSet(viewsets.ReadOnlyModelViewSet):
     Provides access to corporate partner information.
     """
 
-    queryset = CorporatePartner.objects.all()
+    queryset = Partner.objects.all()
     serializer_class = CorporatePartnerSerializer
     permission_classes = [IsPartnerCatalogManager]
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -72,7 +59,7 @@ class CorporatePartnerViewSet(viewsets.ReadOnlyModelViewSet):
         user = self.request.user
         if not (user.is_staff or user.is_superuser):
             managed_partner_ids = (
-                CorporatePartnerCatalog.objects.filter(
+                PartnerCatalog.objects.filter(
                     catalog_managers__user=user,
                     catalog_managers__active=True,
                 )
@@ -106,7 +93,7 @@ class CorporatePartnerCatalogViewSet(
     """
 
     # pylint: disable=E1111
-    queryset = CorporatePartnerCatalog.objects.all()
+    queryset = PartnerCatalog.objects.all()
     serializer_class = CorporatePartnerCatalogSerializer
     permission_classes = [IsPartnerCatalogManager]
     filter_backends = [
@@ -158,7 +145,7 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
     Provides access to corporate partner catalog learner information.
     """
 
-    queryset = CorporatePartnerCatalogLearner.objects.select_related("catalog", "user")
+    queryset = CatalogLearner.objects.select_related("catalog", "user")
     serializer_class = CatalogLearnerSerializer
     permission_classes = [IsPartnerCatalogManager]
     filter_backends = [
@@ -253,7 +240,7 @@ class CorporatePartnerCatalogCourseViewSet(
     Provides access to corporate partner catalog course information.
     """
 
-    queryset = CorporatePartnerCatalogCourse.objects.select_related(
+    queryset = CatalogCourse.objects.select_related(
         "course_overview", "catalog"
     )
     serializer_class = CatalogCourseSerializer
@@ -298,7 +285,7 @@ class CorporatePartnerCatalogEmailRegexViewSet(
 ):
     """ViewSet for catalog email regex patterns."""
 
-    queryset = CorporatePartnerCatalogEmailRegex.objects.all()
+    queryset = CatalogEmailRegex.objects.all()
     serializer_class = CatalogEmailRegexSerializer
     permission_classes = [IsPartnerCatalogManager]
     filter_backends = [DjangoFilterBackend]
@@ -313,170 +300,6 @@ class CorporatePartnerCatalogEmailRegexViewSet(
         qs = self.queryset
         catalog_pk = self.kwargs.get("catalog_pk")
         return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
-
-
-class CatalogCourseEnrollmentAllowedViewSet(
-    mixins.ListModelMixin,
-    mixins.CreateModelMixin,
-    viewsets.GenericViewSet,
-):
-    """
-    /partners/{partner_pk}/catalogs/{catalog_pk}/courses/{course_pk}/invites/
-    """
-
-    permission_classes = [IsAuthenticated]
-
-    def get_catalog_course(self) -> CorporatePartnerCatalogCourse:
-        course_pk = self.kwargs["course_pk"]
-        return CorporatePartnerCatalogCourse.objects.get(pk=course_pk)
-
-    def get_queryset(self):
-        return CatalogCourseEnrollmentAllowed.objects.select_related(
-            "catalog_course", "user", "invited_by"
-        ).filter(catalog_course_id=self.kwargs["course_pk"])
-
-    def get_serializer_class(self):
-        if self.action in ("create"):
-            return CatalogCourseEnrollmentAllowedCreateSerializer
-        return CatalogCourseEnrollmentAllowedSerializer
-
-    def get_serializer_context(self):
-        ctx = super().get_serializer_context()
-        if self.action in ("create"):
-            ctx["catalog_course"] = self.get_catalog_course()
-        return ctx
-
-    @transaction.atomic
-    def create(self, request, *args, **kwargs):
-        """
-        Create one invite (idempotent on (course, invite_email) lowercased).
-        Body: {"emaill": "..."}
-        """
-        serializer = self.get_serializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        obj = serializer.save()
-
-        out = CatalogCourseEnrollmentAllowedSerializer(
-            obj, context=self.get_serializer_context()
-        )
-
-        headers = self.get_success_headers(out.data)
-        return Response(out.data, status=status.HTTP_201_CREATED, headers=headers)
-
-    @bulk_upload_invitations_schema
-    @action(
-        detail=False,
-        methods=["post"],
-        url_path="bulk",
-        parser_classes=[MultiPartParser],
-    )
-    def bulk(
-        self, request, partner_pk=None, catalog_pk=None, course_pk=None
-    ):  # pylint: disable=unused-argument
-        """
-        Bulk upload invitations to a catalog course via CSV file (async).
-        CSV columns: email
-        Returns a Celery task ID for status tracking.
-        """
-        file = request.FILES.get("file")
-        if not file:
-            return Response(
-                {"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST
-            )
-
-        csv_content = file.read().decode(request.encoding or "utf-8")
-        task = partner_tasks.bulk_upload_invitations.delay(
-            csv_content=csv_content,
-            catalog_course_id=course_pk,
-            invited_by_id=request.user.id,
-        )
-        return Response(
-            {"task_id": task.id, "status": "processing"},
-            status=status.HTTP_202_ACCEPTED,
-        )
-
-    @bulk_status_invitations_schema
-    @action(
-        detail=False,
-        methods=["get"],
-        url_path="bulk_status",
-    )
-    def bulk_status(
-        self, request, partner_pk=None, catalog_pk=None, course_pk=None
-    ):  # pylint: disable=unused-argument
-        """
-        Check the status of a bulk upload task by task_id.
-        Query parameter: task_id
-        """
-        task_id = request.query_params.get("task_id")
-        if not task_id:
-            return Response(
-                {"detail": "task_id parameter is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        task_result = AsyncResult(task_id)
-        response_data = {
-            "task_id": task_id,
-            "status": task_result.status,
-        }
-        if task_result.ready():
-            if task_result.successful():
-                response_data["result"] = task_result.result
-            else:
-                response_data["error"] = str(task_result.info)
-        return Response(response_data, status=status.HTTP_200_OK)
-
-    @action(detail=True, methods=["post"], url_path="accept")
-    def accept(self, request, *args, **kwargs):
-        """
-        Accept this specific invitation (detail action).
-        Only the invited user can act (linked user or matching invite_email).
-        """
-        invitation = self.get_object()
-
-        serializer_in = InvitationSelfActionSerializer(data=request.data)
-        serializer_in.is_valid(raise_exception=True)
-
-        if not can_user_act_on_invitation(request.user, invitation):
-            return Response(
-                {"detail": "Not allowed to act on this invitation."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        InvitationService.apply_status_as_user(
-            invitation, request.user, CatalogCourseEnrollmentAllowed.Status.ACCEPTED
-        )
-
-        serializer_out = CatalogCourseEnrollmentAllowedSerializer(
-            invitation, context=self.get_serializer_context()
-        )
-        return Response(serializer_out.data, status=status.HTTP_200_OK)
-
-    @action(detail=True, methods=["post"], url_path="decline")
-    def decline(self, request, *args, **kwargs):
-        """
-        Decline this specific invitation (detail action).
-        Only the invited user can act (linked user or matching invite_email).
-        """
-        invitation = self.get_object()
-
-        serializer_in = InvitationSelfActionSerializer(data=request.data)
-        serializer_in.is_valid(raise_exception=True)
-
-        if not can_user_act_on_invitation(request.user, invitation):
-            return Response(
-                {"detail": "Not allowed to act on this invitation."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-
-        InvitationService.apply_status_as_user(
-            invitation, request.user, CatalogCourseEnrollmentAllowed.Status.DECLINED
-        )
-
-        serializer_out = CatalogCourseEnrollmentAllowedSerializer(
-            invitation, context=self.get_serializer_context()
-        )
-        return Response(serializer_out.data, status=status.HTTP_200_OK)
 
 
 class CatalogCourseEnrollmentViewSet(

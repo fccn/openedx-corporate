@@ -1,8 +1,8 @@
 """Permission classes for partner catalog."""
 
-from rest_framework.permissions import SAFE_METHODS, BasePermission
+from rest_framework.permissions import BasePermission
 
-from partner_catalog.models import CatalogManagerRole, CorporatePartnerCatalogManager
+from partner_catalog.models import CatalogManager
 
 
 class IsPartnerCatalogManager(BasePermission):
@@ -29,18 +29,12 @@ class IsPartnerCatalogManager(BasePermission):
         catalog_pk = view.kwargs.get("catalog_pk")
         partner_pk = view.kwargs.get("partner_pk")
 
-        qs = CorporatePartnerCatalogManager.objects.filter(user=user, active=True)
+        qs = CatalogManager.objects.filter(user=user, active=True)
         if catalog_pk:
             qs = qs.filter(catalog_id=catalog_pk)
         elif partner_pk:
             qs = qs.filter(catalog__corporate_partner_id=partner_pk)
         else:
             return True
-
-        roles = set(qs.values_list("role", flat=True))
-        if CatalogManagerRole.CATALOG_MANAGER in roles:
-            return True
-        if CatalogManagerRole.CATALOG_VIEWER in roles:
-            return request.method in SAFE_METHODS
 
         return False

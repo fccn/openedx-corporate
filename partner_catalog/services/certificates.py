@@ -4,11 +4,7 @@ from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Subque
 from django.db.models.functions import Coalesce
 
 from partner_catalog.edxapp_wrapper.certificates_module import certificate_statuses_model, generated_certificate_model
-from partner_catalog.models import (
-    CatalogCourseEnrollment,
-    CorporatePartnerCatalogCourse,
-    CorporatePartnerCatalogLearner,
-)
+from partner_catalog.models import CatalogCourse, CatalogCourseEnrollment, CatalogLearner
 
 CertificateStatuses = certificate_statuses_model()
 GeneratedCertificate = generated_certificate_model()
@@ -28,7 +24,7 @@ def annotate_course_certified_count(qs):
         ).values("user_id")
     )
     courses_qs = (
-        CorporatePartnerCatalogCourse.objects.filter(
+        CatalogCourse.objects.filter(
             pk=OuterRef("pk")
         ).values("course_overview__id")
     )
@@ -41,11 +37,11 @@ def annotate_catalog_certified_count(qs):
     It gets the count of users that are present in a catalog based on its active learners.
     The courses_qs gets the course_overview__id, of the courses related to the catalog.
     """
-    users_qs = CorporatePartnerCatalogLearner.objects.filter(
+    users_qs = CatalogLearner.objects.filter(
         catalog_id=OuterRef("pk"),
         active=True,
     ).values("user_id")
-    courses_qs = CorporatePartnerCatalogCourse.objects.filter(
+    courses_qs = CatalogCourse.objects.filter(
         catalog_id=OuterRef("pk"),
     ).values("course_overview__id")
 
@@ -60,11 +56,11 @@ def annotate_partner_certified_count(qs):
     learners of each of its catalogs. The courses_qs gets the course_overview__id, of the courses
     related to the corporate partner through its catalogs as well.
     """
-    users_qs = CorporatePartnerCatalogLearner.objects.filter(
+    users_qs = CatalogLearner.objects.filter(
         catalog__corporate_partner_id=OuterRef("pk"),
         active=True,
     ).values("user_id")
-    courses_qs = CorporatePartnerCatalogCourse.objects.filter(
+    courses_qs = CatalogCourse.objects.filter(
         catalog__corporate_partner_id=OuterRef("pk"),
     ).values("course_overview__id")
 

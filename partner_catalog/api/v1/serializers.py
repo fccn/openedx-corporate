@@ -2,23 +2,19 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
-
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import transaction
 from rest_framework import serializers
 
 from flex_catalog.serializers import CourseOverviewSimpleSerializer
 from partner_catalog.edxapp_wrapper.course_module import course_overview
 from partner_catalog.models import (
+    CatalogCourse,
     CatalogCourseEnrollment,
-    CatalogCourseEnrollmentAllowed,
-    CorporatePartner,
-    CorporatePartnerCatalog,
-    CorporatePartnerCatalogCourse,
-    CorporatePartnerCatalogEmailRegex,
-    CorporatePartnerCatalogLearner,
+    CatalogEmailRegex,
+    CatalogLearner,
+    Partner,
+    PartnerCatalog,
 )
 from partner_catalog.services.assessments import get_assessments_counts
 from partner_catalog.services.progress import (
@@ -64,7 +60,7 @@ class CorporatePartnerSerializer(serializers.ModelSerializer):
     certified = serializers.IntegerField(source="certified_count", read_only=True)
 
     class Meta:
-        model = CorporatePartner
+        model = Partner
         fields = [
             "id",
             "code",
@@ -94,7 +90,7 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
     """Serializer for Corporate Partner Catalog data."""
 
     corporate_partner = serializers.PrimaryKeyRelatedField(
-        queryset=CorporatePartner.objects.all()
+        queryset=Partner.objects.all()
     )
 
     email_regexes = serializers.SerializerMethodField()
@@ -106,7 +102,7 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
     completion_rate = serializers.SerializerMethodField()
 
     class Meta:
-        model = CorporatePartnerCatalog
+        model = PartnerCatalog
         fields = [
             "id",
             "name",
@@ -175,12 +171,12 @@ class CatalogLearnerSerializer(serializers.ModelSerializer):
     )
     catalog_id = serializers.PrimaryKeyRelatedField(
         source="catalog",
-        queryset=CorporatePartnerCatalog.objects.all(),
+        queryset=PartnerCatalog.objects.all(),
     )
     user = UserSimpleSerializer(read_only=True)
 
     class Meta:
-        model = CorporatePartnerCatalogLearner
+        model = CatalogLearner
         fields = ["id", "active", "user", "catalog_id", "user_id"]
         read_only_fields = ["id"]
 
@@ -194,7 +190,7 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
     )
     catalog_id = serializers.PrimaryKeyRelatedField(
         source="catalog",
-        queryset=CorporatePartnerCatalog.objects.all(),
+        queryset=PartnerCatalog.objects.all(),
     )
     course_run = CourseOverviewSimpleSerializer(
         source="course_overview", read_only=True
@@ -204,7 +200,7 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
     completion_rate = serializers.SerializerMethodField()
 
     class Meta:
-        model = CorporatePartnerCatalogCourse
+        model = CatalogCourse
         fields = [
             "id",
             "course_overview",
@@ -226,11 +222,11 @@ class CatalogEmailRegexSerializer(serializers.ModelSerializer):
     """Serializer for catalog email regex patterns."""
 
     catalog_id = serializers.PrimaryKeyRelatedField(
-        source="catalog", queryset=CorporatePartnerCatalog.objects.all()
+        source="catalog", queryset=PartnerCatalog.objects.all()
     )
 
     class Meta:
-        model = CorporatePartnerCatalogEmailRegex
+        model = CatalogEmailRegex
         fields = ["id", "catalog_id", "regex"]
         read_only_fields = ["id"]
 
@@ -283,93 +279,6 @@ class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
     def _course_key_str(self, obj):
         co = getattr(obj.catalog_course, "course_overview", None)
         return str(co.id)
-
-
-class CatalogCourseEnrollmentAllowedSerializer(serializers.ModelSerializer):
-    """Read serializer."""
-
-    status_display = serializers.CharField(source="get_status_display", read_only=True)
-    catalog_course = serializers.PrimaryKeyRelatedField(read_only=True)
-    user = serializers.PrimaryKeyRelatedField(read_only=True)
-    invited_by = serializers.PrimaryKeyRelatedField(read_only=True)
-
-    class Meta:
-        model = CatalogCourseEnrollmentAllowed
-        fields = [
-            "id",
-            "catalog_course",
-            "user",
-            "invite_email",
-            "status",
-            "status_display",
-            "invited_by",
-            "invited_at",
-            "status_changed_at",
-            "accepted_at",
-            "declined_at",
-        ]
-        read_only_fields = [
-            "id",
-            "catalog_course",
-            "user",
-            "invited_by",
-            "invited_at",
-            "status_changed_at",
-            "accepted_at",
-            "declined_at",
-            "status_display",
-        ]
-
-
-class CatalogCourseEnrollmentAllowedCreateSerializer(serializers.ModelSerializer):
-    """
-    Create serializer (only accepts `email`).
-
-    - Normalizes `email` to lowercase.
-    - If a user exists with that email, attach it to the invite.
-    - Idempotent on (catalog_course, email).
-    """
-
-    email = serializers.EmailField(write_only=True)
-
-    class Meta:
-        model = CatalogCourseEnrollmentAllowed
-        fields = ["email"]
-
-    def validate(self, attrs: Dict[str, Any]) -> Dict[str, Any]:
-        email = attrs.get("email", "").strip().lower()
-        if not email:
-            raise serializers.ValidationError({"email": "This field is required."})
-        attrs["email"] = email
-        return attrs
-
-    @transaction.atomic
-    def create(self, validated_data: Dict[str, Any]) -> CatalogCourseEnrollmentAllowed:
-        request = self.context.get("request")
-        catalog_course: CorporatePartnerCatalogCourse = self.context["catalog_course"]
-
-        email: str = validated_data["email"]
-
-        user: Optional[User] = User.objects.filter(email__iexact=email).first()
-
-        obj, created = CatalogCourseEnrollmentAllowed.objects.get_or_create(
-            catalog_course=catalog_course,
-            invite_email=email,
-            defaults={
-                "user": user,
-                "invited_by": (
-                    request.user if request and request.user.is_authenticated else None
-                ),
-                "status": CatalogCourseEnrollmentAllowed.Status.SENT,
-            },
-        )
-
-        # If it existed and we just found the user, attach it now.
-        if not created and user and obj.user_id is None:
-            obj.user = user
-            obj.save(update_fields=["user"])
-
-        return obj
 
 
 class InvitationSelfActionSerializer(serializers.Serializer):
