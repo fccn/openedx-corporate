@@ -2,7 +2,6 @@
 
 from celery.result import AsyncResult
 from django.db.models import Count, Q
-from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -18,7 +17,7 @@ from partner_catalog.api.v1.serializers import (
     CatalogCourseSerializer,
     CatalogEmailRegexSerializer,
     CatalogLearnerSerializer,
-    CorporatePartnerCatalogSerializer,
+    PartnerCatalogSerializer,
     PartnerSerializer,
 )
 from partner_catalog.models import (
@@ -67,7 +66,7 @@ class PartnerViewset(viewsets.ReadOnlyModelViewSet):
         return qs
 
 
-class CorporatePartnerCatalogViewSet(
+class PartnerCatalogViewSet(
     InjectNestedFKMixin, viewsets.ModelViewSet
 ):
     """
@@ -77,21 +76,21 @@ class CorporatePartnerCatalogViewSet(
 
     # pylint: disable=E1111
     queryset = PartnerCatalog.objects.all()
-    serializer_class = CorporatePartnerCatalogSerializer
+    serializer_class = PartnerCatalogSerializer
     permission_classes = [IsPartnerCatalogManager]
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
         filters.OrderingFilter,
     ]
-    filterset_fields = ["corporate_partner", "is_public"]
+    filterset_fields = ["partner"]
     search_fields = ["name", "slug"]
     ordering_fields = ["name", "id", "available_start_date", "available_end_date"]
     ordering = ["name"]
 
     # Mixin config
     nested_lookup_kwarg = "partner_pk"
-    target_field_name = "corporate_partner"
+    target_field_name = "partner"
 
     def get_queryset(self):
         """Limit catalogs to those the user manages or views; staff see all."""
@@ -99,7 +98,7 @@ class CorporatePartnerCatalogViewSet(
         user = self.request.user
         partner_pk = self.kwargs.get("partner_pk")
         if partner_pk:
-            qs = qs.filter(corporate_partner_id=partner_pk)
+            qs = qs.filter(partner_id=partner_pk)
 
         if not (user.is_staff or user.is_superuser):
             qs = qs.filter(
@@ -108,15 +107,8 @@ class CorporatePartnerCatalogViewSet(
             ).distinct()
 
         qs = qs.annotate(
-            courses_count=Count("courses", distinct=True),
-            total_enrollments=Coalesce(
-                Count(
-                    "catalog_courses__enrollments",
-                    filter=Q(catalog_courses__enrollments__active=True),
-                    distinct=True,
-                ),
-                0,
-            ),
+            courses_count=Count("catalog_courses", distinct=True),
+            total_enrollments=Count("catalog_learners", distinct=True),
         )
         qs = annotate_catalog_certified_count(qs)
         return qs
