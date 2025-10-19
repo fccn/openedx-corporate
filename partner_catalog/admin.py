@@ -304,14 +304,17 @@ class CatalogLearnerAdmin(admin.ModelAdmin):
     fieldsets = (
         ("Learner Assignment", {"fields": ("catalog", "user", "current_invitation")}),
         ("Status", {"fields": ("active", "created_at")}),
-        ("Invitation Details", {
-            "fields": (
-                "invited_at",
-                "invited_by_display",
-                "removed_at",
-                "removed_by_display",
-            )
-        }),
+        (
+            "Invitation Details",
+            {
+                "fields": (
+                    "invited_at",
+                    "invited_by_display",
+                    "removed_at",
+                    "removed_by_display",
+                )
+            },
+        ),
     )
 
     def user_email(self, obj):
@@ -364,19 +367,16 @@ class CatalogLearnerAdmin(admin.ModelAdmin):
 
 @admin.register(CatalogLearnerInvitation)
 class CatalogLearnerInvitationAdmin(admin.ModelAdmin):
-    """Admin interface for CatalogLearnerInvitation model."""
+    """Admin interface for CatalogLearnerInvitation model - Create and view only."""
 
     list_display = [
         "id",
-        "invite_email",
-        "user",
-        "catalog",
-        "status_display",
+        "user_display",
+        "catalog_slug",
         "invited_at",
-        "accepted_at",
-        "declined_at",
-        "removed_at",
+        "status_display",
     ]
+
     list_filter = [
         "status",
         "catalog__partner",
@@ -385,25 +385,122 @@ class CatalogLearnerInvitationAdmin(admin.ModelAdmin):
         "declined_at",
         "removed_at",
     ]
+
     search_fields = ["invite_email", "user__username", "user__email", "catalog__name"]
     ordering = ["-invited_at"]
-    raw_id_fields = ["catalog", "user", "invited_by", "removed_by", "learner"]
-    readonly_fields = ["status", "invited_at"]
+    raw_id_fields = ["catalog", "user"]
     date_hierarchy = "invited_at"
 
-    fieldsets = (
-        (
-            "Invitation",
-            {"fields": ("catalog", "user", "invite_email", "invited_by", "invited_at")},
-        ),
-        ("Response", {"fields": ("accepted_at", "declined_at")}),
-        ("Revocation", {"fields": ("removed_at", "removed_by")}),
-        ("Status & Link", {"fields": ("status", "learner")}),
-    )
+    readonly_fields = [
+        "catalog",
+        "invite_email",
+        "user",
+        "invited_by_display",
+        "invited_at",
+        "status_display",
+        "accepted_at",
+        "declined_at",
+        "removed_at",
+        "removed_by_display",
+    ]
+
+    def has_change_permission(self, request, obj=None):
+        """Disable editing invitations - they can only be viewed."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Only allow deletion if no learner is linked to this invitation."""
+        if obj and hasattr(obj, 'learner') and obj.learner:
+            return False
+        return True
+
+    def get_fieldsets(self, request, obj=None):
+        """Dynamic fieldsets: simple for add, detailed for view."""
+        if obj is None:
+            return (
+                (
+                    "New Invitation",
+                    {
+                        "fields": ("catalog", "invite_email", "user"),
+                        "description": "Provide either an email address or select an existing user.",
+                    },
+                ),
+            )
+
+        fieldsets = [
+            (
+                "Invitation Details",
+                {
+                    "fields": (
+                        "catalog",
+                        "invite_email",
+                        "user",
+                        "invited_by_display",
+                        "invited_at",
+                        "status_display",
+                        "accepted_at",
+                        "declined_at",
+                    )
+                },
+            ),
+        ]
+
+        if obj.removed_at or obj.removed_by:
+            fieldsets.append(
+                (
+                    "Revocation",
+                    {"fields": ("removed_at", "removed_by_display")},
+                )
+            )
+
+        return fieldsets
+
+    def save_model(self, request, obj, form, change):
+        """Auto-populate invited_by when creating new invitations."""
+        if not change:
+            obj.invited_by = request.user
+        super().save_model(request, obj, form, change)
+
+    def user_display(self, obj):
+        """Display user username or email."""
+        if obj.user:
+            display_name = obj.user.username if obj.user.username else obj.user.email
+            return display_name
+        return obj.invite_email if obj.invite_email else "—"
+
+    user_display.short_description = "User"
+    user_display.admin_order_field = "user__username"
+
+    def catalog_slug(self, obj):
+        """Display catalog slug."""
+        return obj.catalog.slug if obj.catalog else "—"
+
+    catalog_slug.short_description = "Catalog"
+    catalog_slug.admin_order_field = "catalog__slug"
+
+    def invited_by_display(self, obj):
+        """Display who sent the invitation (readonly)."""
+        if obj.invited_by:
+            username = obj.invited_by.username or "—"
+            email = obj.invited_by.email or "—"
+            return format_html("{} ({})", username, email)
+        return format_html('<em style="color:#999">Unknown</em>')
+
+    invited_by_display.short_description = "Invited By"
+
+    def removed_by_display(self, obj):
+        """Display who removed/revoked the invitation (readonly)."""
+        if obj.removed_by:
+            username = obj.removed_by.username or "—"
+            email = obj.removed_by.email or "—"
+            return format_html("{} ({})", username, email)
+        return format_html('<em style="color:#999">—</em>')
+
+    removed_by_display.short_description = "Removed By"
 
     def status_display(self, obj):
         """Display status with color coding."""
-        base_style = "padding:2px 8px;border-radius:12px;color:#fff;font-weight:600;"
+        base_style = "padding:3px 10px;border-radius:12px;color:#fff;font-weight:600;display:inline-block;"
         status_colors = {
             obj.Status.SENT: ("Sent", "#64748b"),
             obj.Status.ACCEPTED: ("Accepted", "#16a34a"),
@@ -425,7 +522,6 @@ class CatalogLearnerInvitationAdmin(admin.ModelAdmin):
             "user",
             "invited_by",
             "removed_by",
-            "learner",
         )
 
 

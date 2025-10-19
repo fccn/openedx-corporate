@@ -425,7 +425,7 @@ class CatalogLearnerInvitation(models.Model):
 
     def __str__(self):
         """Return a string representation of the CatalogLearnerInvitation instance."""
-        return f"<CatalogLearnerInvitation: {self.invite_email} in {self.catalog.slug} ({self.status.label})>"
+        return f"<CatalogLearnerInvitation: {self.invite_email} in {self.catalog.slug} ({self.get_status_display()})>"
 
 
 class CatalogCourseEnrollment(models.Model):
