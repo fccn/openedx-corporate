@@ -4,7 +4,9 @@ import regex
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import models
-from django.db.models.functions import Lower
+from django.utils import timezone
+from django.utils.text import slugify
+from organizations.models import Organization
 
 from flex_catalog.models import FlexibleCatalogModel
 from partner_catalog.edxapp_wrapper.course_module import course_overview
@@ -12,110 +14,111 @@ from partner_catalog.helpers.current_user import safe_get_current_user
 from partner_catalog.services.allowed_courses import CatalogAllowedCoursesService
 
 
-class CatalogManagerRole:
-    CATALOG_MANAGER = "catalog_manager"
-    CATALOG_VIEWER = "catalog_viewer"
-    CHOICES = (
-        (CATALOG_MANAGER, "Catalog Manager"),
-        (CATALOG_VIEWER, "Catalog Viewer"),
+class Partner(models.Model):
+    """
+    Partner model representing a corporate partner organization.
+    """
+
+    organization = models.OneToOneField(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="partner_profile"
     )
-
-
-class CorporatePartner(models.Model):
-    """Company that manages one or more course catalogs."""
-
-    id = models.AutoField(primary_key=True)
-    code = models.CharField(max_length=255, unique=True)
-    name = models.CharField(max_length=255)
-    logo = models.ImageField(upload_to="partner_logos/", blank=True, null=True)
     homepage_url = models.URLField(blank=True, null=True)
 
     class Meta:
-        """Meta options for CorporatePartner model."""
+        """Meta options for Partner model."""
 
         verbose_name = "Corporate Partner"
         verbose_name_plural = "Corporate Partners"
-        ordering = ["name"]
+        ordering = ["organization__short_name"]
 
     def __str__(self):
-        """Return a string representation of the CorporatePartner instance."""
-        return f"<CorporatePartner: {self.name} (Code: {self.code})>"
+        """Return a string representation of the Partner instance."""
+        return f"Partner for {self.organization.short_name}"
 
 
-class CorporatePartnerCatalog(FlexibleCatalogModel):
+class PartnerCatalog(FlexibleCatalogModel):
     """Catalog model for corporate partners."""
 
-    corporate_partner = models.ForeignKey(
-        "CorporatePartner",
+    partner = models.ForeignKey(
+        "Partner",
         on_delete=models.CASCADE,
         related_name="catalogs",
     )
-    course_enrollment_limit = models.PositiveIntegerField(
-        default=0, help_text="Max enrollments allowed in this catalog."
+    course_enrollments_limit = models.PositiveIntegerField(
+        default=0, help_text="Limit of enrollments per course."
     )
     user_limit = models.PositiveIntegerField(
-        default=0, help_text="Max users allowed in this catalog."
+        default=0, help_text="Limit for the number of users that can enroll."
     )
     is_self_enrollment = models.BooleanField(default=False)
-    available_start_date = models.DateTimeField(null=True, blank=True)
-    available_end_date = models.DateTimeField(null=True, blank=True)
-    custom_courses = models.BooleanField(
-        default=False, help_text="If True, allows custom courses."
-    )
-    authorization_additional_message = models.TextField(blank=True, null=True)
-    support_email = models.EmailField(blank=True, null=True)
-    is_public = models.BooleanField(default=False)
-    catalog_alternative_link = models.URLField(blank=True, null=True)
-
-    courses = models.ManyToManyField(
-        course_overview(),
-        through="CorporatePartnerCatalogCourse",
-        related_name="partner_catalogs",
-    )
-
-    learners = models.ManyToManyField(
-        get_user_model(),
-        through="CorporatePartnerCatalogLearner",
-        related_name="enrolled_catalogs",
-    )
-
-    managers = models.ManyToManyField(
-        get_user_model(),
-        through="CorporatePartnerCatalogManager",
-        related_name="managed_partner_catalogs",
-    )
+    available_start_date = models.DateTimeField()
+    available_end_date = models.DateTimeField()
+    authorization_message = models.TextField(blank=True, null=True)
 
     class Meta:
-        """Meta options for CorporatePartnerCatalog model."""
+        """Meta options for PartnerCatalog model."""
 
-        verbose_name = "Corporate Partner Catalog"
-        verbose_name_plural = "Corporate Partner Catalogs"
+        verbose_name = "Partner Catalog"
+        verbose_name_plural = "Partner Catalogs"
         ordering = ["name"]
+
+    def save(self, *args, **kwargs):
+        """Save and generate a slug for the partner catalog."""
+        current_slug = self.slug
+
+        if not current_slug:
+            name_value = str(self.name or "catalog")
+            org_slug = slugify(self.partner.organization.short_name)
+            base_slug = f"{org_slug}-{slugify(name_value)}"
+            current_slug = base_slug
+
+            existing_count = PartnerCatalog.objects.filter(
+                slug__startswith=current_slug
+            ).count()
+
+            if existing_count > 0:
+                current_slug = f"{base_slug}-{existing_count + 1}"
+
+            self.slug = current_slug
+        super().save(*args, **kwargs)
+
+    @property
+    def active(self):
+        """
+        Check if the catalog is currently active based on availability dates.
+
+        Returns:
+            bool: True if current time is within the availability window, False otherwise.
+        """
+        now = timezone.now()
+        return self.available_start_date <= now <= self.available_end_date
 
     def get_course_runs(self):
         """Return all catalog course runs associated with this instance."""
         user = safe_get_current_user()
-        return CatalogAllowedCoursesService.course_runs_for_user(catalog=self, user=user)
+        return CatalogAllowedCoursesService.course_runs_for_user(
+            catalog=self, user=user
+        )
 
 
-class CorporatePartnerCatalogEmailRegex(models.Model):
+class CatalogEmailRegex(models.Model):
     """Regex pattern for validating emails for a partner's catalog."""
 
     id = models.AutoField(primary_key=True)
     catalog = models.ForeignKey(
-        "CorporatePartnerCatalog",
+        "PartnerCatalog",
         on_delete=models.CASCADE,
-        related_name="email_regexes",
+        related_name="catalog_email_regexes",
     )
     regex = models.CharField(
         max_length=500, help_text="Regex pattern for email validation."
     )
 
     def __str__(self):
-        """Return a string representation of the CorporatePartnerCatalogEmailRegex instance."""
-        return (
-            f"<CorporatePartnerCatalogEmailRegex: {self.catalog.name} - {self.regex}>"
-        )
+        """Return a string representation of the CatalogEmailRegex instance."""
+        return f"<CatalogEmailRegex: {self.regex}>"
 
     def clean(self):
         """Validate and normalize the regex pattern."""
@@ -124,8 +127,10 @@ class CorporatePartnerCatalogEmailRegex(models.Model):
             raise ValidationError("Regex pattern cannot be empty.")
 
         # Detects if the regex contains nested quantifiers or multiple consecutive wildcards.
-        if regex.search(r'\((?:\.\*|\.\+)\)[*+{]|(\.\*.*\.\*)|(\.\+.*\.\+)', pattern):
-            raise ValidationError(f"Invalid regex, nested quantifiers detected: {pattern}")
+        if regex.search(r"\((?:\.\*|\.\+)\)[*+{]|(\.\*.*\.\*)|(\.\+.*\.\+)", pattern):
+            raise ValidationError(
+                f"Invalid regex, nested quantifiers detected: {pattern}"
+            )
 
         pattern = pattern.lstrip("^").rstrip("$")
         pattern = f"^{pattern}$"
@@ -143,12 +148,12 @@ class CorporatePartnerCatalogEmailRegex(models.Model):
         super().save(*args, **kwargs)
 
 
-class CorporatePartnerCatalogCourse(models.Model):
-    """Pivot table linking catalogs to courses with ordering."""
+class CatalogCourse(models.Model):
+    """Represents a course included in a Partner Catalog."""
 
     id = models.AutoField(primary_key=True)
     catalog = models.ForeignKey(
-        "CorporatePartnerCatalog",
+        "PartnerCatalog",
         on_delete=models.CASCADE,
         related_name="catalog_courses",
     )
@@ -158,218 +163,280 @@ class CorporatePartnerCatalogCourse(models.Model):
     )
 
     class Meta:
-        """Meta options for CorporatePartnerCatalogCourse model."""
+        """Meta options for CatalogCourse model."""
 
-        verbose_name = "Corporate Partner Catalog Course"
-        verbose_name_plural = "Corporate Partner Catalog Courses"
-        unique_together = ("catalog", "course_overview")
+        verbose_name = "Catalog Course"
+        verbose_name_plural = "Catalog Courses"
         ordering = ["position"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["catalog", "course_overview"],
+                name="pcc_unique_catalog_course",
+            )
+        ]
         indexes = [
-            models.Index(fields=["catalog", "course_overview"], name="catalog_course_idx"),
+            models.Index(
+                fields=["catalog", "course_overview"], name="catalog_course_idx"
+            ),
         ]
 
     def __str__(self):
-        """Return string representation of the CorporatePartnerCatalogCourse instance."""
-        return f"<CorporatePartnerCatalogCourse: {self.course_overview.id}>"  # pylint: disable=no-member
+        """Return string representation of the CatalogCourse instance."""
+        return f"<CatalogCourse: {self.course_overview.id}>"  # pylint: disable=no-member
 
 
-class CorporatePartnerCatalogLearner(models.Model):
-    """Pivot table linking catalogs to users with active status."""
+class CatalogManager(models.Model):
+    """
+    Represents a manager assigned to a Partner Catalog.
+
+    A CatalogManager is a user who has management permissions for a specific
+    PartnerCatalog, allowing them to oversee catalog operations and configurations.
+    A user can only manage catalogs from a single partner organization.
+    """
 
     id = models.AutoField(primary_key=True)
     catalog = models.ForeignKey(
-        "CorporatePartnerCatalog",
+        "PartnerCatalog",
+        on_delete=models.CASCADE,
+        related_name="catalog_managers",
+    )
+    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
+    active = models.BooleanField(default=True)
+
+    class Meta:
+        """Meta options for CatalogManager model."""
+
+        verbose_name = "Catalog Manager"
+        verbose_name_plural = "Catalog Managers"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["catalog", "user"],
+                name="pcm_unique_catalog_manager",
+            )
+        ]
+        indexes = [models.Index(fields=["catalog", "user"])]
+
+    def clean(self):
+        """Validate that the user does not manage catalogs from different partners."""
+        super().clean()
+
+        if self.user_id and self.catalog_id:
+            partner_id = self.catalog.partner_id
+            conflicting = (
+                CatalogManager.objects.filter(user_id=self.user_id)
+                .exclude(pk=self.pk)  # Exclude self when updating
+                .exclude(catalog__partner_id=partner_id)
+                .exists()
+            )
+            if conflicting:
+                raise ValidationError({
+                    'catalog': 'This user already manages catalogs from a different partner organization.'
+                })
+
+    def save(self, *args, **kwargs):
+        """Ensure clean is called before saving."""
+        self.clean()
+        super().save(*args, **kwargs)
+
+    # pylint: disable=no-member
+    def __str__(self):
+        """Return a string representation of the CatalogManager instance."""
+        return f"<CatalogManager: {self.user.username} in {self.catalog.name}>"
+
+
+class CatalogLearner(models.Model):
+    """
+    Represents a learner enrolled in a Partner Catalog.
+
+    Tracks active/inactive status and links to the user and catalog.
+    A Learner in the catalog is created once the user accepts an invitation to join
+    the catalog in CatalogLearnerInvitation.
+    """
+
+    id = models.AutoField(primary_key=True)
+    catalog = models.ForeignKey(
+        "PartnerCatalog",
         on_delete=models.CASCADE,
         related_name="catalog_learners",
     )
     user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
     active = models.BooleanField(default=True)
 
-    class Meta:
-        """Meta options for CorporatePartnerCatalogLearner model."""
-
-        verbose_name = "Corporate Partner Catalog Learner"
-        verbose_name_plural = "Corporate Partner Catalog Learners"
-        unique_together = ("catalog", "user")
-
-    # pylint: disable=no-member
-    def __str__(self):
-        """Return a string representation of the CorporatePartnerCatalogLearner instance."""
-        return f"<CorporatePartnerCatalogLearner: {self.user.username} in {self.catalog.name}>"
-
-
-class CorporatePartnerCatalogManager(models.Model):
-    """Pivot table linking catalogs to managers."""
-
-    id = models.AutoField(primary_key=True)
-    catalog = models.ForeignKey(
-        "CorporatePartnerCatalog",
-        on_delete=models.CASCADE,
-        related_name="catalog_managers",
+    created_at = models.DateTimeField(auto_now_add=True)
+    current_invitation = models.OneToOneField(
+        "CatalogLearnerInvitation",
+        on_delete=models.PROTECT,
+        null=False,
+        blank=False,
+        related_name="current_for_learner",
     )
-    user = models.ForeignKey(get_user_model(), on_delete=models.CASCADE)
-    role = models.CharField(max_length=100, choices=CatalogManagerRole.CHOICES)
-    active = models.BooleanField(default=True)
 
     class Meta:
-        """Meta options for CorporatePartnerCatalogManager model."""
+        """Meta options for CatalogLearner model."""
 
-        verbose_name = "Corporate Partner Catalog Manager"
-        verbose_name_plural = "Corporate Partner Catalog Managers"
-        unique_together = ("catalog", "user")
+        verbose_name = "Catalog Learner"
+        verbose_name_plural = "Catalog Learners"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["catalog", "user"],
+                name="pcl_unique_catalog_learner",
+            )
+        ]
         indexes = [models.Index(fields=["catalog", "user"])]
 
+    def clean(self):
+        """Validate the consistency with the current_invitation status."""
+        super().clean()
+
+        invitation = self.current_invitation
+        if not invitation:
+            raise ValidationError({
+                'current_invitation': 'A learner must have a current invitation assigned.'
+            })
+        if invitation.catalog_id != self.catalog_id or invitation.user_id != self.user_id:
+            raise ValidationError({
+                'current_invitation': 'Current invitation record must match the catalog and user of this learner.'
+            })
+
+    def _compute_active(self):
+        """Compute the active status based on current_invitation."""
+        invitation = self.current_invitation
+        return bool(invitation and invitation.status == CatalogLearnerInvitation.Status.ACCEPTED)
+
+    def save(self, *args, **kwargs):
+        """Save and update active status."""
+        self.active = self._compute_active()
+        super().save(*args, **kwargs)
+
     # pylint: disable=no-member
     def __str__(self):
-        """Return a string representation of the CorporatePartnerCatalogManager instance."""
-        return (
-            f"<CorporatePartnerCatalogManager: {self.user.username} as {self.role} in {self.catalog.name}>"
-        )
+        """Return a string representation of the CatalogLearner instance."""
+        return f"<CatalogLearner: {self.user.username} in {self.catalog.name}>"
 
 
-class CatalogCourseEnrollmentAllowed(models.Model):
+class CatalogLearnerInvitation(models.Model):
     """
-    Invitation to enroll in a specific course within a corporate partner catalog.
+    Represent an invitation record for a learner to join a Partner Catalog.
 
-    Tracks invitations sent to users (by email) to enroll in a catalog course,
-    their status (sent, accepted, declined), and metadata such as who invited
-    them and when the status changed. The `user` field may be null if the
-    invitee does not yet have an account; it will be set when a user with the
-    `invite_email` accepts or declines the invitation.
+    Tracks invitation, acceptance, declination and removal timestamps, along with
+    the user and catalog involved.
     """
 
     class Status(models.IntegerChoices):
-        """Possible invitation statuses."""
+        """Possible Learner invitation statuses."""
 
         SENT = 10, "Sent"
         ACCEPTED = 20, "Accepted"
         DECLINED = 30, "Declined"
+        REMOVED = 40, "Removed"
 
     id = models.AutoField(primary_key=True)
-    catalog_course = models.ForeignKey(
-        "CorporatePartnerCatalogCourse",
-        on_delete=models.PROTECT,
-        related_name="enrollment_invites",
-    )
+    catalog = models.ForeignKey("PartnerCatalog", on_delete=models.CASCADE)
     user = models.ForeignKey(
         get_user_model(),
         on_delete=models.CASCADE,
+        related_name="learner_invitations",
         null=True,
         blank=True,
-        help_text=(
-            "Linked user. May be null if no user exists for invite_email; "
-            "will be set once a user with this email accepts/declines."
-        ),
-        related_name="catalog_course_invites",
     )
 
-    status = models.PositiveSmallIntegerField(
-        choices=Status.choices,
-        default=Status.SENT,
-        help_text="Status of the course enrollment invitation."
-    )
-
+    # Invitation / consent
     invite_email = models.EmailField(
         null=True,
         blank=True,
-        help_text="Invitation email address."
+        help_text="Email address to which the invitation was sent.",
     )
-
     invited_at = models.DateTimeField(auto_now_add=True)
-    status_changed_at = models.DateTimeField(auto_now=True)
-
-    accepted_at = models.DateTimeField(null=True, blank=True)
-    declined_at = models.DateTimeField(null=True, blank=True)
-
     invited_by = models.ForeignKey(
         get_user_model(),
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        related_name="sent_enrollment_invites",
-        help_text="Who created/sent the invite."
+        related_name="sent_learner_invitations",
+    )
+
+    # Revocation
+    removed_at = models.DateTimeField(null=True, blank=True)
+    removed_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="removed_learner_invitations",
+    )
+
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    declined_at = models.DateTimeField(null=True, blank=True)
+
+    status = models.PositiveSmallIntegerField(
+        choices=Status.choices,
+        default=Status.SENT,
+        help_text="Current status of the learner invitation.",
+    )
+
+    # Invitation History link
+    learner = models.ForeignKey(
+        "CatalogLearner",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="invitation_history",
     )
 
     class Meta:
-        """Database metadata and constraints for invitations."""
+        """Meta options for CatalogLearnerInvitation model."""
 
-        db_table = "cp_course_enrl_allowed"
+        verbose_name = "Catalog Learner Invitation"
+        verbose_name_plural = "Catalog Learner Invitations"
         indexes = [
-            models.Index(Lower("invite_email"), name="cpcea_email_ci_idx"),
-            models.Index(fields=["user"], name="cpcea_user_idx"),
-            models.Index(fields=["catalog_course", "status"], name="cpcea_course_status_idx"),
+            models.Index(fields=["catalog", "user"]),
+            models.Index(fields=["catalog", "invited_at"]),
+            models.Index(fields=["accepted_at"]),
+            models.Index(fields=["declined_at"]),
+            models.Index(fields=["removed_at"]),
+        ]
+        constraints = [
+            # Can't be accepted and declined simultaneously
+            models.CheckConstraint(
+                name="cla_not_both_accepted_and_declined",
+                check=~(models.Q(accepted_at__isnull=False) & models.Q(declined_at__isnull=False)),
+            ),
+            # If removed, it must have been accepted before
+            models.CheckConstraint(
+                name="cla_removed_implies_accepted",
+                check=models.Q(removed_at__isnull=True) | models.Q(accepted_at__isnull=False),
+            ),
         ]
 
-        constraints = [
-            models.UniqueConstraint(
-                fields=["catalog_course", "user"],
-                name="cpcea_unique_course_user",
-                condition=models.Q(user__isnull=False),
-            ),
-            models.UniqueConstraint(
-                Lower("invite_email"), "catalog_course",
-                name="cpcea_unique_course_invite_email_ci",
-                condition=models.Q(invite_email__isnull=False),
-            ),
-            models.CheckConstraint(
-                check=models.Q(user__isnull=False) | models.Q(invite_email__isnull=False),
-                name="cpcea_user_or_email_required",
-            ),
-            models.CheckConstraint(
-                check=(
-                    (
-                        models.Q(status=10)
-                        & models.Q(accepted_at__isnull=True)
-                        & models.Q(declined_at__isnull=True)
-                    )
-                    | (
-                        models.Q(status=20)
-                        & models.Q(accepted_at__isnull=False)
-                        & models.Q(declined_at__isnull=True)
-                    )
-                    | (
-                        models.Q(status=30)
-                        & models.Q(declined_at__isnull=False)
-                        & models.Q(accepted_at__isnull=True)
-                    )
-                ),
-                name="cpcea_status_timestamp_consistency",
-            ),
-        ]
+    def _compute_status(self):
+        """Compute the current status based on timestamps."""
+        if self.removed_at:
+            return self.Status.REMOVED
+        if self.declined_at:
+            return self.Status.DECLINED
+        if self.accepted_at:
+            return self.Status.ACCEPTED
+        return self.Status.SENT
 
     def save(self, *args, **kwargs):
-        """
-        Thin save: status/timestamp business rules are enforced via InvitationService.
-
-        Note: Database changes should be handled via InvitationService.apply_status(...) instead.
-        """
+        """Compute the current status based on timestamps before saving."""
+        self.status = self._compute_status()
         super().save(*args, **kwargs)
 
     def __str__(self):
-        """Return a readable label with course id, target email/user, and status."""
-        target = self.invite_email or getattr(self.user, "email", None) or "unknown"
-        return f"{self.catalog_course_id} → {target} [{self.get_status_display()}]"
+        """Return a string representation of the CatalogLearnerInvitation instance."""
+        return f"<CatalogLearnerInvitation: {self.invite_email} in {self.catalog.slug} ({self.status.label})>"
 
 
 class CatalogCourseEnrollment(models.Model):
     """
     Represents a user's enrollment in a specific catalog course.
 
-    This model links a user to a CorporatePartnerCatalogCourse, indicating that the user
-    is enrolled in that course as part of a corporate partner's catalog. The `active` field
-    denotes whether the enrollment is currently active or has been deactivated (e.g., due to
-    withdrawal or removal). Uniqueness is enforced so that a user can only have one enrollment
-    per catalog course.
+    Tracks active/inactive status, invitation and acceptance timestamps, and
+    links to the user and catalog course.
 
-    Fields:
-        id: Primary key for the enrollment.
-        user: Reference to the enrolled user.
-        catalog_course: Reference to the catalog course.
-        active: Boolean indicating if the enrollment is active.
-
-    Constraints:
-        - Unique constraint on (user, catalog_course) to prevent duplicate enrollments.
-        - Indexed for efficient lookup by user, catalog_course, and active status.
+    Used to manage and enforce enrollment limits and statuses within a corporate
+    partner catalog.
     """
 
     id = models.AutoField(primary_key=True)
@@ -379,7 +446,7 @@ class CatalogCourseEnrollment(models.Model):
         related_name="catalog_course_enrollments",
     )
     catalog_course = models.ForeignKey(
-        "CorporatePartnerCatalogCourse",
+        "CatalogCourse",
         on_delete=models.CASCADE,
         related_name="enrollments",
     )
@@ -391,7 +458,7 @@ class CatalogCourseEnrollment(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["user", "catalog_course"],
-                name="cpcea_unique_user_catalog_course_enrollment"
+                name="pcce_unique_user_catalog_course_enrollment",
             )
         ]
         indexes = [
@@ -399,6 +466,26 @@ class CatalogCourseEnrollment(models.Model):
             models.Index(fields=["catalog_course"]),
             models.Index(fields=["user", "active"]),
         ]
+
+    def clean(self):
+        """Validate that the user is a learner in the catalog before enrolling."""
+        if self.user and self.catalog_course:
+            catalog = self.catalog_course.catalog
+            is_active_learner = CatalogLearner.objects.filter(
+                catalog=catalog,
+                user=self.user,
+                active=True
+            ).exists()
+
+            if not is_active_learner:
+                raise ValidationError({
+                    'user': 'User must be an active learner in the catalog to enroll in its courses.'
+                })
+
+    def save(self, *args, **kwargs):
+        """Ensure validation runs before saving."""
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         """Return a readable string representation of the CatalogCourseEnrollment instance."""
