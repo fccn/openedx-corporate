@@ -10,6 +10,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from partner_catalog.api.v1 import tasks as partner_tasks
+from partner_catalog.api.v1.filters import PartnerFilter
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
 from partner_catalog.api.v1.schemas import bulk_status_learner_schema, bulk_upload_learner_schema
 from partner_catalog.api.v1.serializers import (
@@ -45,7 +46,8 @@ class PartnerViewset(viewsets.ReadOnlyModelViewSet):
     queryset = Partner.objects.select_related("organization").all()
     serializer_class = PartnerSerializer
     permission_classes = [IsPartnerCatalogManager]
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = PartnerFilter
     search_fields = ["organization__short_name", "organization__name"]
     ordering_fields = ["organization__name", "organization__short_name", "id"]
     ordering = ["organization__short_name"]
