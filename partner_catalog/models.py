@@ -325,6 +325,7 @@ class CatalogLearnerInvitation(models.Model):
     class Status(models.IntegerChoices):
         """Possible Learner invitation statuses."""
 
+        FAILED = 0, "Failed"
         SENT = 10, "Sent"
         ACCEPTED = 20, "Accepted"
         DECLINED = 30, "Declined"
