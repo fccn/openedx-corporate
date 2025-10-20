@@ -68,6 +68,29 @@ def annotate_partner_certified_count(qs):
     return annotated
 
 
+def annotate_learner_certified_count(qs):
+    """Annotate a CatalogLearner queryset with certified_count.
+
+    It gets the count of certificates for this specific learner in courses
+    that belong to their catalog. The users_qs contains only this learner's user,
+    and courses_qs gets the course_overview__id of courses in the learner's catalog.
+    """
+    users_qs = CatalogLearner.objects.filter(
+        pk=OuterRef("pk"),
+    ).values("user_id")
+
+    catalog_id_sq = CatalogLearner.objects.filter(
+        pk=OuterRef("pk"),
+    ).values("catalog_id")
+
+    courses_qs = CatalogCourse.objects.filter(
+        catalog_id__in=Subquery(catalog_id_sq),
+    ).values("course_overview__id")
+
+    annotated = annotate_certified_count(qs, users_qs, courses_qs)
+    return annotated
+
+
 def annotate_certified_count(qs, users_qs, courses_qs):
     """Generic annotator for certified_count using provided users and courses subqueries.
 

@@ -1,17 +1,11 @@
 """Partner Catalog API v1 Views."""
 
-from celery.result import AsyncResult
-from django.db.models import Count, Q
+from django.db.models import Count, OuterRef, Q, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, status, viewsets
-from rest_framework.decorators import action
-from rest_framework.parsers import MultiPartParser
-from rest_framework.response import Response
+from rest_framework import filters, viewsets
 
-from partner_catalog.api.v1 import tasks as partner_tasks
 from partner_catalog.api.v1.filters import PartnerFilter
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
-from partner_catalog.api.v1.schemas import bulk_status_learner_schema, bulk_upload_learner_schema
 from partner_catalog.api.v1.serializers import (
     CatalogCourseEnrollmentSerializer,
     CatalogCourseSerializer,
@@ -32,6 +26,7 @@ from partner_catalog.permissions import IsPartnerCatalogManager
 from partner_catalog.services.certificates import (
     annotate_catalog_certified_count,
     annotate_course_certified_count,
+    annotate_learner_certified_count,
     annotate_partner_certified_count,
 )
 
@@ -114,7 +109,7 @@ class PartnerCatalogViewSet(
         return qs
 
 
-class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelViewSet):
+class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ModelViewSet):
     """
     ViewSet for Corporate Partner Catalog Learner data.
     Provides access to corporate partner catalog learner information.
@@ -130,7 +125,13 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
     ]
     filterset_fields = ["catalog", "active", "user"]
     search_fields = ["user__username", "user__email"]
-    ordering_fields = ["id", "user_id"]
+    ordering_fields = [
+        "id",
+        "user_id",
+        "accepted_at",
+        "removed_at",
+        "active",
+    ]
     ordering = ["id"]
 
     # Mixin config
@@ -138,73 +139,22 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
     target_field_name = "catalog_id"
 
     def get_queryset(self):
-        """Get the queryset for catalog learners."""
+        """Get the queryset for catalog learners with enrollment counts."""
         qs = self.queryset
         catalog_pk = self.kwargs.get("catalog_pk")
-        return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
 
-    @bulk_upload_learner_schema
-    @action(
-        detail=False,
-        methods=["post"],
-        url_path="bulk",
-        parser_classes=[MultiPartParser],
-    )
-    def bulk(
-        self, request, partner_pk=None, catalog_pk=None
-    ):  # pylint: disable=unused-argument
-        """
-        Bulk upload learners to a catalog via CSV file (async).
-        CSV columns: username (or email), optional active (defaults to True)
-        Returns a Celery task ID for status tracking.
-        """
-        file = request.FILES.get("file")
-        if not file:
-            return Response(
-                {"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST
-            )
-        # Save file content to pass to Celery (as string)
-        csv_content = file.read().decode(request.encoding or "utf-8")
-        # Enqueue Celery task
-        task = partner_tasks.bulk_upload_learners.delay(
-            csv_content=csv_content,
-            catalog_id=catalog_pk,
-        )
-        return Response(
-            {"task_id": task.id, "status": "processing"},
-            status=status.HTTP_202_ACCEPTED,
-        )
+        if catalog_pk:
+            qs = qs.filter(catalog_id=catalog_pk)
 
-    @bulk_status_learner_schema
-    @action(
-        detail=False,
-        methods=["get"],
-        url_path="bulk_status",
-    )
-    def bulk_status(
-        self, request, partner_pk=None, catalog_pk=None
-    ):  # pylint: disable=unused-argument
-        """
-        Check the status of a bulk upload task by task_id.
-        Query parameter: task_id
-        """
-        task_id = request.query_params.get("task_id")
-        if not task_id:
-            return Response(
-                {"detail": "task_id parameter is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        task_result = AsyncResult(task_id)
-        response_data = {
-            "task_id": task_id,
-            "status": task_result.status,
-        }
-        if task_result.ready():
-            if task_result.successful():
-                response_data["result"] = task_result.result
-            else:
-                response_data["error"] = str(task_result.info)
-        return Response(response_data, status=status.HTTP_200_OK)
+        enrollments_subquery = CatalogCourseEnrollment.objects.filter(
+            user_id=OuterRef("user_id"),
+            catalog_course__catalog_id=OuterRef("catalog_id"),
+            active=True,
+        ).values("user_id").annotate(count=Count("id")).values("count")
+
+        qs = qs.annotate(enrollments_count=Subquery(enrollments_subquery))
+        qs = annotate_learner_certified_count(qs)
+        return qs
 
 
 class CatalogCourseViewSet(

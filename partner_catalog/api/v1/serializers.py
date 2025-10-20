@@ -163,12 +163,40 @@ class CatalogLearnerSerializer(serializers.ModelSerializer):
     catalog_id = serializers.PrimaryKeyRelatedField(
         source="catalog",
         queryset=PartnerCatalog.objects.all(),
+        write_only=True,
     )
+
     user = UserSimpleSerializer(read_only=True)
+    active = serializers.BooleanField(read_only=True)
+    invite_sent_at = serializers.DateTimeField(
+        read_only=True,
+        source="current_invitation.invited_at"
+    )
+    accepted_at = serializers.DateTimeField(
+        read_only=True,
+        source="current_invitation.accepted_at"
+    )
+    removed_at = serializers.DateTimeField(
+        read_only=True,
+        source="current_invitation.removed_at"
+    )
+    enrollments = serializers.IntegerField(source="enrollments_count", read_only=True)
+    certified = serializers.IntegerField(source="certified_count", read_only=True)
 
     class Meta:
         model = CatalogLearner
-        fields = ["id", "active", "user", "catalog_id", "user_id"]
+        fields = [
+            "id",
+            "active",
+            "user",
+            "catalog_id",
+            "user_id",
+            "invite_sent_at",
+            "accepted_at",
+            "removed_at",
+            "enrollments",
+            "certified",
+        ]
         read_only_fields = ["id"]
 
 
