@@ -2,7 +2,7 @@ Change Log
 ##########
 
 ..
-   All enhancements and patches to corporate_partner_access will be documented
+   All enhancements and patches to partner_catalog will be documented
    in this file.  It adheres to the structure of https://keepachangelog.com/ ,
    but in reStructuredText instead of Markdown (for ease of incorporation into
    Sphinx documentation and the PyPI description).

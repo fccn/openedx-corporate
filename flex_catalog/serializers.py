@@ -2,7 +2,7 @@
 
 from rest_framework import serializers
 
-from corporate_partner_access.edxapp_wrapper.course_module import course_overview, course_overview_base_serializer
+from partner_catalog.edxapp_wrapper.course_module import course_overview, course_overview_base_serializer
 
 from .models import FlexibleCatalogModel
 

@@ -57,8 +57,8 @@ output/*/index.html
 # Sphinx
 docs/_build
 docs/modules.rst
-docs/corporate_partner_access.rst
-docs/corporate_partner_access.*.rst
+docs/partner_catalog.rst
+docs/partner_catalog.*.rst
 
 # Private requirements
 requirements/private.in

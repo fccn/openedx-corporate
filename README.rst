@@ -1,9 +1,9 @@
-corporate-partner-access
+partner-catalog
 ############################
 
 A unified LMS plugin for Open edX that consolidates corporate partner needs into a scalable, maintainable solution.
 
-The **corporate-partner-access** plugin addresses the specific requirements of corporate partners by providing a comprehensive system for managing corporate access, user management, and partner-specific features within the Open edX platform. This plugin leverages Open edX's plugin architecture to introduce new data models, APIs, and UI components tailored to corporate use cases.
+The **partner-catalog** plugin addresses the specific requirements of corporate partners by providing a comprehensive system for managing corporate access, user management, and partner-specific features within the Open edX platform. This plugin leverages Open edX's plugin architecture to introduce new data models, APIs, and UI components tailored to corporate use cases.
 
 
 **Key Features:**

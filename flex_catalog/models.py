@@ -6,7 +6,7 @@ from django.db import models
 from model_utils.managers import InheritanceManager
 from model_utils.models import TimeStampedModel
 
-from corporate_partner_access.edxapp_wrapper.course_module import course_overview
+from partner_catalog.edxapp_wrapper.course_module import course_overview
 
 
 class FlexibleCatalogModel(TimeStampedModel):
