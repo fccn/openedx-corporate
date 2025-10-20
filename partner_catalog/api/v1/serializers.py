@@ -13,6 +13,7 @@ from partner_catalog.models import (
     CatalogCourseEnrollment,
     CatalogEmailRegex,
     CatalogLearner,
+    CatalogLearnerInvitation,
     Partner,
     PartnerCatalog,
 )
@@ -250,6 +251,39 @@ class CatalogEmailRegexSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
 
+class CatalogLearnerInvitationSerializer(serializers.ModelSerializer):
+    """Serializer for CatalogLearnerInvitation data."""
+
+    id = serializers.IntegerField(read_only=True)
+    status = serializers.SerializerMethodField()
+    catalog_id = serializers.PrimaryKeyRelatedField(
+        source="catalog",
+        queryset=PartnerCatalog.objects.all(),
+    )
+    invite_email = serializers.EmailField()
+
+    class Meta:
+        model = CatalogLearnerInvitation
+        fields = [
+            "id",
+            "catalog_id",
+            "invite_email",
+            "invited_at",
+            "accepted_at",
+            "declined_at",
+        ]
+        read_only_fields = [
+            "id",
+            "invited_at",
+            "accepted_at",
+            "declined_at",
+        ]
+
+    def get_status(self, obj):
+        """Return the display string for the invitation status."""
+        return obj.get_status_display()
+
+
 class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
     """Serializer for enrollments in a catalog course."""
 
@@ -300,11 +334,17 @@ class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
         return str(co.id)
 
 
-class InvitationSelfActionSerializer(serializers.Serializer):
+class InvitationActionSerializer(serializers.Serializer):
     """
-    Input schema for accept/decline endpoints.
-    No fields for now; kept for future extensibility (e.g., consent flags).
+    Input schema for invitation action endpoints (accept/decline/revoke).
+    No fields required as these actions only use the invitation ID from the URL.
+    Kept for future extensibility (e.g., consent flags, reason for revocation).
     """
+
+    id = serializers.IntegerField(read_only=True)
+    status = serializers.SerializerMethodField(read_only=True)
+    catalog_id = serializers.IntegerField(read_only=True)
+    invite_email = serializers.EmailField(read_only=True)
 
     def create(self, validated_data):
         """No-op: this serializer is not used to create DB objects."""
@@ -313,3 +353,7 @@ class InvitationSelfActionSerializer(serializers.Serializer):
     def update(self, instance, validated_data):
         """No-op: this serializer does not mutate instances directly."""
         return instance
+
+    def get_status(self, obj):
+        """Return the display string for the invitation status."""
+        return obj.get_status_display()

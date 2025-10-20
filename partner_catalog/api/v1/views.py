@@ -2,7 +2,10 @@
 
 from django.db.models import Count, OuterRef, Q, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, viewsets
+from edx_rest_framework_extensions.permissions import IsAuthenticated
+from rest_framework import filters, mixins, status, viewsets
+from rest_framework.decorators import action
+from rest_framework.response import Response
 
 from partner_catalog.api.v1.filters import PartnerFilter
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
@@ -10,7 +13,9 @@ from partner_catalog.api.v1.serializers import (
     CatalogCourseEnrollmentSerializer,
     CatalogCourseSerializer,
     CatalogEmailRegexSerializer,
+    CatalogLearnerInvitationSerializer,
     CatalogLearnerSerializer,
+    InvitationActionSerializer,
     PartnerCatalogSerializer,
     PartnerSerializer,
 )
@@ -19,6 +24,7 @@ from partner_catalog.models import (
     CatalogCourseEnrollment,
     CatalogEmailRegex,
     CatalogLearner,
+    CatalogLearnerInvitation,
     Partner,
     PartnerCatalog,
 )
@@ -29,6 +35,7 @@ from partner_catalog.services.certificates import (
     annotate_learner_certified_count,
     annotate_partner_certified_count,
 )
+from partner_catalog.services.invitations import CatalogLearnerInvitationService
 
 
 class PartnerViewset(viewsets.ReadOnlyModelViewSet):
@@ -225,6 +232,101 @@ class CatalogEmailRegexViewSet(
         qs = self.queryset
         catalog_pk = self.kwargs.get("catalog_pk")
         return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
+
+
+class CatalogLearnerInvitationViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
+    InjectNestedFKMixin,
+):
+    """ViewSet for managing Catalog Learner Invitations."""
+
+    queryset = CatalogLearnerInvitation.objects.select_related("catalog", "user")
+    service = CatalogLearnerInvitationService()
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    ]
+
+    def get_permission_classes(self):
+        """Get permission classes based on action."""
+
+        base_permissions = [IsAuthenticated]
+        manager_actions = [
+            "create",
+            "revoke_invite",
+            "bulk_invite_upload",
+            "bulk_revoke_upload"
+        ]
+        if self.action in manager_actions:
+            return base_permissions + [IsPartnerCatalogManager]
+        return base_permissions
+
+    def get_serializer_class(self):
+        """Get the serializer class based on action."""
+
+        if self.action in ['accept_invite', 'decline_invite', 'revoke_invite']:
+            return InvitationActionSerializer
+        return CatalogLearnerInvitationSerializer
+
+    def create(self, request, *args, **kwargs):
+        """Create a new invitation."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        invitation = self.service.create_new_invitation(
+            invite_email=serializer.validated_data.get('invite_email'),
+            catalog_id=serializer.validated_data.get('catalog').id
+        )
+
+        output_serializer = self.get_serializer(invitation)
+        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="accept")
+    def accept_invite(self, request, pk=None):
+        """Accept an invitation."""
+        invitation = self.service.accept_invitation(invitation_id=pk, user=request.user)
+
+        serializer = CatalogLearnerInvitationSerializer(invitation)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="decline")
+    def decline_invite(self, request, pk=None):
+        """Decline an invitation."""
+        invitation = self.service.decline_invitation(invitation_id=pk, user=request.user)
+
+        serializer = CatalogLearnerInvitationSerializer(invitation)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="revoke")
+    def revoke_invite(self, request, pk=None):
+        """Revoke an invitation."""
+        invitation = self.service.revoke_invitation(invitation_id=pk, user=request.user)
+
+        serializer = CatalogLearnerInvitationSerializer(invitation)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["post"], url_path="bulk_invite")
+    def bulk_invite_upload(self, request, *args, **kwargs):
+        """Handle bulk upload of invitations via CSV file."""
+        # TODO: Implementation of bulk upload
+
+    @action(detail=False, methods=["get"], url_path="bulk_invite/status/(?P<task_id>[^/.]+)")
+    def bulk_invite_status(self, request, task_id=None):
+        """Check the status of a bulk invitation task."""
+        # TODO: Implementation of checking task status
+
+    @action(detail=False, methods=["post"], url_path="bulk_revoke")
+    def bulk_revoke_upload(self, request, *args, **kwargs):
+        """Handle bulk revocation of invitations via CSV file."""
+        # TODO: Implementation of bulk revocation
+
+    @action(detail=False, methods=["get"], url_path="bulk_revoke/status/(?P<task_id>[^/.]+)")
+    def bulk_revoke_status(self, request, task_id=None):
+        """Check the status of a bulk revocation task."""
+        # TODO: Implementation of checking revocation task status
 
 
 class CatalogCourseEnrollmentViewSet(
