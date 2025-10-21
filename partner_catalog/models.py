@@ -407,6 +407,12 @@ class CatalogLearnerInvitation(models.Model):
                 name="cla_removed_implies_accepted",
                 check=models.Q(removed_at__isnull=True) | models.Q(accepted_at__isnull=False),
             ),
+            # Prevent duplicate active invitations (SENT or ACCEPTED)
+            models.UniqueConstraint(
+                fields=["catalog", "invite_email"],
+                condition=models.Q(status__in=[10, 20]),
+                name="cla_unique_active_invitation",
+            ),
         ]
 
     def _compute_status(self):

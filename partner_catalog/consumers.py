@@ -1,122 +1,98 @@
 """
 Django signal consumers for partner catalog events.
 
-This module defines signal handlers for events related to CatalogCourseEnrollmentAllowed
-creation and updates. These handlers can be used to trigger side effects such as sending
-notifications or creating enrollments when relevant events occur.
+These handlers can be used to trigger side effects such as sending notifications
+when relevant events occur.
 """
 
 import logging
 from typing import Any
 
-from django.db import transaction
 from django.dispatch import receiver
-from openedx_events.learning.data import CourseEnrollmentData
-from openedx_events.learning.signals import COURSE_ENROLLMENT_CREATED, COURSE_UNENROLLMENT_COMPLETED
 
-from partner_catalog.events.data import CatalogCourseEnrollmentAllowedData
+from partner_catalog.events.data import CatalogLearnerInvitationData
 from partner_catalog.events.signals import (
-    CATALOG_CEA_ACCEPTED_V1,
-    CATALOG_CEA_CREATED_V1,
-    CATALOG_CEA_DECLINED_V1,
-    CATALOG_CEA_UPDATED_V1,
+    CATALOG_LEARNER_INVITATION_ACCEPTED_V1,
+    CATALOG_LEARNER_INVITATION_CREATED_V1,
+    CATALOG_LEARNER_INVITATION_DECLINED_V1,
+    CATALOG_LEARNER_INVITATION_REMOVED_V1,
 )
-from partner_catalog.services.workflows import accept_invite_workflow
-from partner_catalog.tasks import deactivate_catalog_enrollment_task, ensure_catalog_enrollment_task
+from partner_catalog.models import CatalogLearner
 
-logger = logging.getLogger("cpa.events")
+logger = logging.getLogger("partner_catalog.events")
 
 
-@receiver(CATALOG_CEA_CREATED_V1)
-def handle_catalog_cea_created(
+@receiver(CATALOG_LEARNER_INVITATION_CREATED_V1)
+def handle_catalog_learner_invitation_created(
     sender: Any,  # pylint: disable=unused-argument
-    invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any
+    invitation: CatalogLearnerInvitationData,
+    **_kwargs: Any
 ) -> None:
-    """Handle creation of a CatalogCourseEnrollmentAllowed."""
-    # TODO: Send email notification
-    logger.warning("CEA CREATED fired: id=%s status=%s", invite.id, invite.status)
+    """Handle creation of a CatalogLearnerInvitation."""
+    # TODO: Add the needed logic when an invitation is created, like send notification email.
+    # TODO: Catch errors, retry or set the invitation status to FAILED
+    logger.info(
+        "CATALOG_LEARNER_INVITATION_CREATED: id=%s catalog_id=%s status=%s",
+        invitation.id,
+        invitation.catalog_id,
+        invitation.status,
+    )
 
 
-@receiver(CATALOG_CEA_UPDATED_V1)
-def handle_catalog_cea_updated(
+@receiver(CATALOG_LEARNER_INVITATION_ACCEPTED_V1)
+def handle_catalog_learner_invitation_accepted(
     sender: Any,  # pylint: disable=unused-argument
-    invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any
+    invitation: CatalogLearnerInvitationData,
+    **_kwargs: Any
 ) -> None:
-    """Handle updates to a CatalogCourseEnrollmentAllowed."""
-    # TODO: Create catalog course enrollment
-    logger.warning("CEA UPDATED fired: id=%s status=%s", invite.id, invite.status)
+    """Handle acceptance of a CatalogLearnerInvitation."""
+    learner, created = CatalogLearner.objects.get_or_create(
+        user_id=invitation.user_id,
+        catalog_id=invitation.catalog_id,
+        defaults={'current_invitation_id': invitation.id}
+    )
+
+    # If learner existed but has different invitation, update it
+    if not created and learner.current_invitation_id != invitation.id:
+        learner.current_invitation_id = invitation.id
+        learner.save()
+
+    logger.info(
+        "CATALOG_LEARNER_INVITATION_ACCEPTED: Learner %s for invitation id=%s catalog_id=%s user_id=%s",
+        "created" if created else "updated",
+        invitation.id,
+        invitation.catalog_id,
+        invitation.user_id,
+    )
 
 
-@receiver(CATALOG_CEA_ACCEPTED_V1)
-def handle_catalog_cea_accepted(
+@receiver(CATALOG_LEARNER_INVITATION_DECLINED_V1)
+def handle_catalog_learner_invitation_declined(
     sender: Any,  # pylint: disable=unused-argument
-    invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any
+    invitation: CatalogLearnerInvitationData,
+    **_kwargs: Any
 ) -> None:
-    """When an invite is accepted, create/activate the enrollment (idempotent)."""
-
-    def run_workflow() -> None:
-        """
-        Handle side effects when a catalog course enrollment invite is accepted.
-
-        This function is called after a CatalogCourseEnrollmentAllowed invitation is accepted.
-        It triggers the workflow to ensure the user is enrolled in the corresponding catalog course,
-        creating the enrollment if it does not already exist. This operation is idempotent.
-        """
-        accept_invite_workflow(
-            user_id=invite.user_id,
-            catalog_course_id=invite.catalog_course_id,
-        )
-
-    transaction.on_commit(run_workflow)
+    """Handle declination of a CatalogLearnerInvitation."""
+    # TODO: add the needed logic when an invitation is declined.
+    logger.info(
+        "CATALOG_LEARNER_INVITATION_DECLINED: id=%s catalog_id=%s user_id=%s",
+        invitation.id,
+        invitation.catalog_id,
+        invitation.user_id,
+    )
 
 
-@receiver(CATALOG_CEA_DECLINED_V1)
-def handle_catalog_cea_declined(
+@receiver(CATALOG_LEARNER_INVITATION_REMOVED_V1)
+def handle_catalog_learner_invitation_removed(
     sender: Any,  # pylint: disable=unused-argument
-    invite: CatalogCourseEnrollmentAllowedData, **_kwargs: Any
+    invitation: CatalogLearnerInvitationData,
+    **_kwargs: Any
 ) -> None:
-    """When an invite is declined, run any side effect you want (logging for now)."""
-    def after_commit() -> None:
-        """
-        Handle side effects when a catalog course enrollment invite is declined.
-
-        This function is called after a CatalogCourseEnrollmentAllowed invitation is declined.
-        You can implement any necessary side effects here, such as logging, notifying staff,
-        or freeing up a quota slot.
-        """
-        # TODO: implement decline-specific side effects if/when needed.
-        logger.info("CEA DECLINED: id=%s email=%s user_id=%s", invite.id, invite.invite_email, invite.user_id)
-
-    transaction.on_commit(after_commit)
-
-
-@receiver(COURSE_ENROLLMENT_CREATED)
-def handle_course_enrollment_created(
-    sender: Any,  # pylint: disable=unused-argument
-    enrollment: CourseEnrollmentData, **_kwargs: Any
-) -> None:
-    """Ensure a CatalogCourseEnrollment exists when a CourseEnrollment is created."""
-    user_id = int(enrollment.user.id)
-    course_id = str(enrollment.course.course_key)
-
-    transaction.on_commit(lambda: ensure_catalog_enrollment_task.apply_async(
-        args=[user_id, course_id],
-        countdown=120,
-        task_id=f"ensure-catalog-enrollment:{user_id}:{course_id}",
-    ))
-
-
-@receiver(COURSE_UNENROLLMENT_COMPLETED)
-def handle_course_unenrollment_completed(
-    sender: Any,  # pylint: disable=unused-argument
-    enrollment: CourseEnrollmentData, **_kwargs: Any
-) -> None:
-    """Deactivate catalog enrollment when user unenrolls from the underlying course."""
-    user_id = int(enrollment.user.id)
-    course_id = str(enrollment.course.course_key)
-
-    transaction.on_commit(lambda: deactivate_catalog_enrollment_task.apply_async(
-        args=[user_id, course_id],
-        countdown=120,
-        task_id=f"deactivate-catalog-enrollment:{user_id}:{course_id}",
-    ))
+    """Handle removal/revocation of a CatalogLearnerInvitation."""
+    # TODO: Add the needed logic when an invitation is removed.
+    logger.info(
+        "CATALOG_LEARNER_INVITATION_REMOVED: id=%s catalog_id=%s removed_by_id=%s",
+        invitation.id,
+        invitation.catalog_id,
+        invitation.removed_by_id,
+    )
