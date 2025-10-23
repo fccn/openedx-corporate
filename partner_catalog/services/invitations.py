@@ -41,29 +41,32 @@ class CatalogLearnerInvitationService:
         Status.REMOVED: CATALOG_LEARNER_INVITATION_REMOVED_V1,
     }
 
+    ALLOWED_TRANSITIONS = {
+        Status.SENT: [Status.ACCEPTED, Status.DECLINED],
+        Status.ACCEPTED: [Status.REMOVED],
+        Status.DECLINED: [],
+        Status.REMOVED: [],
+        Status.FAILED: [],
+    }
+
     @transaction.atomic
-    def create_new_invitation(self, invite_email: str, catalog_id: int):
+    def create_new_invitation(self, invite_email: str, catalog_id: int, invited_by=None):
         """
         Create a new CatalogLearnerInvitation.
         """
+        if self._has_active_invitations(invite_email, catalog_id):
+            raise ValidationError("An active invitation already exists for this user.")
 
-        # Validate no existing accepted or sent invitations
-        already_invited = self.has_active_invitations(invite_email, catalog_id)
-        if already_invited:
-            raise ValidationError("An active invitation already exists for this user and catalog.")
-
-        user = self.validate_existing_user_from_email(invite_email)
-
+        user = self._get_user_by_email(invite_email)
         try:
             invitation = CatalogLearnerInvitation.objects.create(
                 invite_email=normalize_email(invite_email),
                 catalog_id=catalog_id,
                 user=user,
+                invited_by=invited_by,
             )
         except IntegrityError as exc:
-            raise ValidationError(
-                "An active invitation already exists for this user and catalog."
-            ) from exc
+            raise ValidationError("An active invitation already exists for this user.") from exc
 
         self._emit_invitation_event(invitation)
         return invitation
@@ -74,11 +77,12 @@ class CatalogLearnerInvitationService:
         Decline an existing CatalogLearnerInvitation.
         Update status and timestamps accordingly.
         """
+        invitation = self.get_invitation_or_raise(invitation_id)
 
-        invitation = CatalogLearnerInvitation.objects.get(id=invitation_id)
-        can_act = self.validate_user_action(user, invitation)
+        if self._is_status_transition_allowed(invitation, Status.DECLINED) is False:
+            raise ValidationError("This invitation can not be declined.")
 
-        if not can_act:
+        if not self._validate_invitation_status_access(user, invitation, Status.DECLINED):
             raise ValidationError("User is not authorized to decline this invitation.")
 
         invitation.declined_at = timezone.now()
@@ -92,65 +96,54 @@ class CatalogLearnerInvitationService:
         Accept an existing CatalogLearnerInvitation.
         Update status and timestamps accordingly.
         """
-        invitation = CatalogLearnerInvitation.objects.get(id=invitation_id)
-        can_act = self.validate_user_action(user, invitation)
+        invitation = self.get_invitation_or_raise(invitation_id)
 
-        if not can_act:
+        if not self._validate_invitation_status_access(user, invitation, Status.ACCEPTED):
             raise ValidationError("User is not authorized to accept this invitation.")
+
+        if self._is_status_transition_allowed(invitation, Status.ACCEPTED) is False:
+            raise ValidationError("This invitation can not be accepted.")
 
         invitation.user = user
         invitation.accepted_at = timezone.now()
         invitation.save()
-
-        # CatalogLearner creation is handled by signal handler
         self._emit_invitation_event(invitation)
         return invitation
 
     @transaction.atomic
-    def revoke_invitation(self, invitation_id: int, user):
+    def remove_invitation(self, invitation_id: int, user):
         """
-        Revoke an existing CatalogLearnerInvitation.
+        Mark as removed an existing CatalogLearnerInvitation.
         Update status and timestamps accordingly.
         """
+        invitation = self.get_invitation_or_raise(invitation_id)
 
-        invitation = CatalogLearnerInvitation.objects.get(id=invitation_id)
+        if not self._validate_invitation_status_access(user, invitation, Status.REMOVED):
+            raise ValidationError("Only staff users can remove invitations.")
 
-        if not (user.is_staff or user.is_superuser):
-            raise ValidationError("Only staff users can revoke invitations.")
+        if self._is_status_transition_allowed(invitation, Status.REMOVED) is False:
+            raise ValidationError("Can only remove accepted invitations.")
 
-        if invitation.status != Status.ACCEPTED:
-            raise ValidationError("Can only revoke accepted invitations.")
-
-        invitation.revoked_at = timezone.now()
+        invitation.removed_at = timezone.now()
         invitation.removed_by = user
         invitation.save()
 
-        # Triggers the learner save to update active related state
         learner = invitation.learner
-        learner.refresh_from_db()
-        learner.save()
+        if not learner:
+            raise ValidationError("No learner associated with this invitation.")
 
+        learner.save()
         self._emit_invitation_event(invitation)
         return invitation
 
-    def _to_event_data(self, invitation: CatalogLearnerInvitation):
+    def get_invitation_or_raise(self, invitation_id: int) -> CatalogLearnerInvitation:
         """
-        Convert a CatalogLearnerInvitation instance to event data structure.
+        Get an invitation by ID or raise ValidationError if not found.
         """
-        return CatalogLearnerInvitationData(
-            id=invitation.id,
-            catalog_id=invitation.catalog_id,
-            status=invitation.get_status_display(),
-            invited_at=invitation.invited_at,
-            invite_email=invitation.invite_email,
-            user_id=invitation.user_id,
-            learner_id=invitation.learner_id,
-            invited_by_id=invitation.invited_by_id,
-            accepted_at=invitation.accepted_at,
-            declined_at=invitation.declined_at,
-            removed_at=invitation.removed_at,
-            removed_by_id=invitation.removed_by_id,
-        )
+        try:
+            return CatalogLearnerInvitation.objects.get(id=invitation_id)
+        except CatalogLearnerInvitation.DoesNotExist as exc:
+            raise ValidationError("Invitation not found.") from exc
 
     def _emit_invitation_event(self, invitation: CatalogLearnerInvitation):
         """
@@ -172,7 +165,23 @@ class CatalogLearnerInvitationService:
 
         transaction.on_commit(after_commit)
 
-    def validate_existing_user_from_email(self, invite_email: str):
+    def _is_status_transition_allowed(self, invitation, new_status: Status):
+        """Return True if invitation can transition from its current status to new_status."""
+        current = invitation.status
+
+        return new_status in self.ALLOWED_TRANSITIONS.get(current, [])
+
+    def _validate_invitation_status_access(self, user, invitation, new_status: Status) -> bool:
+        """
+        Validate if the given user can perform the status transition on the invitation.
+        """
+        if new_status in [Status.ACCEPTED, Status.DECLINED]:
+            return getattr(user, "is_authenticated", False) and user == invitation.user
+        elif new_status == Status.REMOVED:
+            return user.is_staff or user.is_superuser
+        return False
+
+    def _get_user_by_email(self, invite_email: str):
         """
         Validate if a user with the given email exists.
         Normalize email before lookup.
@@ -180,7 +189,7 @@ class CatalogLearnerInvitationService:
         normalized_email = normalize_email(invite_email)
         return User.objects.filter(email=normalized_email).first()
 
-    def has_active_invitations(self, invite_email: str, catalog_id: int):
+    def _has_active_invitations(self, invite_email: str, catalog_id: int):
         """
         Validate if an invitation already exists for the given user and catalog.
         Normalize email before lookup.
@@ -192,8 +201,21 @@ class CatalogLearnerInvitationService:
             status__in=[Status.SENT, Status.ACCEPTED]
         ).exists()
 
-    def validate_user_action(self, user, invitation: CatalogLearnerInvitation) -> bool:
+    def _to_event_data(self, invitation: CatalogLearnerInvitation):
         """
-        Validate if the given user can act on the invitation (accept/decline).
+        Convert a CatalogLearnerInvitation instance to event data structure.
         """
-        return getattr(user, "is_authenticated", False) and user == invitation.user
+        return CatalogLearnerInvitationData(
+            id=invitation.id,
+            catalog_id=invitation.catalog_id,
+            status=invitation.get_status_display(),
+            invited_at=invitation.invited_at,
+            invite_email=invitation.invite_email,
+            user_id=invitation.user_id,
+            learner_id=invitation.learner_id,
+            invited_by_id=invitation.invited_by_id,
+            accepted_at=invitation.accepted_at,
+            declined_at=invitation.declined_at,
+            removed_at=invitation.removed_at,
+            removed_by_id=invitation.removed_by_id,
+        )

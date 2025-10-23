@@ -8,6 +8,7 @@ from partner_catalog.api.v1.views import (
     CatalogCourseEnrollmentViewSet,
     CatalogCourseViewSet,
     CatalogEmailRegexViewSet,
+    CatalogLearnerInvitationViewSet,
     CatalogLearnerViewset,
     PartnerCatalogViewSet,
     PartnerViewset,
@@ -23,6 +24,7 @@ catalogs_router = NestedDefaultRouter(partners_router, r"catalogs", lookup="cata
 catalogs_router.register(r"learners", CatalogLearnerViewset, basename="catalog-learners")
 catalogs_router.register(r"courses", CatalogCourseViewSet, basename="catalog-courses")
 catalogs_router.register(r"email_regexes", CatalogEmailRegexViewSet, basename="catalog-email-regexes")
+catalogs_router.register(r"invitations", CatalogLearnerInvitationViewSet, basename="catalog-learner-invitations")
 
 courses_router = NestedDefaultRouter(catalogs_router, r"courses", lookup="course")
 courses_router.register(r"enrollments", CatalogCourseEnrollmentViewSet, basename="catalog-course-enrollments")

@@ -116,7 +116,7 @@ class PartnerCatalogViewSet(
         return qs
 
 
-class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ModelViewSet):
+class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for Corporate Partner Catalog Learner data.
     Provides access to corporate partner catalog learner information.
@@ -256,9 +256,9 @@ class CatalogLearnerInvitationViewSet(
         base_permissions = [IsAuthenticated]
         manager_actions = [
             "create",
-            "revoke_invite",
+            "remove_invite",
             "bulk_invite_upload",
-            "bulk_revoke_upload"
+            "bulk_remove_upload"
         ]
         if self.action in manager_actions:
             return base_permissions + [IsPartnerCatalogManager]
@@ -267,7 +267,7 @@ class CatalogLearnerInvitationViewSet(
     def get_serializer_class(self):
         """Get the serializer class based on action."""
 
-        if self.action in ['accept_invite', 'decline_invite', 'revoke_invite']:
+        if self.action in ['accept_invite', 'decline_invite', 'remove_invite']:
             return InvitationActionSerializer
         return CatalogLearnerInvitationSerializer
 
@@ -278,14 +278,15 @@ class CatalogLearnerInvitationViewSet(
 
         invitation = self.service.create_new_invitation(
             invite_email=serializer.validated_data.get('invite_email'),
-            catalog_id=serializer.validated_data.get('catalog').id
+            catalog_id=serializer.validated_data.get('catalog').id,
+            invited_by=request.user,
         )
 
         output_serializer = self.get_serializer(invitation)
         return Response(output_serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="accept")
-    def accept_invite(self, request, pk=None):
+    def accept_invite(self, request, pk=None, **kwargs):
         """Accept an invitation."""
         invitation = self.service.accept_invitation(invitation_id=pk, user=request.user)
 
@@ -293,23 +294,23 @@ class CatalogLearnerInvitationViewSet(
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], url_path="decline")
-    def decline_invite(self, request, pk=None):
+    def decline_invite(self, request, pk=None, **kwargs):
         """Decline an invitation."""
         invitation = self.service.decline_invitation(invitation_id=pk, user=request.user)
 
         serializer = CatalogLearnerInvitationSerializer(invitation)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @action(detail=True, methods=["post"], url_path="revoke")
-    def revoke_invite(self, request, pk=None):
-        """Revoke an invitation."""
-        invitation = self.service.revoke_invitation(invitation_id=pk, user=request.user)
+    @action(detail=True, methods=["post"], url_path="remove")
+    def remove_invite(self, request, pk=None, **kwargs):
+        """Remove an invitation."""
+        invitation = self.service.remove_invitation(invitation_id=pk, user=request.user)
 
         serializer = CatalogLearnerInvitationSerializer(invitation)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=["post"], url_path="bulk_invite")
-    def bulk_invite_upload(self, request, *args, **kwargs):
+    def bulk_invite(self, request, *args, **kwargs):
         """Handle bulk upload of invitations via CSV file."""
         # TODO: Implementation of bulk upload
 
@@ -318,13 +319,13 @@ class CatalogLearnerInvitationViewSet(
         """Check the status of a bulk invitation task."""
         # TODO: Implementation of checking task status
 
-    @action(detail=False, methods=["post"], url_path="bulk_revoke")
-    def bulk_revoke_upload(self, request, *args, **kwargs):
+    @action(detail=False, methods=["post"], url_path="bulk_remove")
+    def bulk_remove(self, request, *args, **kwargs):
         """Handle bulk revocation of invitations via CSV file."""
         # TODO: Implementation of bulk revocation
 
-    @action(detail=False, methods=["get"], url_path="bulk_revoke/status/(?P<task_id>[^/.]+)")
-    def bulk_revoke_status(self, request, task_id=None):
+    @action(detail=False, methods=["get"], url_path="bulk_remove/status/(?P<task_id>[^/.]+)")
+    def bulk_remove_status(self, request, task_id=None):
         """Check the status of a bulk revocation task."""
         # TODO: Implementation of checking revocation task status
 

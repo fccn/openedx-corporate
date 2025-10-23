@@ -271,6 +271,7 @@ class CatalogLearnerInvitationSerializer(serializers.ModelSerializer):
             "invited_at",
             "accepted_at",
             "declined_at",
+            "status"
         ]
         read_only_fields = [
             "id",
@@ -336,7 +337,7 @@ class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
 
 class InvitationActionSerializer(serializers.Serializer):
     """
-    Input schema for invitation action endpoints (accept/decline/revoke).
+    Input schema for invitation action endpoints (accept/decline/remove).
     No fields required as these actions only use the invitation ID from the URL.
     Kept for future extensibility (e.g., consent flags, reason for revocation).
     """
