@@ -127,12 +127,6 @@ class CatalogLearnerInvitationService:
         invitation.removed_at = timezone.now()
         invitation.removed_by = user
         invitation.save()
-
-        learner = invitation.learner
-        if not learner:
-            raise ValidationError("No learner associated with this invitation.")
-
-        learner.save()
         self._emit_invitation_event(invitation)
         return invitation
 
@@ -158,12 +152,8 @@ class CatalogLearnerInvitationService:
         if not signal:
             return
 
-        def after_commit() -> None:
-            """Send invitation event after transaction commit."""
-            event_data = self._to_event_data(invitation)
-            signal.send_event(invitation=event_data)
-
-        transaction.on_commit(after_commit)
+        event_data = self._to_event_data(invitation)
+        signal.send_event(invitation=event_data)
 
     def _is_status_transition_allowed(self, invitation, new_status: Status):
         """Return True if invitation can transition from its current status to new_status."""
