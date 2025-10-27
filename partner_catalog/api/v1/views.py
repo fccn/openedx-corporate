@@ -5,11 +5,13 @@ from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from partner_catalog.api.v1.filters import PartnerFilter
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
 from partner_catalog.api.v1.serializers import (
+    BulkRemoveInvitationSerializer,
     CatalogCourseEnrollmentSerializer,
     CatalogCourseSerializer,
     CatalogEmailRegexSerializer,
@@ -19,6 +21,7 @@ from partner_catalog.api.v1.serializers import (
     PartnerCatalogSerializer,
     PartnerSerializer,
 )
+from partner_catalog.api.v1.tasks import bulk_remove_invitations, bulk_upload_invitations
 from partner_catalog.models import (
     CatalogCourse,
     CatalogCourseEnrollment,
@@ -269,6 +272,9 @@ class CatalogLearnerInvitationViewSet(
 
         if self.action in ['accept_invite', 'decline_invite', 'remove_invite']:
             return InvitationActionSerializer
+        elif self.action == 'bulk_remove':
+            return BulkRemoveInvitationSerializer
+        # bulk_invite and bulk_invite_status don't use serializer
         return CatalogLearnerInvitationSerializer
 
     def create(self, request, *args, **kwargs):
@@ -309,25 +315,58 @@ class CatalogLearnerInvitationViewSet(
         serializer = CatalogLearnerInvitationSerializer(invitation)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=["post"], url_path="bulk_invite")
+    @action(detail=False, methods=["post"], url_path="bulk_invite", parser_classes=[MultiPartParser])
     def bulk_invite(self, request, *args, **kwargs):
         """Handle bulk upload of invitations via CSV file."""
-        # TODO: Implementation of bulk upload
+        catalog_id = kwargs.get("catalog_pk")
+        csv_file = request.FILES.get("file")
 
-    @action(detail=False, methods=["get"], url_path="bulk_invite/status/(?P<task_id>[^/.]+)")
-    def bulk_invite_status(self, request, task_id=None):
-        """Check the status of a bulk invitation task."""
-        # TODO: Implementation of checking task status
+        if not csv_file:
+            return Response(
+                {"detail": "No file uploaded."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        csv_content = csv_file.read().decode("utf-8")
+        task = bulk_upload_invitations.delay(
+            csv_content=csv_content,
+            catalog_id=catalog_id,
+            invited_by_id=request.user.id,
+        )
+
+        return Response({
+            "task_id": task.id,
+            "status": task.status,
+        }, status=status.HTTP_202_ACCEPTED)
 
     @action(detail=False, methods=["post"], url_path="bulk_remove")
     def bulk_remove(self, request, *args, **kwargs):
-        """Handle bulk revocation of invitations via CSV file."""
-        # TODO: Implementation of bulk revocation
+        """Handle bulk revocation of invitations."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-    @action(detail=False, methods=["get"], url_path="bulk_remove/status/(?P<task_id>[^/.]+)")
-    def bulk_remove_status(self, request, task_id=None):
-        """Check the status of a bulk revocation task."""
-        # TODO: Implementation of checking revocation task status
+        learner_ids = serializer.validated_data['learner_ids']
+        task = bulk_remove_invitations.delay(
+            learner_ids=learner_ids,
+            removed_by_id=request.user.id,
+        )
+
+        return Response({
+            "task_id": task.id,
+            "status": task.status,
+        }, status=status.HTTP_202_ACCEPTED)
+
+    @action(detail=False, methods=["get"], url_path="bulk_task/status/(?P<task_id>[^/.]+)")
+    def bulk_invite_status(self, request, task_id=None):
+        """Check the status of a bulk invitation task."""
+        if not task_id:
+            return Response(
+                {"detail": "task_id is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        task_status_response = self.service.get_task_status(task_id=task_id)
+        return Response(task_status_response, status=status.HTTP_200_OK)
 
 
 class CatalogCourseEnrollmentViewSet(
