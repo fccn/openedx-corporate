@@ -10,6 +10,11 @@ from rest_framework.response import Response
 
 from partner_catalog.api.v1.filters import PartnerFilter
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
+from partner_catalog.api.v1.schemas import (
+    bulk_remove_invitations_schema,
+    bulk_status_invitations_schema,
+    bulk_upload_invitations_schema,
+)
 from partner_catalog.api.v1.serializers import (
     BulkRemoveInvitationSerializer,
     CatalogCourseEnrollmentSerializer,
@@ -253,6 +258,16 @@ class CatalogLearnerInvitationViewSet(
         filters.OrderingFilter,
     ]
 
+    def get_queryset(self):
+        """Get the queryset for catalog learner invitations."""
+        qs = self.queryset
+        catalog_pk = self.kwargs.get("catalog_pk")
+
+        if catalog_pk:
+            qs = qs.filter(catalog_id=catalog_pk)
+
+        return qs
+
     def get_permission_classes(self):
         """Get permission classes based on action."""
 
@@ -270,11 +285,17 @@ class CatalogLearnerInvitationViewSet(
     def get_serializer_class(self):
         """Get the serializer class based on action."""
 
-        if self.action in ['accept_invite', 'decline_invite', 'remove_invite']:
+        if self.action in [
+            "accept_invite",
+            "decline_invite",
+            "remove_invite",
+            "bulk_invite",
+            "bulk_invite_status",
+        ]:
             return InvitationActionSerializer
-        elif self.action == 'bulk_remove':
+        elif self.action == "bulk_remove":
             return BulkRemoveInvitationSerializer
-        # bulk_invite and bulk_invite_status don't use serializer
+
         return CatalogLearnerInvitationSerializer
 
     def create(self, request, *args, **kwargs):
@@ -315,6 +336,7 @@ class CatalogLearnerInvitationViewSet(
         serializer = CatalogLearnerInvitationSerializer(invitation)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @bulk_upload_invitations_schema
     @action(detail=False, methods=["post"], url_path="bulk_invite", parser_classes=[MultiPartParser])
     def bulk_invite(self, request, *args, **kwargs):
         """Handle bulk upload of invitations via CSV file."""
@@ -339,16 +361,19 @@ class CatalogLearnerInvitationViewSet(
             "status": task.status,
         }, status=status.HTTP_202_ACCEPTED)
 
+    @bulk_remove_invitations_schema
     @action(detail=False, methods=["post"], url_path="bulk_remove")
     def bulk_remove(self, request, *args, **kwargs):
         """Handle bulk revocation of invitations."""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        catalog_id = kwargs.get("catalog_pk")
 
         learner_ids = serializer.validated_data['learner_ids']
         task = bulk_remove_invitations.delay(
             learner_ids=learner_ids,
             removed_by_id=request.user.id,
+            catalog_id=catalog_id
         )
 
         return Response({
@@ -356,8 +381,9 @@ class CatalogLearnerInvitationViewSet(
             "status": task.status,
         }, status=status.HTTP_202_ACCEPTED)
 
+    @bulk_status_invitations_schema
     @action(detail=False, methods=["get"], url_path="bulk_task/status/(?P<task_id>[^/.]+)")
-    def bulk_invite_status(self, request, task_id=None):
+    def bulk_invite_status(self, request, task_id=None, **kwargs):
         """Check the status of a bulk invitation task."""
         if not task_id:
             return Response(

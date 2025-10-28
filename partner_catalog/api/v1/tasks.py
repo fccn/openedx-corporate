@@ -75,7 +75,7 @@ def bulk_upload_invitations(
 
 @shared_task(bind=True)
 def bulk_remove_invitations(
-    _self, learner_ids: List[int], removed_by_id: int
+    _self, learner_ids: List[int], removed_by_id: int, catalog_id: str
 ) -> Dict[str, Any]:
     """
     Celery task to process bulk invitation removals.
@@ -91,7 +91,7 @@ def bulk_remove_invitations(
 
     for learner_id in learner_ids:
         try:
-            learner = CatalogLearner.objects.get(id=learner_id)
+            learner = CatalogLearner.objects.get(id=learner_id, catalog_id=catalog_id)
 
             if not learner.current_invitation:
                 failed.append({
