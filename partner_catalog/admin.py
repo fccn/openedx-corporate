@@ -7,6 +7,7 @@ from django.utils.html import format_html
 
 from flex_catalog.admin import CourseKeysMixin
 from partner_catalog.models import (
+    BaseCatalogCourse,
     CatalogCourse,
     CatalogCourseEnrollment,
     CatalogEmailRegex,
@@ -613,3 +614,42 @@ class CatalogCourseEnrollmentAdmin(admin.ModelAdmin):
             "catalog_course__catalog__partner__organization",
             "catalog_course__course_overview",
         )
+
+
+@admin.register(BaseCatalogCourse)
+class BaseCatalogCourseAdmin(admin.ModelAdmin):
+    """
+    Admin interface for BaseCatalogCourse model.
+
+    Allows management of courses that are part of the base catalog.
+    """
+
+    list_display = ("course_id", "course_display", "added_at", "added_by")
+    search_fields = ("course__id", "course__display_name", "added_by__username")
+    list_filter = ("added_at", "added_by")
+    raw_id_fields = ("course", "added_by")
+    ordering = ("-added_at",)
+    readonly_fields = ("added_at",)
+    fields = ("course", "added_by", "added_at")
+
+    def course_id(self, obj):
+        """Display the course ID."""
+        return getattr(obj.course, "id", None)
+
+    course_id.short_description = "Course ID"
+
+    def course_display(self, obj):
+        """Display the course name."""
+        return getattr(obj.course, "display_name", str(obj.course))
+
+    course_display.short_description = "Course Name"
+
+    def get_queryset(self, request):
+        """Queryset with related course and added_by user."""
+        return super().get_queryset(request).select_related("course", "added_by")
+
+    def save_model(self, request, obj, form, change):
+        """Auto-populate added_by when creating new BaseCatalogCourse."""
+        if not change:
+            obj.added_by = request.user
+        super().save_model(request, obj, form, change)

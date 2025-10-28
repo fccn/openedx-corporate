@@ -14,6 +14,48 @@ from partner_catalog.helpers.current_user import safe_get_current_user
 from partner_catalog.services.allowed_courses import CatalogAllowedCoursesService
 
 
+class BaseCatalogCourse(models.Model):
+    """
+    Wrapper model representing courses available in the base catalog.
+
+    This model acts as a simple marker: if a CourseOverview has an associated
+    BaseCatalogCourse instance, it's part of the base catalog and can be added
+    to Partner Catalogs.
+
+    """
+
+    course = models.OneToOneField(
+        course_overview(),
+        on_delete=models.CASCADE,
+        primary_key=True,
+        help_text="Course that is part of the base catalog"
+    )
+
+    added_at = models.DateTimeField(
+        auto_now_add=True,
+        help_text="Date and time when the course was added to the base catalog"
+    )
+
+    added_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        help_text="User who added the course to the base catalog"
+    )
+
+    class Meta:
+        """Meta options for BaseCatalogCourse model."""
+
+        verbose_name = "Base Catalog Course"
+        verbose_name_plural = "Base Catalog Courses"
+        ordering = ["-added_at"]
+
+    def __str__(self):
+        """Return string representation."""
+        return f"Base Catalog Course: {self.course}"
+
+
 class Partner(models.Model):
     """
     Partner model representing a corporate partner organization.
