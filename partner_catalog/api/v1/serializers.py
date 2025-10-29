@@ -90,10 +90,10 @@ class PartnerSerializer(serializers.ModelSerializer):
         return None
 
 
-class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
+class PartnerCatalogSerializer(serializers.ModelSerializer):
     """Serializer for Corporate Partner Catalog data."""
 
-    corporate_partner = serializers.PrimaryKeyRelatedField(
+    partner = serializers.PrimaryKeyRelatedField(
         queryset=Partner.objects.all()
     )
 
@@ -101,8 +101,6 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
     courses = serializers.IntegerField(source="courses_count", read_only=True)
     enrollments = serializers.IntegerField(source="total_enrollments", read_only=True)
     certified = serializers.IntegerField(source="certified_count", read_only=True)
-
-    # TODO: Replace implementation
     completion_rate = serializers.SerializerMethodField()
 
     class Meta:
@@ -111,18 +109,14 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "slug",
-            "corporate_partner",
+            "partner",
             "email_regexes",
-            "course_enrollment_limit",
+            "course_enrollments_limit",
             "user_limit",
             "is_self_enrollment",
             "available_start_date",
             "available_end_date",
-            "custom_courses",
-            "authorization_additional_message",
-            "support_email",
-            "is_public",
-            "catalog_alternative_link",
+            "authorization_message",
             "courses",
             "enrollments",
             "certified",
@@ -132,17 +126,10 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
             "id",
             "email_regexes",
             "courses",
+            "slug",
         ]
         extra_kwargs = {
-            "authorization_additional_message": {
-                "required": False,
-                "allow_blank": True,
-            },
-            "support_email": {
-                "required": False,
-                "allow_blank": True,
-            },
-            "catalog_alternative_link": {
+            "authorization_message": {
                 "required": False,
                 "allow_blank": True,
             },
@@ -158,7 +145,7 @@ class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
         return attrs
 
     def get_email_regexes(self, obj):
-        return list(obj.email_regexes.all().values_list("regex", flat=True))
+        return list(obj.catalog_email_regexes.all().values_list("regex", flat=True))
 
     def get_completion_rate(self, obj):
         rate_statistics = compute_catalog_completion_rate(obj.id)
