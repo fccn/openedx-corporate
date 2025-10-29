@@ -50,18 +50,18 @@ def annotate_catalog_certified_count(qs):
 
 
 def annotate_partner_certified_count(qs):
-    """Annotate a CorporatePartner queryset with certified_count.
+    """Annotate a Partner queryset with certified_count.
 
     It gets the count of users that are present in a corporate partner based on the active
     learners of each of its catalogs. The courses_qs gets the course_overview__id, of the courses
     related to the corporate partner through its catalogs as well.
     """
     users_qs = CatalogLearner.objects.filter(
-        catalog__corporate_partner_id=OuterRef("pk"),
+        catalog__partner_id=OuterRef("pk"),
         active=True,
     ).values("user_id")
     courses_qs = CatalogCourse.objects.filter(
-        catalog__corporate_partner_id=OuterRef("pk"),
+        catalog__partner_id=OuterRef("pk"),
     ).values("course_overview__id")
 
     annotated = annotate_certified_count(qs, users_qs, courses_qs)

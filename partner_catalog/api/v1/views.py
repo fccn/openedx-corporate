@@ -10,6 +10,7 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from partner_catalog.api.v1 import tasks as partner_tasks
+from partner_catalog.api.v1.filters import PartnerFilter
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
 from partner_catalog.api.v1.schemas import bulk_status_learner_schema, bulk_upload_learner_schema
 from partner_catalog.api.v1.serializers import (
@@ -18,7 +19,7 @@ from partner_catalog.api.v1.serializers import (
     CatalogEmailRegexSerializer,
     CatalogLearnerSerializer,
     CorporatePartnerCatalogSerializer,
-    CorporatePartnerSerializer,
+    PartnerSerializer,
 )
 from partner_catalog.models import (
     CatalogCourse,
@@ -36,19 +37,20 @@ from partner_catalog.services.certificates import (
 )
 
 
-class CorporatePartnerViewSet(viewsets.ReadOnlyModelViewSet):
+class PartnerViewset(viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for Corporate Partner data.
     Provides access to corporate partner information.
     """
 
-    queryset = Partner.objects.all()
-    serializer_class = CorporatePartnerSerializer
+    queryset = Partner.objects.select_related("organization").all()
+    serializer_class = PartnerSerializer
     permission_classes = [IsPartnerCatalogManager]
-    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
-    search_fields = ["code", "name"]
-    ordering_fields = ["name", "code", "id"]
-    ordering = ["name"]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_class = PartnerFilter
+    search_fields = ["organization__short_name", "organization__name"]
+    ordering_fields = ["organization__name", "organization__short_name", "id"]
+    ordering = ["organization__short_name"]
 
     def get_queryset(self):
         """
@@ -56,29 +58,10 @@ class CorporatePartnerViewSet(viewsets.ReadOnlyModelViewSet):
         Staff/superusers see all.
         """
         qs = self.queryset
-        user = self.request.user
-        if not (user.is_staff or user.is_superuser):
-            managed_partner_ids = (
-                PartnerCatalog.objects.filter(
-                    catalog_managers__user=user,
-                    catalog_managers__active=True,
-                )
-                .values_list("corporate_partner_id", flat=True)
-                .distinct()
-            )
-            qs = qs.filter(id__in=managed_partner_ids)
-
         qs = qs.annotate(
             catalogs_count=Count("catalogs", distinct=True),
-            courses_count=Count("catalogs__courses", distinct=True),
-            total_enrollments=Coalesce(
-                Count(
-                    "catalogs__catalog_courses__enrollments",
-                    filter=Q(catalogs__catalog_courses__enrollments__active=True),
-                    distinct=True,
-                ),
-                0,
-            ),
+            courses_count=Count("catalogs__catalog_courses", distinct=True),
+            learners_count=Count("catalogs__catalog_learners", distinct=True)
         )
         qs = annotate_partner_certified_count(qs)
         return qs

@@ -10,11 +10,11 @@ from partner_catalog.api.v1.views import (
     CorporatePartnerCatalogEmailRegexViewSet,
     CorporatePartnerCatalogLearnerViewSet,
     CorporatePartnerCatalogViewSet,
-    CorporatePartnerViewSet,
+    PartnerViewset,
 )
 
 router = DefaultRouter()
-router.register(r"partners", CorporatePartnerViewSet, basename="partner")
+router.register(r"partners", PartnerViewset, basename="partner")
 
 partners_router = NestedDefaultRouter(router, r"partners", lookup="partner")
 partners_router.register(r"catalogs", CorporatePartnerCatalogViewSet, basename="partner-catalog")

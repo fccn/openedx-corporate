@@ -49,21 +49,24 @@ class UserSimpleSerializer(serializers.ModelSerializer):
         return full or None
 
 
-class CorporatePartnerSerializer(serializers.ModelSerializer):
-    """Serializer for Corporate Partner data."""
+class PartnerSerializer(serializers.ModelSerializer):
+    """Serializer for Partner data."""
 
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(source="organization.name", read_only=True)
+    slug = serializers.CharField(source="organization.short_name", read_only=True)
     logo = serializers.SerializerMethodField()
+
     catalogs = serializers.IntegerField(source="catalogs_count", read_only=True)
     courses = serializers.IntegerField(source="courses_count", read_only=True)
-    enrollments = serializers.IntegerField(source="total_enrollments", read_only=True)
-
+    enrollments = serializers.IntegerField(source="learners_count", read_only=True)
     certified = serializers.IntegerField(source="certified_count", read_only=True)
 
     class Meta:
         model = Partner
         fields = [
             "id",
-            "code",
+            "slug",
             "name",
             "homepage_url",
             "logo",
@@ -72,18 +75,19 @@ class CorporatePartnerSerializer(serializers.ModelSerializer):
             "enrollments",
             "certified",
         ]
-        read_only_fields = ["id"]
+        read_only_fields = ["id", "org_id", "org_name", "org_short_name"]
         extra_kwargs = {
             "homepage_url": {"required": False, "allow_null": True},
-            "logo": {"required": False, "allow_null": True, "write_only": True},
         }
 
     def get_logo(self, obj):
-        """Return the URL of the corporate partner's logo."""
+        """Return the URL of the corporate partner organization's logo."""
         try:
-            return f"{settings.LMS_ROOT_URL}{obj.logo.url}"
+            if obj.organization and obj.organization.logo:
+                return f"{settings.LMS_ROOT_URL}{obj.organization.logo.url}"
         except (ValueError, AttributeError):
-            return None
+            pass
+        return None
 
 
 class CorporatePartnerCatalogSerializer(serializers.ModelSerializer):
