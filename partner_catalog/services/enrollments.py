@@ -8,7 +8,7 @@ from typing import Optional, Tuple
 from django.db import IntegrityError, transaction
 
 from partner_catalog.edxapp_wrapper.student_module import course_enrollment_model
-from partner_catalog.models import CatalogCourseEnrollment, CorporatePartnerCatalogCourse
+from partner_catalog.models import CatalogCourse, CatalogCourseEnrollment
 
 CourseEnrollment = course_enrollment_model()
 
@@ -89,7 +89,7 @@ def get_catalog_course_id(*, user_id: int, course_id: str) -> Optional[int]:
         catalog_id_lookup = catalog_id_str
 
     return (
-        CorporatePartnerCatalogCourse.objects
+        CatalogCourse.objects
         .filter(course_overview__id=course_id, catalog_id=catalog_id_lookup)
         .values_list("id", flat=True)
         .first()

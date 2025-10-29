@@ -100,6 +100,7 @@ django==4.2.23
     #   django-crum
     #   django-filter
     #   django-model-utils
+    #   django-simple-history
     #   django-waffle
     #   djangorestframework
     #   drf-jwt
@@ -107,6 +108,7 @@ django==4.2.23
     #   drf-spectacular
     #   edx-django-utils
     #   edx-drf-extensions
+    #   edx-organizations
     #   edx-search
     #   edx-toggles
     #   event-tracking
@@ -120,7 +122,13 @@ django-crum==0.7.9
 django-filter==25.1
     # via -r requirements/test.txt
 django-model-utils==5.0.0
-    # via -r requirements/test.txt
+    # via
+    #   -r requirements/test.txt
+    #   edx-organizations
+django-simple-history==3.10.1
+    # via
+    #   -r requirements/test.txt
+    #   edx-organizations
 django-waffle==5.0.0
     # via
     #   -r requirements/test.txt
@@ -134,6 +142,7 @@ djangorestframework==3.16.1
     #   drf-nested-routers
     #   drf-spectacular
     #   edx-drf-extensions
+    #   edx-organizations
 dnspython==2.7.0
     # via
     #   -r requirements/test.txt
@@ -158,7 +167,9 @@ edx-django-utils==8.0.0
     #   event-tracking
     #   openedx-events
 edx-drf-extensions==10.6.0
-    # via -r requirements/test.txt
+    # via
+    #   -r requirements/test.txt
+    #   edx-organizations
 edx-lint==5.6.0
     # via -r requirements/quality.in
 edx-opaque-keys[django]==3.0.0
@@ -166,8 +177,11 @@ edx-opaque-keys[django]==3.0.0
     #   -r requirements/test.txt
     #   edx-ccx-keys
     #   edx-drf-extensions
+    #   edx-organizations
     #   openedx-events
     #   openedx-filters
+edx-organizations==7.3.0
+    # via -r requirements/test.txt
 edx-search==4.1.3
     # via -r requirements/test.txt
 edx-toggles==5.4.1
@@ -249,7 +263,9 @@ pbr==6.1.1
     #   -r requirements/test.txt
     #   stevedore
 pillow==11.3.0
-    # via -r requirements/test.txt
+    # via
+    #   -r requirements/test.txt
+    #   edx-organizations
 platformdirs==4.3.8
     # via pylint
 pluggy==1.6.0

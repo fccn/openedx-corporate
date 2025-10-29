@@ -48,6 +48,7 @@ django==4.2.23
     #   django-crum
     #   django-filter
     #   django-model-utils
+    #   django-simple-history
     #   django-waffle
     #   djangorestframework
     #   drf-jwt
@@ -55,6 +56,7 @@ django==4.2.23
     #   drf-spectacular
     #   edx-django-utils
     #   edx-drf-extensions
+    #   edx-organizations
     #   openedx-events
     #   openedx-filters
 django-crum==0.7.9
@@ -64,7 +66,11 @@ django-crum==0.7.9
 django-filter==25.1
     # via -r requirements/base.in
 django-model-utils==5.0.0
-    # via -r requirements/base.in
+    # via
+    #   -r requirements/base.in
+    #   edx-organizations
+django-simple-history==3.10.1
+    # via edx-organizations
 django-waffle==5.0.0
     # via
     #   edx-django-utils
@@ -76,6 +82,7 @@ djangorestframework==3.16.1
     #   drf-nested-routers
     #   drf-spectacular
     #   edx-drf-extensions
+    #   edx-organizations
 dnspython==2.7.0
     # via pymongo
 drf-jwt==1.19.2
@@ -92,14 +99,19 @@ edx-django-utils==8.0.0
     #   edx-drf-extensions
     #   openedx-events
 edx-drf-extensions==10.6.0
-    # via -r requirements/base.in
+    # via
+    #   -r requirements/base.in
+    #   edx-organizations
 edx-opaque-keys[django]==3.0.0
     # via
     #   -r requirements/base.in
     #   edx-ccx-keys
     #   edx-drf-extensions
+    #   edx-organizations
     #   openedx-events
     #   openedx-filters
+edx-organizations==7.3.0
+    # via -r requirements/base.in
 fastavro==1.12.0
     # via openedx-events
 idna==3.10
@@ -125,7 +137,9 @@ packaging==25.0
 pbr==6.1.1
     # via stevedore
 pillow==11.3.0
-    # via -r requirements/base.in
+    # via
+    #   -r requirements/base.in
+    #   edx-organizations
 prompt-toolkit==3.0.51
     # via click-repl
 psutil==7.0.0

@@ -34,6 +34,7 @@ INSTALLED_APPS = (
     'django.contrib.sessions',
     'flex_catalog',
     'partner_catalog',
+    'organizations',
 )
 
 LOCALE_PATHS = [

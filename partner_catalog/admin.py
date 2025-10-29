@@ -1,56 +1,74 @@
 """Admin configuration for Partner Catalog models."""
 
-from django.contrib import admin, messages
+from django.contrib import admin
+from django.db.models import Count
 from django.urls import reverse
 from django.utils.html import format_html
 
 from flex_catalog.admin import CourseKeysMixin
 from partner_catalog.models import (
+    CatalogCourse,
     CatalogCourseEnrollment,
-    CatalogCourseEnrollmentAllowed,
-    CorporatePartner,
-    CorporatePartnerCatalog,
-    CorporatePartnerCatalogCourse,
-    CorporatePartnerCatalogEmailRegex,
-    CorporatePartnerCatalogLearner,
-    CorporatePartnerCatalogManager,
+    CatalogEmailRegex,
+    CatalogLearner,
+    CatalogLearnerInvitation,
+    CatalogManager,
+    Partner,
+    PartnerCatalog,
 )
-from partner_catalog.services.invitations import InvitationService
 
 
-@admin.register(CorporatePartner)
-class CorporatePartnerAdmin(admin.ModelAdmin):
-    """Admin interface for CorporatePartner model."""
+@admin.register(Partner)
+class PartnerAdmin(admin.ModelAdmin):
+    """Admin interface for Partner model."""
 
-    inlines = []
-    list_display = [
-        "code",
-        "name",
-        "logo_thumbnail",
+    fields = ("organization", "homepage_url")
+    raw_id_fields = ("organization",)
+
+    list_display = (
+        "organization_short_name",
+        "organization_name",
         "homepage_url",
+        "organization_logo_thumb",
         "catalog_count",
-    ]
-    list_filter = ["name", "code"]
-    search_fields = ["name", "code", "homepage_url"]
-    ordering = ["code"]
-
-    fieldsets = (
-        ("Basic Information", {"fields": ("name", "code")}),
-        ("Media & Links", {"fields": ("logo", "homepage_url")}),
+    )
+    list_display_links = ("organization_short_name", "organization_name")
+    ordering = ("organization__short_name",)
+    search_fields = (
+        "organization__short_name",
+        "organization__name",
+        "homepage_url",
     )
 
-    def catalog_count(self, obj):
-        """Display the number of catalogs associated with this partner."""
-        return obj.catalogs.count()
+    list_select_related = ("organization",)
 
-    catalog_count.short_description = "Catalogs"
-    catalog_count.admin_order_field = "catalogs__count"
+    def get_queryset(self, request):
+        """Queryset with annotated catalog count."""
+        qs = super().get_queryset(request)
+        return qs.select_related("organization").annotate(
+            _catalog_count=Count("catalogs", distinct=True)
+        )
 
-    def logo_thumbnail(self, obj):
-        """Display a thumbnail of the partner's logo."""
+    def organization_short_name(self, obj):
+        """Display the short name of the organization."""
+        return getattr(obj.organization, "short_name", str(obj.organization))
+
+    organization_short_name.short_description = "Org. short name"
+    organization_short_name.admin_order_field = "organization__short_name"
+
+    def organization_name(self, obj):
+        """Display the full name of the organization."""
+        return getattr(obj.organization, "name", "")
+
+    organization_name.short_description = "Organization"
+    organization_name.admin_order_field = "organization__name"
+
+    def organization_logo_thumb(self, obj):
+        """Display a small organization logo if available."""
         try:
             return format_html(
-                '<img src="{}" width="40" height="40" style="object-fit: cover; border-radius: 4px;"/>',
+                '<img src="{}" width="32" height="32" '
+                'style="object-fit:cover;border-radius:4px;" />',
                 obj.logo.url,
             )
         except (ValueError, AttributeError):
@@ -58,34 +76,35 @@ class CorporatePartnerAdmin(admin.ModelAdmin):
                 '<span style="color: #999; font-style: italic;">No logo</span>'
             )
 
-    logo_thumbnail.short_description = "Logo"
+    organization_logo_thumb.short_description = "Logo"
 
-    def get_queryset(self, request):
-        """Optimize queryset with prefetch_related for catalog count."""
-        queryset = super().get_queryset(request)
-        return queryset.prefetch_related("catalogs")
+    def catalog_count(self, obj):
+        """Display the number of catalogs linked to this partner."""
+        return getattr(obj, "_catalog_count", 0)
+
+    catalog_count.short_description = "Catalogs"
+    catalog_count.admin_order_field = "_catalog_count"
 
 
-class CorporatePartnerCatalogEmailRegexInline(admin.TabularInline):
+class CatalogEmailRegexInline(admin.TabularInline):
     """Inline admin for email regex patterns."""
 
-    model = CorporatePartnerCatalogEmailRegex
+    model = CatalogEmailRegex
     extra = 1
     fields = ["regex"]
     verbose_name = "Email Regex Pattern"
     verbose_name_plural = "Email Regex Patterns"
 
 
-@admin.register(CorporatePartnerCatalog)
-class CorporatePartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
-    """Admin interface for CorporatePartnerCatalog model."""
+@admin.register(PartnerCatalog)
+class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
+    """Admin interface for PartnerCatalog model."""
 
-    inlines = [CorporatePartnerCatalogEmailRegexInline]
+    inlines = [CatalogEmailRegexInline]
 
     list_display = [
         "name",
         "partner_name",
-        "is_public",
         "is_self_enrollment",
         "course_count",
         "learner_count",
@@ -94,43 +113,40 @@ class CorporatePartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
         "add_manager",
     ]
     list_filter = [
-        "corporate_partner",
-        "is_public",
+        "partner",
         "is_self_enrollment",
-        "custom_courses",
     ]
-    search_fields = ["name", "corporate_partner__name", "corporate_partner__code"]
-    ordering = ["corporate_partner__code", "name"]
-    raw_id_fields = ["corporate_partner"]
-    readonly_fields = ["course_keys"]
+    search_fields = [
+        "name",
+        "partner__organization__name",
+        "partner__organization__short_name",
+    ]
+    ordering = ["partner__organization__short_name", "name"]
+    raw_id_fields = ["partner"]
+    readonly_fields = ["course_keys", "slug"]
 
     fieldsets = (
-        ("Basic Information", {"fields": ("name", "corporate_partner", "slug")}),
+        ("Basic Information", {"fields": ("name", "partner", "slug")}),
         (
             "Enrollment Settings",
             {
                 "fields": (
                     "is_self_enrollment",
-                    "course_enrollment_limit",
+                    "course_enrollments_limit",
                     "user_limit",
-                    "custom_courses",
                 )
             },
         ),
         (
             "Availability",
             {
-                "fields": ("available_start_date", "available_end_date", "is_public"),
+                "fields": ("available_start_date", "available_end_date"),
             },
         ),
         (
             "Additional Information",
             {
-                "fields": (
-                    "authorization_additional_message",
-                    "support_email",
-                    "catalog_alternative_link",
-                ),
+                "fields": ("authorization_message",),
             },
         ),
         (
@@ -143,30 +159,30 @@ class CorporatePartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
     )
 
     def partner_name(self, obj):
-        """Display the name of the corporate partner."""
-        return (
-            f"{obj.corporate_partner.name} ({obj.corporate_partner.code})"
-            if obj.corporate_partner
-            else "No Partner"
-        )
+        """Display the name of the partner."""
+        if obj.partner and obj.partner.organization:
+            org = obj.partner.organization
+            return f"{org.name} ({org.short_name})"
+        return "No Partner"
+
+    partner_name.short_description = "Partner"
+    partner_name.admin_order_field = "partner__organization__short_name"
 
     def course_count(self, obj):
         """Display the number of courses in this catalog."""
-        return obj.courses.count()
+        return obj.catalog_courses.count()
 
     course_count.short_description = "Courses"
-    course_count.admin_order_field = "courses__count"
 
     def learner_count(self, obj):
         """Display the number of learners in this catalog."""
-        return obj.learners.count()
+        return obj.catalog_learners.count()
 
     learner_count.short_description = "Learners"
-    learner_count.admin_order_field = "learners__count"
 
     def add_learner(self, obj):
         """Generate a link to add a new learner to this catalog."""
-        learner_model = CorporatePartnerCatalogLearner
+        learner_model = CatalogLearner
         add_learner_url = reverse(
             f"admin:{learner_model._meta.app_label}_{learner_model._meta.model_name}_add"
         )
@@ -181,7 +197,7 @@ class CorporatePartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
 
     def add_course(self, obj):
         """Generate a link to add a new course to this catalog."""
-        course_model = CorporatePartnerCatalogCourse
+        course_model = CatalogCourse
         add_course_url = reverse(
             f"admin:{course_model._meta.app_label}_{course_model._meta.model_name}_add"
         )
@@ -196,7 +212,7 @@ class CorporatePartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
 
     def add_manager(self, obj):
         """Generate a link to add a new manager (catalog-level)."""
-        manager_model = CorporatePartnerCatalogManager
+        manager_model = CatalogManager
         add_manager_url = reverse(
             f"admin:{manager_model._meta.app_label}_{manager_model._meta.model_name}_add"
         )
@@ -212,17 +228,22 @@ class CorporatePartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
     def get_queryset(self, request):
         """Optimize queryset with select_related and prefetch_related."""
         queryset = super().get_queryset(request)
-        return queryset.select_related("corporate_partner").prefetch_related(
-            "courses", "learners", "email_regexes"
+        return queryset.select_related("partner__organization").prefetch_related(
+            "catalog_courses", "catalog_learners", "catalog_email_regexes"
         )
 
 
-@admin.register(CorporatePartnerCatalogCourse)
-class CorporatePartnerCatalogCourseAdmin(admin.ModelAdmin):
-    """Admin interface for CorporatePartnerCatalogCourse model."""
+@admin.register(CatalogCourse)
+class CatalogCourseAdmin(admin.ModelAdmin):
+    """Admin interface for CatalogCourse model."""
 
-    list_display = ["id", "catalog", "course_overview", "position"]
-    list_filter = ["catalog__corporate_partner"]
+    list_display = [
+        "id",
+        "catalog",
+        "course_overview",
+        "position",
+    ]
+    list_filter = ["catalog__partner"]
     search_fields = ["catalog__name", "course_overview__display_name"]
     ordering = ["catalog__name", "position"]
     raw_id_fields = ["catalog", "course_overview"]
@@ -231,118 +252,317 @@ class CorporatePartnerCatalogCourseAdmin(admin.ModelAdmin):
         ("Course Assignment", {"fields": ("catalog", "course_overview", "position")}),
     )
 
+    def get_queryset(self, request):
+        """Optimize queryset with select_related."""
+        qs = super().get_queryset(request)
+        return qs.select_related("catalog", "course_overview")
 
-@admin.register(CorporatePartnerCatalogLearner)
-class CorporatePartnerCatalogLearnerAdmin(admin.ModelAdmin):
-    """Admin interface for CorporatePartnerCatalogLearner model."""
 
-    list_display = ["id", "user", "user_email", "catalog", "active"]
-    list_filter = ["catalog__corporate_partner", "active"]
+@admin.register(CatalogLearner)
+class CatalogLearnerAdmin(admin.ModelAdmin):
+    """Admin interface for CatalogLearner model - Read-only, learners are created via invitations."""
+
+    list_display = [
+        "id",
+        "user",
+        "user_email",
+        "catalog",
+        "active",
+        "invited_at",
+        "removed_at",
+        "created_at",
+    ]
+    list_filter = ["catalog__partner", "active"]
     search_fields = ["user__username", "user__email", "catalog__name"]
     ordering = ["catalog__name", "user__username"]
-    raw_id_fields = ["catalog", "user"]
+    date_hierarchy = "created_at"
 
-    fieldsets = (("Learner Assignment", {"fields": ("catalog", "user", "active")}),)
+    def has_add_permission(self, request):
+        """Disable adding learners directly."""
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        """Disable editing learners directly."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Disable deleting learners directly."""
+        return False
+
+    readonly_fields = [
+        "catalog",
+        "user",
+        "current_invitation",
+        "active",
+        "created_at",
+        "invited_at",
+        "removed_at",
+        "invited_by_display",
+        "removed_by_display",
+    ]
+
+    fieldsets = (
+        ("Learner Assignment", {"fields": ("catalog", "user", "current_invitation")}),
+        ("Status", {"fields": ("active", "created_at")}),
+        (
+            "Invitation Details",
+            {
+                "fields": (
+                    "invited_at",
+                    "invited_by_display",
+                    "removed_at",
+                    "removed_by_display",
+                )
+            },
+        ),
+    )
 
     def user_email(self, obj):
         """Display the user's email."""
         return obj.user.email
 
     user_email.short_description = "Email"
+    user_email.admin_order_field = "user__email"
+
+    def invited_at(self, obj):
+        """Display when the current invitation was sent."""
+        return obj.current_invitation.invited_at
+
+    invited_at.short_description = "Invited At"
+    invited_at.admin_order_field = "current_invitation__invited_at"
+
+    def removed_at(self, obj):
+        """Display when the learner was removed."""
+        return obj.current_invitation.removed_at
+
+    removed_at.short_description = "Removed At"
+
+    def invited_by_display(self, obj):
+        """Display who sent the invitation."""
+        if obj.current_invitation and obj.current_invitation.invited_by:
+            return obj.current_invitation.invited_by.username
+        return "-"
+
+    invited_by_display.short_description = "Invited By"
+
+    def removed_by_display(self, obj):
+        """Display who removed the learner."""
+        if obj.current_invitation and obj.current_invitation.removed_by:
+            return obj.current_invitation.removed_by.username
+        return "-"
+
+    removed_by_display.short_description = "Removed By"
+
+    def get_queryset(self, request):
+        """Optimize queryset with select_related."""
+        qs = super().get_queryset(request)
+        return qs.select_related(
+            "catalog__partner__organization",
+            "user",
+            "current_invitation",
+            "current_invitation__invited_by",
+            "current_invitation__removed_by",
+        )
 
 
-@admin.register(CorporatePartnerCatalogManager)
-class CorporatePartnerCatalogManagerAdmin(admin.ModelAdmin):
-    """Admin interface for CorporatePartnerCatalogManager model."""
+@admin.register(CatalogLearnerInvitation)
+class CatalogLearnerInvitationAdmin(admin.ModelAdmin):
+    """Admin interface for CatalogLearnerInvitation model - Create and view only."""
 
-    list_display = ["id", "catalog", "user", "role", "active"]
-    list_filter = ["catalog__corporate_partner", "catalog", "role", "active"]
-    search_fields = [
-        "catalog__name",
-        "catalog__corporate_partner__name",
-        "user__username",
-        "user__email",
-    ]
-    ordering = ["catalog__corporate_partner__code", "catalog__name", "user__username"]
-    raw_id_fields = ["catalog", "user"]
-
-    fieldsets = (("Assignment", {"fields": ("catalog", "user", "role", "active")}),)
-
-
-@admin.register(CatalogCourseEnrollmentAllowed)
-class CatalogCourseEnrollmentAllowedAdmin(admin.ModelAdmin):
-    """Admin configuration for catalog course enrollment invitations."""
-
-    list_display = (
+    list_display = [
         "id",
-        "catalog_course",
-        "target_email",
-        "status_badge",
-        "invited_by",
+        "user_display",
+        "catalog_slug",
+        "invited_at",
+        "status_display",
+    ]
+
+    list_filter = [
+        "status",
+        "catalog__partner",
         "invited_at",
         "accepted_at",
         "declined_at",
-    )
+        "removed_at",
+    ]
 
-    actions = ("mark_accepted", "mark_declined", "mark_sent")
-
-    list_filter = (
-        "status",
-    )
-
-    raw_id_fields = ["catalog_course", "user"]
-
-    ordering = ("-invited_at",)
+    search_fields = ["invite_email", "user__username", "user__email", "catalog__name"]
+    ordering = ["-invited_at"]
+    raw_id_fields = ["catalog", "user"]
     date_hierarchy = "invited_at"
 
-    readonly_fields = ("invited_at", "accepted_at", "declined_at", "status_changed_at")
+    def get_readonly_fields(self, request, obj=None):
+        """No readonly fields when creating, all readonly when viewing."""
+        if obj is None:
+            # Creating new invitation
+            return []
 
-    def target_email(self, obj):
-        """Show invite_email if present, otherwise user.email."""
-        return obj.invite_email or (obj.user and obj.user.email) or "—"
-    target_email.short_description = "Target Email"
+        return [
+            "catalog",
+            "invite_email",
+            "user",
+            "invited_by_display",
+            "invited_at",
+            "status_display",
+            "accepted_at",
+            "declined_at",
+            "removed_at",
+            "removed_by_display",
+        ]
 
-    def status_badge(self, obj):
-        """Render a colored badge for status."""
-        # Map Status enum values to colors
-        colors = {
-            obj.Status.SENT: "#64748b",      # gray-ish
-            obj.Status.ACCEPTED: "#16a34a",  # green
-            obj.Status.DECLINED: "#dc2626",  # red
-        }
-        color = colors.get(obj.status, "#334155")
-        label = obj.get_status_display()
-        return format_html(
-            '<span style="padding:2px 8px;border-radius:12px;background:{};color:white;font-weight:600;">{}</span>',
-            color,
-            label,
-        )
-    status_badge.short_description = "Status"
-    status_badge.admin_order_field = "status"
+    def has_change_permission(self, request, obj=None):
+        """Disable editing invitations - they can only be viewed."""
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        """Only allow deletion if no learner is linked to this invitation."""
+        if obj and hasattr(obj, 'learner') and obj.learner:
+            return False
+        return True
+
+    def get_fieldsets(self, request, obj=None):
+        """Dynamic fieldsets: simple for add, detailed for view."""
+        if obj is None:
+            return (
+                (
+                    "New Invitation",
+                    {
+                        "fields": ("catalog", "invite_email", "user"),
+                        "description": "Provide either an email address or select an existing user.",
+                    },
+                ),
+            )
+
+        fieldsets = [
+            (
+                "Invitation Details",
+                {
+                    "fields": (
+                        "catalog",
+                        "invite_email",
+                        "user",
+                        "invited_by_display",
+                        "invited_at",
+                        "status_display",
+                        "accepted_at",
+                        "declined_at",
+                    )
+                },
+            ),
+        ]
+
+        if obj.removed_at or obj.removed_by:
+            fieldsets.append(
+                (
+                    "Revocation",
+                    {"fields": ("removed_at", "removed_by_display")},
+                )
+            )
+
+        return fieldsets
 
     def save_model(self, request, obj, form, change):
-        """Normalize invite_email to lowercase on save."""
-        if obj.invite_email:
-            obj.invite_email = obj.invite_email.strip().lower()
+        """Auto-populate invited_by when creating new invitations."""
+        if not change:
+            obj.invited_by = request.user
         super().save_model(request, obj, form, change)
 
-    def mark_accepted(self, request, queryset):
-        """Admin action to mark selected invitations as ACCEPTED."""
-        for invite in queryset:
-            InvitationService.accept(invite)
-        self.message_user(request, "Selected invites marked as ACCEPTED.", level=messages.SUCCESS)
+    def user_display(self, obj):
+        """Display user username or email."""
+        if obj.user:
+            display_name = obj.user.username if obj.user.username else obj.user.email
+            return display_name
+        return obj.invite_email if obj.invite_email else "—"
 
-    def mark_declined(self, request, queryset):
-        """Admin action to mark selected invitations as DECLINED."""
-        for invite in queryset:
-            InvitationService.decline(invite)
-        self.message_user(request, "Selected invites marked as DECLINED.", level=messages.SUCCESS)
+    user_display.short_description = "User"
+    user_display.admin_order_field = "user__username"
 
-    def mark_sent(self, request, queryset):
-        """Admin action to mark selected invitations as SENT."""
-        for invite in queryset:
-            InvitationService.mark_sent(invite)
-        self.message_user(request, "Selected invites marked as SENT.", level=messages.SUCCESS)
+    def catalog_slug(self, obj):
+        """Display catalog slug."""
+        return obj.catalog.slug if obj.catalog else "—"
+
+    catalog_slug.short_description = "Catalog"
+    catalog_slug.admin_order_field = "catalog__slug"
+
+    def invited_by_display(self, obj):
+        """Display who sent the invitation (readonly)."""
+        if obj.invited_by:
+            username = obj.invited_by.username or "—"
+            email = obj.invited_by.email or "—"
+            return format_html("{} ({})", username, email)
+        return format_html('<em style="color:#999">Unknown</em>')
+
+    invited_by_display.short_description = "Invited By"
+
+    def removed_by_display(self, obj):
+        """Display who removed/revoked the invitation (readonly)."""
+        if obj.removed_by:
+            username = obj.removed_by.username or "—"
+            email = obj.removed_by.email or "—"
+            return format_html("{} ({})", username, email)
+        return format_html('<em style="color:#999">—</em>')
+
+    removed_by_display.short_description = "Removed By"
+
+    def status_display(self, obj):
+        """Display status with color coding."""
+        base_style = "padding:3px 10px;border-radius:12px;color:#fff;font-weight:600;display:inline-block;"
+        status_colors = {
+            obj.Status.SENT: ("Sent", "#64748b"),
+            obj.Status.ACCEPTED: ("Accepted", "#16a34a"),
+            obj.Status.DECLINED: ("Declined", "#f59e0b"),
+            obj.Status.REMOVED: ("Removed", "#dc2626"),
+        }
+        label, bg = status_colors.get(obj.status, ("Unknown", "#6b7280"))
+        return format_html(
+            '<span style="{}background:{}">{}</span>', base_style, bg, label
+        )
+
+    status_display.short_description = "Status"
+
+    def get_queryset(self, request):
+        """Optimize queryset with select_related."""
+        qs = super().get_queryset(request)
+        return qs.select_related(
+            "catalog__partner__organization",
+            "user",
+            "invited_by",
+            "removed_by",
+        )
+
+
+@admin.register(CatalogManager)
+class CatalogManagerAdmin(admin.ModelAdmin):
+    """Admin interface for CatalogManager model."""
+
+    list_display = ["id", "catalog", "user", "user_email", "active"]
+    list_filter = ["catalog__partner", "catalog", "active"]
+    search_fields = [
+        "catalog__name",
+        "catalog__partner__organization__name",
+        "user__username",
+        "user__email",
+    ]
+    ordering = [
+        "catalog__partner__organization__short_name",
+        "catalog__name",
+        "user__username",
+    ]
+    raw_id_fields = ["catalog", "user"]
+
+    fieldsets = (("Assignment", {"fields": ("catalog", "user", "active")}),)
+
+    def user_email(self, obj):
+        """Display the user's email."""
+        return obj.user.email
+
+    user_email.short_description = "Email"
+    user_email.admin_order_field = "user__email"
+
+    def get_queryset(self, request):
+        """Optimize queryset with select_related."""
+        qs = super().get_queryset(request)
+        return qs.select_related("catalog__partner__organization", "user")
 
 
 @admin.register(CatalogCourseEnrollment)
@@ -351,30 +571,53 @@ class CatalogCourseEnrollmentAdmin(admin.ModelAdmin):
 
     list_display = (
         "id",
-        "user_id",
         "user_username",
-        "catalog_course_id",
-        "is_active"
+        "user_email",
+        "catalog_course_display",
+        "is_active",
     )
 
-    list_filter = ("active",)
+    list_filter = ("active", "catalog_course__catalog__partner")
+    search_fields = ("user__username", "user__email", "catalog_course__catalog__name")
+    ordering = ("id",)
 
     raw_id_fields = ("user", "catalog_course")
-    list_select_related = ("user", "catalog_course")
+    list_select_related = ("user", "catalog_course__catalog")
+
+    fieldsets = (("Enrollment", {"fields": ("user", "catalog_course", "active")}),)
 
     def is_active(self, obj):
         """Return whether the enrollment is active (for boolean display in admin)."""
         return obj.active
+
     is_active.boolean = True
     is_active.short_description = "Active"
 
     def user_username(self, obj):
         """Return the username of the user associated with this enrollment."""
         return getattr(obj.user, "username", obj.user_id)
+
     user_username.admin_order_field = "user__username"
     user_username.short_description = "Username"
+
+    def user_email(self, obj):
+        """Display the user's email."""
+        return obj.user.email
+
+    user_email.short_description = "Email"
+    user_email.admin_order_field = "user__email"
+
+    def catalog_course_display(self, obj):
+        """Display catalog and course info."""
+        return f"{obj.catalog_course.catalog.name} - {obj.catalog_course.course_overview.display_name}"
+
+    catalog_course_display.short_description = "Catalog - Course"
 
     def get_queryset(self, request):
         """Return the queryset for the admin changelist, with related user and catalog_course prefetched."""
         qs = super().get_queryset(request)
-        return qs.select_related("user", "catalog_course")
+        return qs.select_related(
+            "user",
+            "catalog_course__catalog__partner__organization",
+            "catalog_course__course_overview",
+        )
