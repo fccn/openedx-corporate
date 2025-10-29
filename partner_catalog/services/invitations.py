@@ -34,6 +34,12 @@ class CatalogLearnerInvitationService:
     managing status timestamps, and ensuring atomic updates to the database.
     """
 
+    ERROR_ACTIVE_INVITATION_EXISTS = "An active invitation already exists for this user."
+    ERROR_DECLINE_NOT_ALLOWED = "This invitation can not be declined."
+    ERROR_ACCEPT_NOT_ALLOWED = "This invitation can not be accepted."
+    ERROR_REMOVE_NOT_ALLOWED = "This invitation can not be removed."
+    ERROR_INVITATION_NOT_FOUND = "Invitation not found."
+
     _EVENT_MAP = {
         Status.SENT: CATALOG_LEARNER_INVITATION_CREATED_V1,
         Status.ACCEPTED: CATALOG_LEARNER_INVITATION_ACCEPTED_V1,
@@ -55,7 +61,7 @@ class CatalogLearnerInvitationService:
         Create a new CatalogLearnerInvitation.
         """
         if self._has_active_invitations(invite_email, catalog_id):
-            raise ValidationError("An active invitation already exists for this user.")
+            raise ValidationError(self.ERROR_ACTIVE_INVITATION_EXISTS)
 
         user = self._get_user_by_email(invite_email)
         try:
@@ -66,9 +72,42 @@ class CatalogLearnerInvitationService:
                 invited_by=invited_by,
             )
         except IntegrityError as exc:
-            raise ValidationError("An active invitation already exists for this user.") from exc
+            raise ValidationError(self.ERROR_ACTIVE_INVITATION_EXISTS) from exc
 
         self._emit_invitation_event(invitation)
+        return invitation
+
+    def _transition_status(
+        self,
+        invitation: CatalogLearnerInvitation,
+        new_status: Status,
+        user,
+        timestamp_field: str,
+        *,
+        extra_updates: dict = None,
+        error_msg: str = "",
+    ):
+        """
+        Generic method to transition an invitation to a new status.
+        Handles validation, timestamp updates, extra field updates, saving, and event emission.
+        """
+
+        if not self._is_status_transition_allowed(invitation, new_status):
+            raise ValidationError(error_msg or f"Cannot transition to {new_status}")
+
+        if not self._validate_invitation_status_access(user, invitation, new_status):
+            raise ValidationError(error_msg or "Unauthorized to perform this action")
+
+        if timestamp_field:
+            setattr(invitation, timestamp_field, timezone.now())
+
+        if extra_updates:
+            for field, value in extra_updates.items():
+                setattr(invitation, field, value)
+
+        invitation.save()
+        self._emit_invitation_event(invitation)
+
         return invitation
 
     @transaction.atomic
@@ -78,17 +117,13 @@ class CatalogLearnerInvitationService:
         Update status and timestamps accordingly.
         """
         invitation = self.get_invitation_or_raise(invitation_id)
-
-        if self._is_status_transition_allowed(invitation, Status.DECLINED) is False:
-            raise ValidationError("This invitation can not be declined.")
-
-        if not self._validate_invitation_status_access(user, invitation, Status.DECLINED):
-            raise ValidationError("User is not authorized to decline this invitation.")
-
-        invitation.declined_at = timezone.now()
-        invitation.save()
-        self._emit_invitation_event(invitation)
-        return invitation
+        return self._transition_status(
+            invitation=invitation,
+            new_status=Status.DECLINED,
+            user=user,
+            timestamp_field='declined_at',
+            error_msg=self.ERROR_DECLINE_NOT_ALLOWED,
+        )
 
     @transaction.atomic
     def accept_invitation(self, invitation_id: int, user):
@@ -97,18 +132,14 @@ class CatalogLearnerInvitationService:
         Update status and timestamps accordingly.
         """
         invitation = self.get_invitation_or_raise(invitation_id)
-
-        if not self._validate_invitation_status_access(user, invitation, Status.ACCEPTED):
-            raise ValidationError("User is not authorized to accept this invitation.")
-
-        if self._is_status_transition_allowed(invitation, Status.ACCEPTED) is False:
-            raise ValidationError("This invitation can not be accepted.")
-
-        invitation.user = user
-        invitation.accepted_at = timezone.now()
-        invitation.save()
-        self._emit_invitation_event(invitation)
-        return invitation
+        return self._transition_status(
+            invitation=invitation,
+            new_status=Status.ACCEPTED,
+            user=user,
+            timestamp_field='accepted_at',
+            extra_updates={'user': user},
+            error_msg=self.ERROR_ACCEPT_NOT_ALLOWED,
+        )
 
     @transaction.atomic
     def remove_invitation(self, invitation_id: int, user):
@@ -117,18 +148,14 @@ class CatalogLearnerInvitationService:
         Update status and timestamps accordingly.
         """
         invitation = self.get_invitation_or_raise(invitation_id)
-
-        if not self._validate_invitation_status_access(user, invitation, Status.REMOVED):
-            raise ValidationError("Only staff users can remove invitations.")
-
-        if self._is_status_transition_allowed(invitation, Status.REMOVED) is False:
-            raise ValidationError("Can only remove accepted invitations.")
-
-        invitation.removed_at = timezone.now()
-        invitation.removed_by = user
-        invitation.save()
-        self._emit_invitation_event(invitation)
-        return invitation
+        return self._transition_status(
+            invitation=invitation,
+            new_status=Status.REMOVED,
+            user=user,
+            timestamp_field='removed_at',
+            extra_updates={'removed_by': user},
+            error_msg=self.ERROR_REMOVE_NOT_ALLOWED,
+        )
 
     def get_invitation_or_raise(self, invitation_id: int) -> CatalogLearnerInvitation:
         """
@@ -137,7 +164,7 @@ class CatalogLearnerInvitationService:
         try:
             return CatalogLearnerInvitation.objects.get(id=invitation_id)
         except CatalogLearnerInvitation.DoesNotExist as exc:
-            raise ValidationError("Invitation not found.") from exc
+            raise ValidationError(self.ERROR_INVITATION_NOT_FOUND) from exc
 
     def _emit_invitation_event(self, invitation: CatalogLearnerInvitation):
         """
