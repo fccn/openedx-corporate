@@ -14,26 +14,54 @@ from partner_catalog.helpers.current_user import safe_get_current_user
 from partner_catalog.services.allowed_courses import CatalogAllowedCoursesService
 
 
+class BaseCatalog(FlexibleCatalogModel):
+    """
+    Base catalog containing all open courses available for partner catalogs.
+    """
+
+    def get_course_runs(self):
+        """Get courses in this base catalog."""
+        return course_overview().objects.filter(
+            base_catalog_entry__base_catalog_id=self.id
+        )
+
+    class Meta:
+        """Meta options for BaseCatalog model."""
+
+        verbose_name = "Base Catalog"
+        verbose_name_plural = "Base Catalogs"
+
+    def __str__(self):
+        """Return string representation."""
+        return f"<BaseCatalog: {self.name} (ID: {self.id})>"
+
+
 class BaseCatalogCourse(models.Model):
     """
-    Wrapper model representing courses available in the base catalog.
+    Represents a course included in the Base Catalog.
 
-    This model acts as a simple marker: if a CourseOverview has an associated
-    BaseCatalogCourse instance, it's part of the base catalog and can be added
-    to Partner Catalogs.
-
+    Links BaseCatalog to CourseOverview with metadata about when
+    and by whom the course was added.
     """
 
-    course = models.OneToOneField(
+    base_catalog = models.ForeignKey(
+        BaseCatalog,
+        on_delete=models.CASCADE,
+        related_name="courses",
+        help_text="Base catalog this course belongs to",
+    )
+
+    course_overview = models.OneToOneField(
         course_overview(),
         on_delete=models.CASCADE,
-        primary_key=True,
-        help_text="Course that is part of the base catalog"
+        unique=True,
+        related_name="base_catalog_entry",
+        help_text="Course that is part of the base catalog",
     )
 
     added_at = models.DateTimeField(
         auto_now_add=True,
-        help_text="Date and time when the course was added to the base catalog"
+        help_text="Date and time when the course was added to the base catalog",
     )
 
     added_by = models.ForeignKey(
@@ -41,7 +69,7 @@ class BaseCatalogCourse(models.Model):
         on_delete=models.SET_NULL,
         null=True,
         blank=True,
-        help_text="User who added the course to the base catalog"
+        help_text="User who added the course to the base catalog",
     )
 
     class Meta:
@@ -53,7 +81,7 @@ class BaseCatalogCourse(models.Model):
 
     def __str__(self):
         """Return string representation."""
-        return f"Base Catalog Course: {self.course}"
+        return f"Base Catalog: {self.course_overview}"
 
 
 class Partner(models.Model):
@@ -62,9 +90,7 @@ class Partner(models.Model):
     """
 
     organization = models.OneToOneField(
-        Organization,
-        on_delete=models.CASCADE,
-        related_name="partner_profile"
+        Organization, on_delete=models.CASCADE, related_name="partner_profile"
     )
     homepage_url = models.URLField(blank=True, null=True)
 
@@ -231,7 +257,9 @@ class CatalogCourse(models.Model):
 
     def __str__(self):
         """Return string representation of the CatalogCourse instance."""
-        return f"<CatalogCourse: {self.course_overview.id}>"  # pylint: disable=no-member
+        return (
+            f"<CatalogCourse: {self.course_overview.id}>"  # pylint: disable=no-member
+        )
 
 
 class CatalogManager(models.Model):
@@ -278,9 +306,11 @@ class CatalogManager(models.Model):
                 .exists()
             )
             if conflicting:
-                raise ValidationError({
-                    'catalog': 'This user already manages catalogs from a different partner organization.'
-                })
+                raise ValidationError(
+                    {
+                        "catalog": "This user already manages catalogs from a different partner organization."
+                    }
+                )
 
     def save(self, *args, **kwargs):
         """Ensure clean is called before saving."""
@@ -339,18 +369,27 @@ class CatalogLearner(models.Model):
 
         invitation = self.current_invitation
         if not invitation:
-            raise ValidationError({
-                'current_invitation': 'A learner must have a current invitation assigned.'
-            })
-        if invitation.catalog_id != self.catalog_id or invitation.user_id != self.user_id:
-            raise ValidationError({
-                'current_invitation': 'Current invitation record must match the catalog and user of this learner.'
-            })
+            raise ValidationError(
+                {
+                    "current_invitation": "A learner must have a current invitation assigned."
+                }
+            )
+        if (
+            invitation.catalog_id != self.catalog_id
+            or invitation.user_id != self.user_id
+        ):
+            raise ValidationError(
+                {
+                    "current_invitation": "Current invitation record must match the catalog and user of this learner."
+                }
+            )
 
     def _compute_active(self):
         """Compute the active status based on current_invitation."""
         invitation = self.current_invitation
-        return bool(invitation and invitation.status == CatalogLearnerInvitation.Status.ACCEPTED)
+        return bool(
+            invitation and invitation.status == CatalogLearnerInvitation.Status.ACCEPTED
+        )
 
     def save(self, *args, **kwargs):
         """Save and update active status."""
@@ -449,12 +488,16 @@ class CatalogLearnerInvitation(models.Model):
             # Can't be accepted and declined simultaneously
             models.CheckConstraint(
                 name="cla_not_both_accepted_and_declined",
-                check=~(models.Q(accepted_at__isnull=False) & models.Q(declined_at__isnull=False)),
+                check=~(
+                    models.Q(accepted_at__isnull=False)
+                    & models.Q(declined_at__isnull=False)
+                ),
             ),
             # If removed, it must have been accepted before
             models.CheckConstraint(
                 name="cla_removed_implies_accepted",
-                check=models.Q(removed_at__isnull=True) | models.Q(accepted_at__isnull=False),
+                check=models.Q(removed_at__isnull=True)
+                | models.Q(accepted_at__isnull=False),
             ),
             # Prevent duplicate active invitations (SENT or ACCEPTED)
             models.UniqueConstraint(
@@ -528,15 +571,15 @@ class CatalogCourseEnrollment(models.Model):
         if self.user and self.catalog_course:
             catalog = self.catalog_course.catalog
             is_active_learner = CatalogLearner.objects.filter(
-                catalog=catalog,
-                user=self.user,
-                active=True
+                catalog=catalog, user=self.user, active=True
             ).exists()
 
             if not is_active_learner:
-                raise ValidationError({
-                    'user': 'User must be an active learner in the catalog to enroll in its courses.'
-                })
+                raise ValidationError(
+                    {
+                        "user": "User must be an active learner in the catalog to enroll in its courses."
+                    }
+                )
 
     def save(self, *args, **kwargs):
         """Ensure validation runs before saving."""
