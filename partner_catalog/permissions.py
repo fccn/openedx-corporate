@@ -11,7 +11,6 @@ class IsPartnerCatalogManager(BasePermission):
 
     This permission grants access to corporate partner resources based on the user's role.
     If the user is a Manager of the current catalog, they have full access.
-    If the user is a Viewer, they have read-only access.
 
     """
 
@@ -33,8 +32,8 @@ class IsPartnerCatalogManager(BasePermission):
         if catalog_pk:
             qs = qs.filter(catalog_id=catalog_pk)
         elif partner_pk:
-            qs = qs.filter(catalog__corporate_partner_id=partner_pk)
+            qs = qs.filter(catalog__partner_id=partner_pk)
         else:
             return True
 
-        return False
+        return qs.exists()

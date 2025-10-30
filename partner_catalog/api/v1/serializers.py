@@ -358,3 +358,21 @@ class InvitationActionSerializer(serializers.Serializer):
     def get_status(self, obj):
         """Return the display string for the invitation status."""
         return obj.get_status_display()
+
+
+class BulkRemoveInvitationSerializer(serializers.Serializer):
+    """Serializer for bulk removal of invitations."""
+
+    learner_ids = serializers.ListField(
+        child=serializers.IntegerField(min_value=1),
+        min_length=1,
+        help_text="List of CatalogLearner IDs to remove"
+    )
+
+    def create(self, validated_data):
+        """No-op: this serializer is not used to create DB objects."""
+        return validated_data
+
+    def update(self, instance, validated_data):
+        """No-op: this serializer does not mutate instances directly."""
+        return instance

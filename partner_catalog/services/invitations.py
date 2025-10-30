@@ -7,6 +7,7 @@ timestamp management and atomic database updates. It delegates event emission to
 Django model signals, ensuring side effects are handled consistently elsewhere.
 """
 
+from celery.result import AsyncResult
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -217,6 +218,24 @@ class CatalogLearnerInvitationService:
             catalog_id=catalog_id,
             status__in=[Status.SENT, Status.ACCEPTED]
         ).exists()
+
+    def get_task_status(self, task_id: str) -> dict:
+        """
+        Get the status of a Celery task.
+        """
+        task_result = AsyncResult(task_id)
+        response_data = {
+            "task_id": task_id,
+            "status": task_result.status,
+        }
+
+        if task_result.ready():
+            if task_result.successful():
+                response_data["result"] = task_result.result
+            else:
+                response_data["error"] = str(task_result.info)
+
+        return response_data
 
     def _to_event_data(self, invitation: CatalogLearnerInvitation):
         """
