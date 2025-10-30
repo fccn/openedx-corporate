@@ -14,20 +14,22 @@ import attr
 
 
 @attr.s(frozen=True, slots=True)
-class CatalogCourseEnrollmentAllowedData:
+class CatalogLearnerInvitationData:
     """
-    Data for: org.mondtic.catalog.course.enrollment.allowed.*.v1
+    Dataclass for catalog learner invitation events.
 
-    Required:
-      - id, catalog_course_id, status, invited_at
-    Optional:
-      - invite_email, user_id, accepted_at, declined_at
+    This class encapsulates the data related to a CatalogLearnerInvitation,
+    ensuring immutability when sent as part of event payloads.
     """
     id: int = attr.ib()
-    catalog_course_id: int = attr.ib()
-    status: str = attr.ib()          # "SENT" | "ACCEPTED" | "DECLINED"
+    catalog_id: int = attr.ib()
+    status: str = attr.ib()
     invited_at: datetime = attr.ib()
     invite_email: Optional[str] = attr.ib(default=None)
     user_id: Optional[int] = attr.ib(default=None)
+    learner_id: Optional[int] = attr.ib(default=None)
+    invited_by_id: Optional[int] = attr.ib(default=None)
     accepted_at: Optional[datetime] = attr.ib(default=None)
     declined_at: Optional[datetime] = attr.ib(default=None)
+    removed_at: Optional[datetime] = attr.ib(default=None)
+    removed_by_id: Optional[int] = attr.ib(default=None)

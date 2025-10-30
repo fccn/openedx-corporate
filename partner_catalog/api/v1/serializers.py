@@ -13,6 +13,7 @@ from partner_catalog.models import (
     CatalogCourseEnrollment,
     CatalogEmailRegex,
     CatalogLearner,
+    CatalogLearnerInvitation,
     Partner,
     PartnerCatalog,
 )
@@ -163,12 +164,40 @@ class CatalogLearnerSerializer(serializers.ModelSerializer):
     catalog_id = serializers.PrimaryKeyRelatedField(
         source="catalog",
         queryset=PartnerCatalog.objects.all(),
+        write_only=True,
     )
+
     user = UserSimpleSerializer(read_only=True)
+    active = serializers.BooleanField(read_only=True)
+    invite_sent_at = serializers.DateTimeField(
+        read_only=True,
+        source="current_invitation.invited_at"
+    )
+    accepted_at = serializers.DateTimeField(
+        read_only=True,
+        source="current_invitation.accepted_at"
+    )
+    removed_at = serializers.DateTimeField(
+        read_only=True,
+        source="current_invitation.removed_at"
+    )
+    enrollments = serializers.IntegerField(source="enrollments_count", read_only=True)
+    certified = serializers.IntegerField(source="certified_count", read_only=True)
 
     class Meta:
         model = CatalogLearner
-        fields = ["id", "active", "user", "catalog_id", "user_id"]
+        fields = [
+            "id",
+            "active",
+            "user",
+            "catalog_id",
+            "user_id",
+            "invite_sent_at",
+            "accepted_at",
+            "removed_at",
+            "enrollments",
+            "certified",
+        ]
         read_only_fields = ["id"]
 
 
@@ -222,6 +251,40 @@ class CatalogEmailRegexSerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
 
+class CatalogLearnerInvitationSerializer(serializers.ModelSerializer):
+    """Serializer for CatalogLearnerInvitation data."""
+
+    id = serializers.IntegerField(read_only=True)
+    status = serializers.SerializerMethodField()
+    catalog_id = serializers.PrimaryKeyRelatedField(
+        source="catalog",
+        queryset=PartnerCatalog.objects.all(),
+    )
+    invite_email = serializers.EmailField()
+
+    class Meta:
+        model = CatalogLearnerInvitation
+        fields = [
+            "id",
+            "catalog_id",
+            "invite_email",
+            "invited_at",
+            "accepted_at",
+            "declined_at",
+            "status"
+        ]
+        read_only_fields = [
+            "id",
+            "invited_at",
+            "accepted_at",
+            "declined_at",
+        ]
+
+    def get_status(self, obj):
+        """Return the display string for the invitation status."""
+        return obj.get_status_display()
+
+
 class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
     """Serializer for enrollments in a catalog course."""
 
@@ -272,11 +335,17 @@ class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
         return str(co.id)
 
 
-class InvitationSelfActionSerializer(serializers.Serializer):
+class InvitationActionSerializer(serializers.Serializer):
     """
-    Input schema for accept/decline endpoints.
-    No fields for now; kept for future extensibility (e.g., consent flags).
+    Input schema for invitation action endpoints (accept/decline/remove).
+    No fields required as these actions only use the invitation ID from the URL.
+    Kept for future extensibility (e.g., consent flags, reason for revocation).
     """
+
+    id = serializers.IntegerField(read_only=True)
+    status = serializers.SerializerMethodField(read_only=True)
+    catalog_id = serializers.IntegerField(read_only=True)
+    invite_email = serializers.EmailField(read_only=True)
 
     def create(self, validated_data):
         """No-op: this serializer is not used to create DB objects."""
@@ -285,3 +354,7 @@ class InvitationSelfActionSerializer(serializers.Serializer):
     def update(self, instance, validated_data):
         """No-op: this serializer does not mutate instances directly."""
         return instance
+
+    def get_status(self, obj):
+        """Return the display string for the invitation status."""
+        return obj.get_status_display()

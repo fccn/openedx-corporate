@@ -277,16 +277,8 @@ class CatalogLearnerAdmin(admin.ModelAdmin):
     ordering = ["catalog__name", "user__username"]
     date_hierarchy = "created_at"
 
-    def has_add_permission(self, request):
-        """Disable adding learners directly."""
-        return False
-
     def has_change_permission(self, request, obj=None):
         """Disable editing learners directly."""
-        return False
-
-    def has_delete_permission(self, request, obj=None):
-        """Disable deleting learners directly."""
         return False
 
     readonly_fields = [

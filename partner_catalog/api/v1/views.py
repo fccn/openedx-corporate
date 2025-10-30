@@ -1,22 +1,21 @@
 """Partner Catalog API v1 Views."""
 
-from celery.result import AsyncResult
-from django.db.models import Count, Q
+from django.db.models import Count, OuterRef, Q, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
-from rest_framework import filters, status, viewsets
+from edx_rest_framework_extensions.permissions import IsAuthenticated
+from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
-from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
-from partner_catalog.api.v1 import tasks as partner_tasks
 from partner_catalog.api.v1.filters import PartnerFilter
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
-from partner_catalog.api.v1.schemas import bulk_status_learner_schema, bulk_upload_learner_schema
 from partner_catalog.api.v1.serializers import (
     CatalogCourseEnrollmentSerializer,
     CatalogCourseSerializer,
     CatalogEmailRegexSerializer,
+    CatalogLearnerInvitationSerializer,
     CatalogLearnerSerializer,
+    InvitationActionSerializer,
     PartnerCatalogSerializer,
     PartnerSerializer,
 )
@@ -25,6 +24,7 @@ from partner_catalog.models import (
     CatalogCourseEnrollment,
     CatalogEmailRegex,
     CatalogLearner,
+    CatalogLearnerInvitation,
     Partner,
     PartnerCatalog,
 )
@@ -32,8 +32,10 @@ from partner_catalog.permissions import IsPartnerCatalogManager
 from partner_catalog.services.certificates import (
     annotate_catalog_certified_count,
     annotate_course_certified_count,
+    annotate_learner_certified_count,
     annotate_partner_certified_count,
 )
+from partner_catalog.services.invitations import CatalogLearnerInvitationService
 
 
 class PartnerViewset(viewsets.ReadOnlyModelViewSet):
@@ -114,7 +116,7 @@ class PartnerCatalogViewSet(
         return qs
 
 
-class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelViewSet):
+class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for Corporate Partner Catalog Learner data.
     Provides access to corporate partner catalog learner information.
@@ -130,7 +132,13 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
     ]
     filterset_fields = ["catalog", "active", "user"]
     search_fields = ["user__username", "user__email"]
-    ordering_fields = ["id", "user_id"]
+    ordering_fields = [
+        "id",
+        "user_id",
+        "accepted_at",
+        "removed_at",
+        "active",
+    ]
     ordering = ["id"]
 
     # Mixin config
@@ -138,73 +146,22 @@ class CorporatePartnerCatalogLearnerViewSet(InjectNestedFKMixin, viewsets.ModelV
     target_field_name = "catalog_id"
 
     def get_queryset(self):
-        """Get the queryset for catalog learners."""
+        """Get the queryset for catalog learners with enrollment counts."""
         qs = self.queryset
         catalog_pk = self.kwargs.get("catalog_pk")
-        return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
 
-    @bulk_upload_learner_schema
-    @action(
-        detail=False,
-        methods=["post"],
-        url_path="bulk",
-        parser_classes=[MultiPartParser],
-    )
-    def bulk(
-        self, request, partner_pk=None, catalog_pk=None
-    ):  # pylint: disable=unused-argument
-        """
-        Bulk upload learners to a catalog via CSV file (async).
-        CSV columns: username (or email), optional active (defaults to True)
-        Returns a Celery task ID for status tracking.
-        """
-        file = request.FILES.get("file")
-        if not file:
-            return Response(
-                {"detail": "No file uploaded."}, status=status.HTTP_400_BAD_REQUEST
-            )
-        # Save file content to pass to Celery (as string)
-        csv_content = file.read().decode(request.encoding or "utf-8")
-        # Enqueue Celery task
-        task = partner_tasks.bulk_upload_learners.delay(
-            csv_content=csv_content,
-            catalog_id=catalog_pk,
-        )
-        return Response(
-            {"task_id": task.id, "status": "processing"},
-            status=status.HTTP_202_ACCEPTED,
-        )
+        if catalog_pk:
+            qs = qs.filter(catalog_id=catalog_pk)
 
-    @bulk_status_learner_schema
-    @action(
-        detail=False,
-        methods=["get"],
-        url_path="bulk_status",
-    )
-    def bulk_status(
-        self, request, partner_pk=None, catalog_pk=None
-    ):  # pylint: disable=unused-argument
-        """
-        Check the status of a bulk upload task by task_id.
-        Query parameter: task_id
-        """
-        task_id = request.query_params.get("task_id")
-        if not task_id:
-            return Response(
-                {"detail": "task_id parameter is required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        task_result = AsyncResult(task_id)
-        response_data = {
-            "task_id": task_id,
-            "status": task_result.status,
-        }
-        if task_result.ready():
-            if task_result.successful():
-                response_data["result"] = task_result.result
-            else:
-                response_data["error"] = str(task_result.info)
-        return Response(response_data, status=status.HTTP_200_OK)
+        enrollments_subquery = CatalogCourseEnrollment.objects.filter(
+            user_id=OuterRef("user_id"),
+            catalog_course__catalog_id=OuterRef("catalog_id"),
+            active=True,
+        ).values("user_id").annotate(count=Count("id")).values("count")
+
+        qs = qs.annotate(enrollments_count=Subquery(enrollments_subquery))
+        qs = annotate_learner_certified_count(qs)
+        return qs
 
 
 class CatalogCourseViewSet(
@@ -275,6 +232,102 @@ class CatalogEmailRegexViewSet(
         qs = self.queryset
         catalog_pk = self.kwargs.get("catalog_pk")
         return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
+
+
+class CatalogLearnerInvitationViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    viewsets.GenericViewSet,
+    InjectNestedFKMixin,
+):
+    """ViewSet for managing Catalog Learner Invitations."""
+
+    queryset = CatalogLearnerInvitation.objects.select_related("catalog", "user")
+    service = CatalogLearnerInvitationService()
+    filter_backends = [
+        DjangoFilterBackend,
+        filters.SearchFilter,
+        filters.OrderingFilter,
+    ]
+
+    def get_permission_classes(self):
+        """Get permission classes based on action."""
+
+        base_permissions = [IsAuthenticated]
+        manager_actions = [
+            "create",
+            "remove_invite",
+            "bulk_invite_upload",
+            "bulk_remove_upload"
+        ]
+        if self.action in manager_actions:
+            return base_permissions + [IsPartnerCatalogManager]
+        return base_permissions
+
+    def get_serializer_class(self):
+        """Get the serializer class based on action."""
+
+        if self.action in ['accept_invite', 'decline_invite', 'remove_invite']:
+            return InvitationActionSerializer
+        return CatalogLearnerInvitationSerializer
+
+    def create(self, request, *args, **kwargs):
+        """Create a new invitation."""
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        invitation = self.service.create_new_invitation(
+            invite_email=serializer.validated_data.get('invite_email'),
+            catalog_id=serializer.validated_data.get('catalog').id,
+            invited_by=request.user,
+        )
+
+        output_serializer = self.get_serializer(invitation)
+        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["post"], url_path="accept")
+    def accept_invite(self, request, pk=None, **kwargs):
+        """Accept an invitation."""
+        invitation = self.service.accept_invitation(invitation_id=pk, user=request.user)
+
+        serializer = CatalogLearnerInvitationSerializer(invitation)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="decline")
+    def decline_invite(self, request, pk=None, **kwargs):
+        """Decline an invitation."""
+        invitation = self.service.decline_invitation(invitation_id=pk, user=request.user)
+
+        serializer = CatalogLearnerInvitationSerializer(invitation)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="remove")
+    def remove_invite(self, request, pk=None, **kwargs):
+        """Remove an invitation."""
+        invitation = self.service.remove_invitation(invitation_id=pk, user=request.user)
+
+        serializer = CatalogLearnerInvitationSerializer(invitation)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["post"], url_path="bulk_invite")
+    def bulk_invite(self, request, *args, **kwargs):
+        """Handle bulk upload of invitations via CSV file."""
+        # TODO: Implementation of bulk upload
+
+    @action(detail=False, methods=["get"], url_path="bulk_invite/status/(?P<task_id>[^/.]+)")
+    def bulk_invite_status(self, request, task_id=None):
+        """Check the status of a bulk invitation task."""
+        # TODO: Implementation of checking task status
+
+    @action(detail=False, methods=["post"], url_path="bulk_remove")
+    def bulk_remove(self, request, *args, **kwargs):
+        """Handle bulk revocation of invitations via CSV file."""
+        # TODO: Implementation of bulk revocation
+
+    @action(detail=False, methods=["get"], url_path="bulk_remove/status/(?P<task_id>[^/.]+)")
+    def bulk_remove_status(self, request, task_id=None):
+        """Check the status of a bulk revocation task."""
+        # TODO: Implementation of checking revocation task status
 
 
 class CatalogCourseEnrollmentViewSet(
