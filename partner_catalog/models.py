@@ -19,6 +19,18 @@ class BaseCatalog(FlexibleCatalogModel):
     Base catalog containing all open courses available for partner catalogs.
     """
 
+    @staticmethod
+    def get_instance():
+        """Get the singleton BaseCatalog instance."""
+        catalog_slug = getattr("settings", "PARTNER_CATALOG_BASE_CATALOG_SLUG", "base-catalog")
+        catalog_name = getattr("settings", "PARTNER_CATALOG_BASE_CATALOG_NAME", "Base Catalog")
+
+        base_catalog, _ = BaseCatalog.objects.get_or_create(
+            slug=catalog_slug,
+            defaults={"name": catalog_name},
+        )
+        return base_catalog
+
     def get_course_runs(self):
         """Get courses in this base catalog."""
         return course_overview().objects.filter(
@@ -254,6 +266,27 @@ class CatalogCourse(models.Model):
                 fields=["catalog", "course_overview"], name="catalog_course_idx"
             ),
         ]
+
+    def clean(self):
+        """Validate that the course is part of the partner course offerings or base catalog."""
+        super().clean()
+
+        # Check if the course is in the base catalog
+        base_catalog = BaseCatalog.get_instance()
+        if base_catalog.get_course_runs().filter(id=self.course_overview_id).exists():
+            return
+
+        # Check if the course belongs to the partner's organization
+        organization = self.catalog.partner.organization
+        course_org = self.course_overview.org
+
+        if organization.short_name != course_org:
+            raise ValidationError({"course_overview": "Course is not part of the partner's offerings."})
+
+    def save(self, *args, **kwargs):
+        """Ensure clean is called before saving."""
+        self.clean()
+        super().save(*args, **kwargs)
 
     def __str__(self):
         """Return string representation of the CatalogCourse instance."""
