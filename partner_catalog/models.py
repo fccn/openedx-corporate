@@ -19,6 +19,12 @@ class BaseCatalog(FlexibleCatalogModel):
     Base catalog containing all open courses available for partner catalogs.
     """
 
+    courses = models.ManyToManyField(
+        course_overview(),
+        through='BaseCatalogCourse',
+        related_name='base_catalogs'
+    )
+
     @staticmethod
     def get_instance():
         """Get the singleton BaseCatalog instance."""
@@ -33,9 +39,7 @@ class BaseCatalog(FlexibleCatalogModel):
 
     def get_course_runs(self):
         """Get courses in this base catalog."""
-        return course_overview().objects.filter(
-            base_catalog_entry__base_catalog_id=self.id
-        )
+        return self.courses.all()
 
     class Meta:
         """Meta options for BaseCatalog model."""
@@ -59,14 +63,13 @@ class BaseCatalogCourse(models.Model):
     base_catalog = models.ForeignKey(
         BaseCatalog,
         on_delete=models.CASCADE,
-        related_name="courses",
+        related_name="base_catalog_courses",
         help_text="Base catalog this course belongs to",
     )
 
-    course_overview = models.OneToOneField(
+    course_overview = models.ForeignKey(
         course_overview(),
         on_delete=models.CASCADE,
-        unique=True,
         related_name="base_catalog_entry",
         help_text="Course that is part of the base catalog",
     )
