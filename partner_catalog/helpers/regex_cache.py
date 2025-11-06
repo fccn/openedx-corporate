@@ -7,8 +7,6 @@ patterns. It also provides a cache clearing utility for use in signal handlers o
 administrative actions.
 """
 
-from __future__ import annotations
-
 import functools
 
 import regex
@@ -32,16 +30,15 @@ def compiled_email_regexes_for_catalog(catalog_id: int):
         - Invalid regex patterns are skipped.
     """
     CatalogEmailRegex = apps.get_model(
-        'partner_catalog', 'CorporatePartnerCatalogEmailRegex'
+        'partner_catalog', 'CatalogEmailRegex'
     )
     patterns = (CatalogEmailRegex.objects
                 .filter(catalog_id=catalog_id)
                 .values_list("regex", flat=True))
     compiled = []
-    for p in patterns:
+    for pattern in patterns:
         try:
-            anchored = p if p.startswith("^") or p.endswith("$") else f"^{p}$"
-            compiled.append(regex.compile(anchored, flags=regex.IGNORECASE))
+            compiled.append(regex.compile(pattern, flags=regex.IGNORECASE))
         except regex.error:
             continue
     return tuple(compiled)
