@@ -20,3 +20,4 @@ drf-spectacular
 django-crum
 openedx-filters
 openedx-events
+cachetools

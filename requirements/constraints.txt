@@ -18,3 +18,7 @@ click==8.2.1
 # Fix packaging version conflict between pip-tools (24.2) and other requirements (25.0)
 # Using the newer version for consistency across all requirements
 packaging==25.0
+
+# Pin cachetools to avoid version conflicts between tox (6.1.0) and our direct dependency (6.2.1)
+# Using the newer version for better compatibility and features
+cachetools==6.2.1

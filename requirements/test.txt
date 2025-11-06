@@ -24,6 +24,10 @@ billiard==4.2.1
     # via
     #   -r requirements/base.txt
     #   celery
+cachetools==6.2.1
+    # via
+    #   -c requirements/constraints.txt
+    #   -r requirements/base.txt
 camel-converter[pydantic]==4.0.1
     # via meilisearch
 celery==5.5.3

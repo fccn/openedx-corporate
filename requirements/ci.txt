@@ -4,8 +4,10 @@
 #
 #    pip-compile --output-file=requirements/ci.txt requirements/ci.in
 #
-cachetools==6.1.0
-    # via tox
+cachetools==6.2.1
+    # via
+    #   -c requirements/constraints.txt
+    #   tox
 chardet==5.2.0
     # via tox
 colorama==0.4.6
