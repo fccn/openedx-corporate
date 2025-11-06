@@ -37,6 +37,7 @@ from partner_catalog.models import (
     PartnerCatalog,
 )
 from partner_catalog.permissions import IsPartnerCatalogManager
+from partner_catalog.services.catalogs import PartnerCatalogService
 from partner_catalog.services.certificates import (
     annotate_catalog_certified_count,
     annotate_course_certified_count,
@@ -102,6 +103,8 @@ class PartnerCatalogViewSet(
     nested_lookup_kwarg = "partner_pk"
     target_field_name = "partner"
 
+    service = PartnerCatalogService()
+
     def get_queryset(self):
         """Limit catalogs to those the user manages or views; staff see all."""
         qs = self.queryset
@@ -122,6 +125,16 @@ class PartnerCatalogViewSet(
         )
         qs = annotate_catalog_certified_count(qs)
         return qs
+
+    @action(detail=True, methods=["post"], url_path="enroll")
+    def enroll(self, request, *args, **kwargs):
+        """Allow a user to self-enroll in a catalog."""
+        catalog = self.get_object()
+        user = request.user
+
+        learner = self.service.self_enroll_user_in_catalog(user=user, catalog=catalog)
+        serializer = CatalogLearnerSerializer(learner)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):

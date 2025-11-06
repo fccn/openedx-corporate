@@ -57,7 +57,7 @@ class CatalogLearnerInvitationService:
     }
 
     @transaction.atomic
-    def create_new_invitation(self, invite_email: str, catalog_id: int, invited_by=None):
+    def create_new_invitation(self, invite_email: str, catalog_id: int, invited_by=None, emit_event=True):
         """
         Create a new CatalogLearnerInvitation.
         """
@@ -75,7 +75,8 @@ class CatalogLearnerInvitationService:
         except IntegrityError as exc:
             raise ValidationError(self.ERROR_ACTIVE_INVITATION_EXISTS) from exc
 
-        self._emit_invitation_event(invitation)
+        if emit_event:
+            self._emit_invitation_event(invitation)
         return invitation
 
     def _transition_status(
