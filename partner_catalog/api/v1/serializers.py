@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from django.db.models import Q
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
@@ -16,6 +17,7 @@ from partner_catalog.models import (
     CatalogLearnerInvitation,
     Partner,
     PartnerCatalog,
+    CatalogManager,
 )
 from partner_catalog.services.assessments import get_assessments_counts
 from partner_catalog.services.progress import (
@@ -97,12 +99,16 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
     partner = serializers.PrimaryKeyRelatedField(
         queryset=Partner.objects.all()
     )
-
+    
+    image = serializers.ImageField(read_only=True)
     email_regexes = serializers.SerializerMethodField()
+    org = serializers.SerializerMethodField()
     courses = serializers.IntegerField(source="courses_count", read_only=True)
     enrollments = serializers.IntegerField(source="total_enrollments", read_only=True)
     certified = serializers.IntegerField(source="certified_count", read_only=True)
     completion_rate = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField(read_only=True)
+    is_manager = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = PartnerCatalog
@@ -122,12 +128,19 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
             "enrollments",
             "certified",
             "completion_rate",
+            "org",
+            "image",
+            "status",
+            "is_manager",
         ]
         read_only_fields = [
             "id",
             "email_regexes",
             "courses",
             "slug",
+            "image",
+            "status",
+            "is_manager",
         ]
         extra_kwargs = {
             "authorization_message": {
@@ -145,12 +158,55 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
             )
         return attrs
 
+    def get_org(self, obj):
+        return obj.partner.organization.short_name
+
     def get_email_regexes(self, obj):
         return list(obj.catalog_email_regexes.all().values_list("regex", flat=True))
 
     def get_completion_rate(self, obj):
         rate_statistics = compute_catalog_completion_rate(obj.id)
         return rate_statistics.get("completion_rate")
+
+    def get_status(self, obj):
+        """
+        Returns the current invitation status for the requesting user on this catalog.
+
+        If there is no invitation for the user (by user FK or by their email), returns None.
+        If multiple invitations exist, returns the most recent one (by invited_at).
+        """
+        request = self.context.get("request")
+        if not request or not request.user or not request.user.is_authenticated:
+            return None
+
+        user = request.user
+        email = getattr(user, "email", None)
+
+        qs = CatalogLearnerInvitation.objects.filter(catalog=obj)
+        if email:
+            qs = qs.filter(Q(user=user) | Q(invite_email__iexact=email))
+        else:
+            qs = qs.filter(user=user)
+
+        inv = qs.select_related("user").order_by("-invited_at").first()
+
+        if not inv:
+            return None
+
+        return inv.get_status_display()
+
+    def get_is_manager(self, obj):
+        """
+        Returns True if the current user is an active CatalogManager for this catalog.
+        """
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return False
+
+        user = request.user
+        return CatalogManager.objects.filter(
+            catalog=obj, user=user, active=True
+        ).exists()
 
 
 class CatalogLearnerSerializer(serializers.ModelSerializer):

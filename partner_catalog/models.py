@@ -61,6 +61,7 @@ class PartnerCatalog(FlexibleCatalogModel):
     available_start_date = models.DateTimeField()
     available_end_date = models.DateTimeField()
     authorization_message = models.TextField(blank=True, null=True)
+    image = models.ImageField(upload_to="partner_catalog_images/", blank=True, null=True)
     support_email = models.EmailField(blank=True, null=True)
     alternative_link = models.URLField(blank=True, null=True)
 
