@@ -52,10 +52,17 @@ class PartnerCatalog(FlexibleCatalogModel):
     user_limit = models.PositiveIntegerField(
         default=0, help_text="Limit for the number of users that can enroll."
     )
+    courses = models.ManyToManyField(
+        course_overview(),
+        through='CatalogCourse',
+        related_name='catalogs'
+    )
     is_self_enrollment = models.BooleanField(default=False)
     available_start_date = models.DateTimeField()
     available_end_date = models.DateTimeField()
     authorization_message = models.TextField(blank=True, null=True)
+    support_email = models.EmailField(blank=True, null=True)
+    alternative_link = models.URLField(blank=True, null=True)
 
     class Meta:
         """Meta options for PartnerCatalog model."""
