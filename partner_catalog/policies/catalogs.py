@@ -9,7 +9,7 @@ public catalogs, enrolled learners, and email-based access via regex patterns.
 from __future__ import annotations
 
 from django.apps import apps
-from pydantic_core import ValidationError
+from django.core.exceptions import ValidationError
 
 from partner_catalog.helpers.regex_cache import compiled_email_regexes_for_catalog
 

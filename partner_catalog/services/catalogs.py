@@ -1,8 +1,8 @@
 """Service layer for catalog operations."""
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError
 from django.db import transaction
-from pydantic_core import ValidationError
 
 from partner_catalog.models import CatalogLearner, CatalogLearnerInvitation
 from partner_catalog.policies.catalogs import validate_enrollment_request
