@@ -121,6 +121,16 @@ class Partner(models.Model):
         """Return a string representation of the Partner instance."""
         return f"Partner for {self.organization.short_name}"
 
+    def get_partner_course_offering(self):
+        """
+        Get courses specific to this partner's organization only.
+
+        Returns:
+            QuerySet of CourseOverview instances.
+        """
+        CourseOverview = course_overview()
+        return CourseOverview.objects.filter(org=self.organization.short_name)
+
 
 class PartnerCatalog(FlexibleCatalogModel):
     """Catalog model for corporate partners."""
