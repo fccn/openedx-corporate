@@ -9,7 +9,7 @@ based on catalog visibility and user eligibility policies.
 from __future__ import annotations
 
 from partner_catalog.edxapp_wrapper.course_module import course_overview
-from partner_catalog.policies.catalogs import can_user_see_catalog_courses
+from partner_catalog.policies.catalogs import can_access_catalog_courses
 
 
 class CatalogAllowedCoursesService:
@@ -30,7 +30,7 @@ class CatalogAllowedCoursesService:
         Return a queryset of course runs the user can see for the given catalog.
         No selectors: use catalog.courses directly.
         """
-        if can_user_see_catalog_courses(user=user, catalog=catalog):
+        if can_access_catalog_courses(user=user, catalog=catalog):
             return catalog.courses.all()
         return course_overview().objects.none()
 

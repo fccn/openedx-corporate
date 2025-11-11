@@ -19,7 +19,7 @@ from partner_catalog.events.signals import (
     CATALOG_LEARNER_INVITATION_DECLINED_V1,
     CATALOG_LEARNER_INVITATION_REMOVED_V1,
 )
-from partner_catalog.models import CatalogLearner, CatalogLearnerInvitation
+from partner_catalog.services.catalogs import PartnerCatalogService
 
 logger = logging.getLogger("partner_catalog.events")
 
@@ -49,21 +49,9 @@ def handle_catalog_learner_invitation_accepted(
 ) -> None:
     """Handle acceptance of a CatalogLearnerInvitation."""
     try:
-        learner, created = CatalogLearner.objects.get_or_create(
-            user_id=invitation.user_id,
-            catalog_id=invitation.catalog_id,
-            defaults={'current_invitation_id': invitation.id}
-        )
 
-        # If learner existed but has different invitation, update it
-        if not created and learner.current_invitation_id != invitation.id:
-            learner.current_invitation_id = invitation.id
-            learner.save()
-
-        # Ensure the invitation.learner FK points back to this learner (History Link)
-        invitation_obj = CatalogLearnerInvitation.objects.get(id=invitation.id)
-        invitation_obj.learner = learner
-        invitation_obj.save()
+        catalog_service = PartnerCatalogService()
+        _, created = catalog_service.create_or_update_learner_from_invitation(invitation.id)
 
         logger.info(
             "CATALOG_LEARNER_INVITATION_ACCEPTED: Learner %s for invitation id=%s catalog_id=%s user_id=%s",
@@ -106,16 +94,11 @@ def handle_catalog_learner_invitation_removed(
 ) -> None:
     """Handle removal/revocation of a CatalogLearnerInvitation."""
     try:
-        invitation_obj = CatalogLearnerInvitation.objects.get(id=invitation.id)
-        learner = invitation_obj.learner
+        service = PartnerCatalogService()
+        learner = service.deactivate_learner_from_invitation(invitation.id)
 
-        if not learner:
-            raise ValidationError("No learner associated with this invitation.")
-
-        # This will trigger _compute_active() to deactivate the learner
-        learner.save()
         logger.info(
-            "CL_INVITATION_REMOVED: Learner %s deactivated catalog_id=%s removed_by_id=%s",
+            "CATALOG_LEARNER_INVITATION_REMOVED: Learner %s deactivated catalog_id=%s removed_by_id=%s",
             learner.id,
             invitation.catalog_id,
             invitation.removed_by_id,
