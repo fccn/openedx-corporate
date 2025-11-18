@@ -1,10 +1,10 @@
 """Service layer for catalog operations."""
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
 from django.db import transaction
+from rest_framework.exceptions import ValidationError
 
-from partner_catalog.models import CatalogLearner, CatalogLearnerInvitation
+from partner_catalog.models import CatalogLearner, CatalogLearnerInvitation, CatalogManager
 from partner_catalog.policies.catalogs import validate_enrollment_request
 from partner_catalog.services.invitations import CatalogLearnerInvitationService
 
@@ -15,6 +15,9 @@ class PartnerCatalogService():
     """
     Service layer for partner catalog operations.
     """
+
+    ERROR_NOT_PENDING_INVITATION = "No pending invitation found for this catalog."
+    ERROR_USER_NOT_ENROLLED = "User is not enrolled in this catalog."
 
     @transaction.atomic
     def self_enroll_user_in_catalog(self, user, catalog) -> CatalogLearner:
@@ -48,6 +51,99 @@ class PartnerCatalogService():
         return invitation.learner
 
     @transaction.atomic
+    def unenroll_user_from_catalog(self, user, catalog):
+        """
+        Unenroll a user from a catalog by removing their current invitation.
+
+        This will mark the user's current invitation as removed and deactivate
+        the learner, triggering all associated business logic and events.
+
+        Args:
+            user: The user to unenroll.
+            catalog: The catalog to unenroll the user from.
+        Returns:
+            The deactivated CatalogLearner instance.
+        Raises:
+            ValidationError: If the user is not enrolled in the catalog.
+        """
+        learner = CatalogLearner.objects.filter(
+            catalog=catalog,
+            user=user,
+            active=True
+        ).select_related('current_invitation').first()
+
+        if not learner or not learner.current_invitation:
+            raise ValidationError(self.ERROR_USER_NOT_ENROLLED)
+
+        invitation_service = CatalogLearnerInvitationService()
+        invitation_service.remove_invitation(
+            invitation_id=learner.current_invitation.id,
+            user=user
+        )
+        learner.refresh_from_db()
+        return learner
+
+    @transaction.atomic
+    def accept_catalog_invitation(self, user, catalog) -> CatalogLearner:
+        """
+        Accept a pending invitation for a user in a catalog.
+
+        Finds the user's pending invitation and accepts it, creating or updating
+        the CatalogLearner and triggering all associated business logic.
+
+        Args:
+            user: The user accepting the invitation.
+            catalog: The catalog for which to accept the invitation.
+        Returns:
+            The created or updated CatalogLearner instance.
+        Raises:
+            ValidationError: If no pending invitation is found.
+        """
+        invitation_service = CatalogLearnerInvitationService()
+        invitation = invitation_service.get_latest_sent_invitation(
+            user=user, catalog=catalog
+        )
+
+        if not invitation:
+            raise ValidationError(self.ERROR_NOT_PENDING_INVITATION)
+
+        invitation_service.accept_invitation(
+            invitation_id=invitation.id,
+            user=user
+        )
+        invitation.refresh_from_db()
+        return invitation.learner
+
+    @transaction.atomic
+    def decline_catalog_invitation(self, user, catalog) -> CatalogLearnerInvitation:
+        """
+        Decline a pending invitation for a user in a catalog.
+
+        Finds the user's pending invitation and declines it, triggering
+        all associated business logic and events.
+
+        Args:
+            user: The user declining the invitation.
+            catalog: The catalog for which to decline the invitation.
+        Returns:
+            The declined CatalogLearnerInvitation instance.
+        Raises:
+            ValidationError: If no pending invitation is found.
+        """
+        invitation_service = CatalogLearnerInvitationService()
+        invitation = invitation_service.get_latest_sent_invitation(
+            user=user, catalog=catalog
+        )
+
+        if not invitation:
+            raise ValidationError(self.ERROR_NOT_PENDING_INVITATION)
+
+        return invitation_service.decline_invitation(
+            invitation_id=invitation.id,
+            user=user
+        )
+
+    @transaction.atomic
     def create_or_update_learner_from_invitation(
         self, invitation_id: int
     ) -> tuple[CatalogLearner, bool]:
@@ -64,11 +160,7 @@ class PartnerCatalogService():
             id=invitation_id
         )
 
-        user = User.objects.get(id=invitation.user_id)
-        validate_enrollment_request(
-            catalog=invitation.catalog,
-            user=user
-        )
+        validate_enrollment_request(invitation=invitation)
 
         learner, created = CatalogLearner.objects.get_or_create(
             user_id=invitation.user_id,
@@ -107,3 +199,61 @@ class PartnerCatalogService():
         # This triggers _compute_active() which sets active=False
         learner.save()
         return learner
+
+    @staticmethod
+    def get_user_catalog_invitation_status(catalog, user):
+        """
+        Get the invitation status for a user on a specific catalog.
+
+        Returns the status display string of the user's current invitation.
+        The user may be a CatalogLearner with a current invitation, or may have
+        a latest sent invitation without being enrolled as a learner.
+
+        Args:
+            catalog: PartnerCatalog instance
+            user: User instance
+
+        Returns:
+            str or None: Status display string (e.g., "Sent", "Accepted", "Declined")
+        """
+        if not user or not user.is_authenticated:
+            return None
+
+        learner = CatalogLearner.objects.filter(
+            catalog=catalog,
+            user=user
+        ).select_related('current_invitation').first()
+
+        if learner and learner.current_invitation:
+            return learner.current_invitation.get_status_display()
+
+        invitation_service = CatalogLearnerInvitationService()
+        invitation = invitation_service.get_latest_sent_invitation(
+            user=user, catalog=catalog
+        )
+
+        if invitation:
+            return invitation.get_status_display()
+
+        return None
+
+    @staticmethod
+    def is_user_catalog_manager(catalog, user):
+        """
+        Check if a user is an active manager of a specific catalog.
+
+        Args:
+            catalog: PartnerCatalog instance
+            user: User instance
+
+        Returns:
+            bool: True if user is an active manager, False otherwise
+        """
+        if not user or not user.is_authenticated:
+            return False
+
+        return CatalogManager.objects.filter(
+            catalog=catalog,
+            user=user,
+            active=True
+        ).exists()

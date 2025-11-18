@@ -10,6 +10,7 @@ Django model signals, ensuring side effects are handled consistently elsewhere.
 from celery.result import AsyncResult
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
+from django.db.models import Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -168,6 +169,26 @@ class CatalogLearnerInvitationService:
         except CatalogLearnerInvitation.DoesNotExist as exc:
             raise ValidationError(self.ERROR_INVITATION_NOT_FOUND) from exc
 
+    def get_latest_sent_invitation(self, user, catalog):
+        """
+        Get the latest pending (sent) invitation for a user in a catalog.
+
+        Args:
+            user: The user to check for.
+            catalog: The catalog to check in.
+        Returns:
+            The pending CatalogLearnerInvitation instance, or None if not found.
+        """
+
+        invitation = CatalogLearnerInvitation.objects.filter(
+            catalog=catalog,
+            status=Status.SENT
+        ).filter(
+            Q(user=user) | Q(invite_email=user.email)
+        ).order_by('-invited_at').first()
+
+        return invitation
+
     def _emit_invitation_event(self, invitation: CatalogLearnerInvitation):
         """
         Emit the appropriate event signal based on the invitation's status.
@@ -194,10 +215,11 @@ class CatalogLearnerInvitationService:
         """
         Validate if the given user can perform the status transition on the invitation.
         """
+        is_invitation_user = user == invitation.user
         if new_status in [Status.ACCEPTED, Status.DECLINED]:
-            return getattr(user, "is_authenticated", False) and user == invitation.user
+            return getattr(user, "is_authenticated", False) and is_invitation_user
         elif new_status == Status.REMOVED:
-            return user.is_staff or user.is_superuser
+            return is_invitation_user or user.is_staff or user.is_superuser
         return False
 
     def _get_user_by_email(self, invite_email: str):
