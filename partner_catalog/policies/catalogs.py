@@ -14,7 +14,7 @@ from django.core.exceptions import ValidationError
 from partner_catalog.helpers.regex_cache import compiled_email_regexes_for_catalog
 
 
-def email_matches_catalog(email: str | None, catalog_id: int) -> bool:
+def email_matches_catalog(email: str | None, catalog_id: str) -> bool:
     """
     Check if the given email matches any of the compiled regex patterns for the specified catalog.
 

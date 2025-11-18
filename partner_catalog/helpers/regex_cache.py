@@ -7,14 +7,21 @@ patterns. It also provides a cache clearing utility for use in signal handlers o
 administrative actions.
 """
 
-import functools
+import logging
+from threading import RLock
 
 import regex
+from cachetools import LRUCache, cached
 from django.apps import apps
 
+logger = logging.getLogger(__name__)
 
-@functools.lru_cache(maxsize=1024)
-def compiled_email_regexes_for_catalog(catalog_id: int):
+_regex_cache = LRUCache(maxsize=1024)
+_cache_lock = RLock()
+
+
+@cached(cache=_regex_cache, lock=_cache_lock)
+def compiled_email_regexes_for_catalog(catalog_id: str):
     """
     Retrieve and cache compiled email regex patterns for a given catalog.
 
@@ -23,15 +30,12 @@ def compiled_email_regexes_for_catalog(catalog_id: int):
 
     Returns:
         Tuple of compiled regex patterns (case-insensitive) for the catalog.
-        Patterns are anchored with ^ and $ if not already present.
 
     Notes:
         - Results are cached for performance.
         - Invalid regex patterns are skipped.
     """
-    CatalogEmailRegex = apps.get_model(
-        'partner_catalog', 'CatalogEmailRegex'
-    )
+    CatalogEmailRegex = apps.get_model('partner_catalog', 'CatalogEmailRegex')
     patterns = (CatalogEmailRegex.objects
                 .filter(catalog_id=catalog_id)
                 .values_list("regex", flat=True))
@@ -44,15 +48,21 @@ def compiled_email_regexes_for_catalog(catalog_id: int):
     return tuple(compiled)
 
 
-def clear_email_regex_cache():
+def clear_email_regex_cache(catalog_id: str | None = None):
     """
-    Clear the cache of compiled email regex patterns for all catalogs.
+    Clear the cache of compiled email regex patterns.
+
+    Args:
+        catalog_id: If provided, only clears cache for this specific catalog.
+                   If None, clears cache for all catalogs.
 
     This function should be called when email regex patterns are added, updated,
     or deleted for any catalog, to ensure that subsequent lookups use the latest
     patterns from the database.
 
-    Typical use cases include signal handlers for model changes or administrative
-    actions that modify catalog email regexes.
     """
-    compiled_email_regexes_for_catalog.cache_clear()
+    with _cache_lock:
+        if catalog_id is not None:
+            _regex_cache.pop((catalog_id,), None)
+        else:
+            _regex_cache.clear()

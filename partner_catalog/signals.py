@@ -13,5 +13,7 @@ from partner_catalog.models import CatalogEmailRegex
 def _invalidate_catalog_regex_cache(sender, instance, **kwargs):  # pylint: disable=unused-argument
     """
     Invalidate compiled regex cache when a catalog regex is created/updated/deleted.
+
+    Only invalidates the cache for the specific catalog that was modified.
     """
-    clear_email_regex_cache()
+    clear_email_regex_cache(catalog_id=instance.catalog_id)

@@ -35,9 +35,11 @@ build==1.2.2.post1
     # via
     #   -r requirements/pip-tools.txt
     #   pip-tools
-cachetools==6.1.0
+cachetools==6.2.1
     # via
+    #   -c requirements/constraints.txt
     #   -r requirements/ci.txt
+    #   -r requirements/quality.txt
     #   tox
 camel-converter[pydantic]==4.0.1
     # via
