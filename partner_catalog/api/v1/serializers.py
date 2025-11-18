@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from django.db.models import Q
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
@@ -17,9 +16,9 @@ from partner_catalog.models import (
     CatalogLearnerInvitation,
     Partner,
     PartnerCatalog,
-    CatalogManager,
 )
 from partner_catalog.services.assessments import get_assessments_counts
+from partner_catalog.services.catalogs import PartnerCatalogService
 from partner_catalog.services.progress import (
     compute_catalog_completion_rate,
     compute_catalog_course_completion_rate,
@@ -99,7 +98,7 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
     partner = serializers.PrimaryKeyRelatedField(
         queryset=Partner.objects.all()
     )
-    
+
     image = serializers.ImageField(read_only=True)
     email_regexes = serializers.SerializerMethodField()
     org = serializers.SerializerMethodField()
@@ -108,7 +107,6 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
     certified = serializers.IntegerField(source="certified_count", read_only=True)
     completion_rate = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField(read_only=True)
-    is_manager = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = PartnerCatalog
@@ -131,7 +129,6 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
             "org",
             "image",
             "status",
-            "is_manager",
         ]
         read_only_fields = [
             "id",
@@ -139,8 +136,6 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
             "courses",
             "slug",
             "image",
-            "status",
-            "is_manager",
         ]
         extra_kwargs = {
             "authorization_message": {
@@ -169,44 +164,14 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
         return rate_statistics.get("completion_rate")
 
     def get_status(self, obj):
-        """
-        Returns the current invitation status for the requesting user on this catalog.
-
-        If there is no invitation for the user (by user FK or by their email), returns None.
-        If multiple invitations exist, returns the most recent one (by invited_at).
-        """
-        request = self.context.get("request")
-        if not request or not request.user or not request.user.is_authenticated:
-            return None
-
-        user = request.user
-        email = getattr(user, "email", None)
-
-        qs = CatalogLearnerInvitation.objects.filter(catalog=obj)
-        if email:
-            qs = qs.filter(Q(user=user) | Q(invite_email__iexact=email))
-        else:
-            qs = qs.filter(user=user)
-
-        inv = qs.select_related("user").order_by("-invited_at").first()
-
-        if not inv:
-            return None
-
-        return inv.get_status_display()
-
-    def get_is_manager(self, obj):
-        """
-        Returns True if the current user is an active CatalogManager for this catalog.
-        """
+        """Return the catalog status for the current user."""
         request = self.context.get("request")
         if not request or not request.user.is_authenticated:
-            return False
-
-        user = request.user
-        return CatalogManager.objects.filter(
-            catalog=obj, user=user, active=True
-        ).exists()
+            return None
+        return PartnerCatalogService.get_user_catalog_invitation_status(
+            catalog=obj,
+            user=request.user
+        )
 
 
 class CatalogLearnerSerializer(serializers.ModelSerializer):
@@ -432,3 +397,87 @@ class BulkRemoveInvitationSerializer(serializers.Serializer):
     def update(self, instance, validated_data):
         """No-op: this serializer does not mutate instances directly."""
         return instance
+
+
+class LearnerPartnerCatalogSerializer(serializers.ModelSerializer):
+    """
+    Serializer for catalogs from the learner's perspective.
+
+    Provides essential catalog information without management fields.
+    Includes status, enrollment info, and user-specific data.
+    """
+
+    org = serializers.CharField(source="partner.organization.short_name", read_only=True)
+    image = serializers.ImageField(read_only=True)
+    courses = serializers.IntegerField(source="courses_count", read_only=True)
+    enrollments = serializers.IntegerField(source="total_enrollments", read_only=True)
+    status = serializers.SerializerMethodField(read_only=True)
+    is_manager = serializers.SerializerMethodField(read_only=True)
+
+    class Meta:
+        model = PartnerCatalog
+        fields = [
+            "id",
+            "name",
+            "slug",
+            "org",
+            "image",
+            "is_self_enrollment",
+            "available_start_date",
+            "available_end_date",
+            "authorization_message",
+            "user_limit",
+            "course_enrollments_limit",
+            "courses",
+            "enrollments",
+            "status",
+            "is_manager",
+        ]
+        read_only_fields = fields
+
+    def get_status(self, obj):
+        """
+        Check the invitation status for the requesting user on this catalog.
+        """
+        request = self.context.get("request")
+        if not request or not request.user:
+            return None
+
+        return PartnerCatalogService.get_user_catalog_invitation_status(
+            catalog=obj,
+            user=request.user
+        )
+
+    def get_is_manager(self, obj):
+        """
+        Checks if the requesting user is a manager of this catalog.
+        """
+        request = self.context.get("request")
+        if not request or not request.user:
+            return False
+
+        return PartnerCatalogService.is_user_catalog_manager(
+            catalog=obj,
+            user=request.user
+        )
+
+
+class LearnerCatalogCourseSerializer(serializers.ModelSerializer):
+    """
+    Serializer for catalog courses from the learner's perspective.
+    """
+
+    catalog_id = serializers.IntegerField(source="catalog.id", read_only=True)
+    course_run = CourseOverviewSimpleSerializer(source="course_overview", read_only=True)
+    enrollments = serializers.IntegerField(source="enrollments_count", read_only=True)
+
+    class Meta:
+        model = CatalogCourse
+        fields = [
+            "id",
+            "catalog_id",
+            "course_run",
+            "enrollments",
+            "position",
+        ]
+        read_only_fields = fields

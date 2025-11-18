@@ -1,5 +1,7 @@
 """Models for managing course catalogs and access for corporate partners."""
 
+from importlib import import_module
+
 import regex
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
@@ -11,7 +13,6 @@ from organizations.models import Organization
 from flex_catalog.models import FlexibleCatalogModel
 from partner_catalog.edxapp_wrapper.course_module import course_overview
 from partner_catalog.helpers.current_user import safe_get_current_user
-from partner_catalog.services.allowed_courses import CatalogAllowedCoursesService
 
 
 class Partner(models.Model):
@@ -105,6 +106,9 @@ class PartnerCatalog(FlexibleCatalogModel):
 
     def get_course_runs(self):
         """Return all catalog course runs associated with this instance."""
+        allowed_courses_module = import_module('partner_catalog.services.allowed_courses')
+        CatalogAllowedCoursesService = allowed_courses_module.CatalogAllowedCoursesService
+
         user = safe_get_current_user()
         return CatalogAllowedCoursesService.course_runs_for_user(
             catalog=self, user=user
