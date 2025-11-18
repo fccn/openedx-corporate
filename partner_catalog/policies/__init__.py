@@ -1,0 +1,1 @@
+"""Corporate partner catalog policies."""

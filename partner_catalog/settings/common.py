@@ -38,3 +38,7 @@ def plugin_settings(settings):
     settings.SEARCH_ENGINE = (
         "partner_catalog.search_engine.FlexibleCatalogCompatibleSearchEngine"
     )
+
+    settings.SYSTEM_WIDE_ROLE_CLASSES = [
+        "partner_catalog.policies.rbac.get_catalog_role_assignments",
+    ]
