@@ -2,7 +2,7 @@
 
 import django_filters
 
-from partner_catalog.models import Partner
+from partner_catalog.models import Partner, PartnerCatalog
 
 
 class PartnerFilter(django_filters.FilterSet):
@@ -31,4 +31,24 @@ class PartnerFilter(django_filters.FilterSet):
         fields = [
             "slug",
             "name",
+        ]
+
+
+class PartnerCatalogFilter(django_filters.FilterSet):
+    """
+    Custom filters for PartnerCatalog model.
+
+    Allows filtering by partner ID:
+    - partner: filters by partner__id
+    """
+
+    partner = django_filters.NumberFilter(
+        field_name="partner__id",
+        help_text="Filter by partner ID",
+    )
+
+    class Meta:
+        model = PartnerCatalog
+        fields = [
+            "partner",
         ]

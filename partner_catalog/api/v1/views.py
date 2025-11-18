@@ -2,7 +2,6 @@
 
 from django.db.models import Count, OuterRef, Q, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
-from edx_rest_framework_extensions.permissions import IsAuthenticated
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
@@ -64,10 +63,18 @@ class PartnerViewset(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """
-        Limit non-staff users to partners where they are active members.
-        Staff/superusers see all.
+        Limit non-staff users to partners where they are active managers.
+        Staff/superusers see all partners.
         """
         qs = self.queryset
+        user = self.request.user
+
+        if not (user.is_staff or user.is_superuser):
+            qs = qs.filter(
+                catalogs__catalog_managers__user=user,
+                catalogs__catalog_managers__active=True
+            ).distinct()
+
         qs = qs.annotate(
             catalogs_count=Count("catalogs", distinct=True),
             courses_count=Count("catalogs__catalog_courses", distinct=True),
@@ -264,12 +271,18 @@ class CatalogLearnerInvitationViewSet(
     """ViewSet for managing Catalog Learner Invitations."""
 
     queryset = CatalogLearnerInvitation.objects.select_related("catalog", "user")
+    serializer_class = CatalogLearnerInvitationSerializer
+    permission_classes = [IsPartnerCatalogManager]
     service = CatalogLearnerInvitationService()
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
         filters.OrderingFilter,
     ]
+
+    # Mixin config
+    nested_lookup_kwarg = "catalog_pk"
+    target_field_name = "catalog_id"
 
     def get_queryset(self):
         """Get the queryset for catalog learner invitations."""
@@ -281,26 +294,10 @@ class CatalogLearnerInvitationViewSet(
 
         return qs
 
-    def get_permission_classes(self):
-        """Get permission classes based on action."""
-
-        base_permissions = [IsAuthenticated]
-        manager_actions = [
-            "create",
-            "remove_invite",
-            "bulk_invite_upload",
-            "bulk_remove_upload"
-        ]
-        if self.action in manager_actions:
-            return base_permissions + [IsPartnerCatalogManager]
-        return base_permissions
-
     def get_serializer_class(self):
         """Get the serializer class based on action."""
 
         if self.action in [
-            "accept_invite",
-            "decline_invite",
             "remove_invite",
             "bulk_invite",
             "bulk_invite_status",
@@ -315,31 +312,16 @@ class CatalogLearnerInvitationViewSet(
         """Create a new invitation."""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        catalog_id = self.kwargs.get('catalog_pk')
 
         invitation = self.service.create_new_invitation(
             invite_email=serializer.validated_data.get('invite_email'),
-            catalog_id=serializer.validated_data.get('catalog').id,
+            catalog_id=catalog_id,
             invited_by=request.user,
         )
 
         output_serializer = self.get_serializer(invitation)
         return Response(output_serializer.data, status=status.HTTP_201_CREATED)
-
-    @action(detail=True, methods=["post"], url_path="accept")
-    def accept_invite(self, request, pk=None, **kwargs):
-        """Accept an invitation."""
-        invitation = self.service.accept_invitation(invitation_id=pk, user=request.user)
-
-        serializer = CatalogLearnerInvitationSerializer(invitation)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    @action(detail=True, methods=["post"], url_path="decline")
-    def decline_invite(self, request, pk=None, **kwargs):
-        """Decline an invitation."""
-        invitation = self.service.decline_invitation(invitation_id=pk, user=request.user)
-
-        serializer = CatalogLearnerInvitationSerializer(invitation)
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], url_path="remove")
     def remove_invite(self, request, pk=None, **kwargs):

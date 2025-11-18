@@ -33,7 +33,5 @@ class IsPartnerCatalogManager(BasePermission):
             qs = qs.filter(catalog_id=catalog_pk)
         elif partner_pk:
             qs = qs.filter(catalog__partner_id=partner_pk)
-        else:
-            return True
 
         return qs.exists()
