@@ -42,3 +42,6 @@ def plugin_settings(settings):
     settings.SYSTEM_WIDE_ROLE_CLASSES = [
         "partner_catalog.policies.rbac.get_catalog_role_assignments",
     ]
+    # Base Catalog settings
+    settings.PARTNER_CATALOG_BASE_CATALOG_SLUG = "NAU-base-catalog"
+    settings.PARTNER_CATALOG_BASE_CATALOG_NAME = "NAU Base Catalog"

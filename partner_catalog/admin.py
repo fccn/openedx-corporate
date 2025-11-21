@@ -7,6 +7,8 @@ from django.utils.html import format_html
 
 from flex_catalog.admin import CourseKeysMixin
 from partner_catalog.models import (
+    BaseCatalog,
+    BaseCatalogCourse,
     CatalogCourse,
     CatalogCourseEnrollment,
     CatalogEmailRegex,
@@ -16,6 +18,111 @@ from partner_catalog.models import (
     Partner,
     PartnerCatalog,
 )
+
+
+@admin.register(BaseCatalog)
+class BaseCatalogAdmin(admin.ModelAdmin):
+    """Admin interface for BaseCatalog model."""
+
+    list_display = ('name', 'slug', 'course_count', 'course_ids', 'add_course')
+    readonly_fields = ('created', 'modified', 'course_count', 'course_ids_display', 'add_course_button')
+    fields = ('name', 'slug', 'created', 'modified', 'course_count', 'course_ids_display', 'add_course_button')
+    search_fields = ('name', 'slug')
+
+    def get_queryset(self, request):
+        """Optimize queryset with prefetch."""
+        qs = super().get_queryset(request)
+        return qs.prefetch_related('courses', 'base_catalog_courses')
+
+    def course_count(self, obj):
+        """Display the total number of courses in the catalog."""
+        return obj.courses.count()
+    course_count.short_description = 'Total Courses'
+
+    def course_ids(self, obj):
+        """Display preview of course IDs in the list view."""
+        course_runs = obj.get_course_runs()
+
+        if course_runs:
+            course_ids = [str(course.id) for course in course_runs]
+            return format_html('<br>'.join(course_ids))
+
+        return format_html('<em style="color: #999;">No courses</em>')
+
+    course_ids.short_description = 'Course IDs'
+
+    def course_ids_display(self, obj):
+        """Display all course IDs in the detail view."""
+        course_runs = obj.get_course_runs()
+
+        if course_runs:
+            course_ids = [str(course.id) for course in course_runs]
+            return format_html('<br>'.join(course_ids))
+
+        return format_html('<em style="color: #999;">No courses</em>')
+
+    course_ids_display.short_description = 'Course IDs'
+
+    def add_course_button(self, obj):
+        """Genera un botón para agregar un nuevo curso a este BaseCatalog."""
+        if not obj.pk:
+            return format_html('<em style="color: #999;">Guarda el catálogo primero</em>')
+
+        course_model = BaseCatalogCourse
+        add_course_url = reverse(
+            f"admin:{course_model._meta.app_label}_{course_model._meta.model_name}_add"
+        )
+        full_url = f"{add_course_url}?base_catalog={obj.pk}"
+
+        return format_html(
+            '<a href="{}" class="button" style="background-color: #417690;">+ Add Course</a>',
+            full_url,
+        )
+
+    add_course_button.short_description = "Add Courses"
+
+    def add_course(self, obj):
+        """Genera un link para agregar un nuevo curso a este BaseCatalog."""
+        course_model = BaseCatalogCourse
+        add_course_url = reverse(
+            f"admin:{course_model._meta.app_label}_{course_model._meta.model_name}_add"
+        )
+        full_url = f"{add_course_url}?base_catalog={obj.pk}"
+
+        return format_html(
+            '<a href="{}" style="font-weight: bold;">+ Add Course</a>',
+            full_url,
+        )
+
+    add_course.short_description = "+ Add Course"
+
+
+@admin.register(BaseCatalogCourse)
+class BaseCatalogCourseAdmin(admin.ModelAdmin):
+    """Admin interface for BaseCatalogCourse model."""
+
+    list_display = ["id", "base_catalog", "course_overview", "added_by", "added_at"]
+    list_filter = ["base_catalog"]
+    search_fields = ["base_catalog__name", "course_overview__display_name"]
+    ordering = ["-added_at"]
+    raw_id_fields = ["base_catalog", "course_overview"]
+    readonly_fields = ["added_at", "added_by"]
+
+    fieldsets = (
+        ("Course Assignment", {"fields": ("base_catalog", "course_overview")}),
+        ("Metadata", {"fields": ("added_by", "added_at")}),
+    )
+
+    def save_model(self, request, obj, form, change):
+        """Asigna el usuario actual al campo added_by si es una creación nueva."""
+        if not change and not obj.added_by:
+            obj.added_by = request.user
+        super().save_model(request, obj, form, change)
+
+    def get_queryset(self, request):
+        """Optimize queryset with select_related."""
+        qs = super().get_queryset(request)
+        return qs.select_related("base_catalog", "course_overview", "added_by")
 
 
 @admin.register(Partner)
