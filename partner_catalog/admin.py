@@ -32,7 +32,7 @@ class BaseCatalogAdmin(admin.ModelAdmin):
     def get_queryset(self, request):
         """Optimize queryset with prefetch."""
         qs = super().get_queryset(request)
-        return qs.prefetch_related('courses', 'courses__course_overview')
+        return qs.prefetch_related('courses', 'base_catalog_courses')
 
     def course_count(self, obj):
         """Display the total number of courses in the catalog."""

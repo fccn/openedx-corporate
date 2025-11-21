@@ -33,7 +33,7 @@ def delete_base_catalog_instance(apps, schema_editor):  # pylint: disable=unused
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('partner_catalog', '0002_basecatalog_basecatalogcourse'),
+        ('partner_catalog', '0004_basecatalog_basecatalogcourse'),
     ]
 
     operations = [
