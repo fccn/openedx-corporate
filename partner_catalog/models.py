@@ -597,26 +597,6 @@ class CatalogCourseEnrollment(models.Model):
             models.Index(fields=["user", "active"]),
         ]
 
-    def clean(self):
-        """Validate that the user is a learner in the catalog before enrolling."""
-        if self.user and self.catalog_course:
-            catalog = self.catalog_course.catalog
-            is_active_learner = CatalogLearner.objects.filter(
-                catalog=catalog, user=self.user, active=True
-            ).exists()
-
-            if not is_active_learner:
-                raise ValidationError(
-                    {
-                        "user": "User must be an active learner in the catalog to enroll in its courses."
-                    }
-                )
-
-    def save(self, *args, **kwargs):
-        """Ensure validation runs before saving."""
-        self.clean()
-        super().save(*args, **kwargs)
-
     def __str__(self):
         """Return a readable string representation of the CatalogCourseEnrollment instance."""
         state = "active" if self.active else "inactive"
