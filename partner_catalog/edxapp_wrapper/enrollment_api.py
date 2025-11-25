@@ -32,3 +32,17 @@ def add_enrollment(
     return _backend().add_enrollment(
         username=username, course_id=course_id, mode=mode, enrollment_attributes=enrollment_attributes
     )
+
+
+def get_enrollment(
+    *,
+    username,
+    course_id,
+):
+    """
+    Retrieve enrollment for a user in a course. Backend hides signature/path differences between releases.
+    """
+    return _backend().get_enrollment(
+        username=username,
+        course_id=course_id,
+    )

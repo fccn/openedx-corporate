@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional
 
 # pylint: disable=import-error
 from openedx.core.djangoapps.enrollments.api import add_enrollment as api_add_enrollment
+from openedx.core.djangoapps.enrollments.api import get_enrollment as api_get_enrollment
 
 
 def add_enrollment(
@@ -32,5 +33,27 @@ def add_enrollment(
         course_id=course_id,
         mode=mode,
         enrollment_attributes=enrollment_attributes or [],
+    )
+    return enrollment
+
+
+def get_enrollment(
+    *,
+    username,
+    course_id,
+):
+    """
+    Retrieves the enrollment for a specific user and course.
+
+    Args:
+        username: The username of the user.
+        course_id: The course key identifying the course.
+
+    Returns:
+        The enrollment object if found, None otherwise.
+    """
+    enrollment = api_get_enrollment(
+        username=username,
+        course_id=course_id,
     )
     return enrollment
