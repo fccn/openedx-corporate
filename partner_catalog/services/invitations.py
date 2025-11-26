@@ -215,7 +215,7 @@ class CatalogLearnerInvitationService:
         """
         Validate if the given user can perform the status transition on the invitation.
         """
-        is_invitation_user = user == invitation.user
+        is_invitation_user = (user == invitation.user or user.email == invitation.invite_email)
         if new_status in [Status.ACCEPTED, Status.DECLINED]:
             return getattr(user, "is_authenticated", False) and is_invitation_user
         elif new_status == Status.REMOVED:
