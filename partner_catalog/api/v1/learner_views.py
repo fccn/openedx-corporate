@@ -78,11 +78,16 @@ class LearnerCatalogViewSet(viewsets.ReadOnlyModelViewSet):
 
     @action(detail=True, methods=["post"], url_path="enroll")
     def enroll(self, request, **kwargs):
-        """Allow a user to self-enroll in a catalog."""
+        """
+        Enroll user in a catalog.
+
+        This action allows an user to enroll in a catalog if they have a valid invitation
+        or if the catalog allows self-enrollment.
+        """
         catalog = self.get_object()
         user = request.user
 
-        learner = self.catalog_service.self_enroll_user_in_catalog(
+        learner = self.catalog_service.enroll_user_in_catalog(
             user=user, catalog=catalog
         )
         serializer = CatalogLearnerSerializer(learner)
@@ -95,18 +100,6 @@ class LearnerCatalogViewSet(viewsets.ReadOnlyModelViewSet):
         user = request.user
 
         learner = self.catalog_service.unenroll_user_from_catalog(
-            user=user, catalog=catalog
-        )
-        serializer = CatalogLearnerSerializer(learner)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    @action(detail=True, methods=["post"], url_path="accept")
-    def accept(self, request, **kwargs):
-        """Accept a pending invitation for this catalog."""
-        catalog = self.get_object()
-        user = request.user
-
-        learner = self.catalog_service.accept_catalog_invitation(
             user=user, catalog=catalog
         )
         serializer = CatalogLearnerSerializer(learner)

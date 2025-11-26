@@ -5,7 +5,7 @@ from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
 from partner_catalog.models import CatalogLearner, CatalogLearnerInvitation, CatalogManager
-from partner_catalog.policies.catalogs import validate_catalog_enrollment_request
+from partner_catalog.policies.catalogs import is_user_an_active_catalog_learner, validate_catalog_enrollment_request
 from partner_catalog.services.invitations import CatalogLearnerInvitationService
 
 User = get_user_model()
@@ -18,23 +18,44 @@ class PartnerCatalogService():
 
     ERROR_NOT_PENDING_INVITATION = "No pending invitation found for this catalog."
     ERROR_USER_NOT_ENROLLED = "User is not enrolled in this catalog."
+    ERROR_USER_ALREADY_ENROLLED = "User is already enrolled in this catalog."
 
     @transaction.atomic
-    def self_enroll_user_in_catalog(self, user, catalog) -> CatalogLearner:
+    def enroll_user_in_catalog(self, user, catalog) -> CatalogLearner:
         """
-        Enroll the given user in the specified catalog as a CatalogLearner.
+        Enroll a user in a catalog.
 
-        It creates a new invitation and accepts it on behalf of the user, thereby
-        triggering all associated business logic and events.
+        This method attempts to enroll the user in the specified catalog.
+        It checks for existing enrollment, pending invitations, and self-enrollment settings.
 
         Args:
             user: The user to enroll.
             catalog: The catalog to enroll the user in.
         Returns:
-            The created CatalogLearner instance.
+            The CatalogLearner instance.
+        Raises:
+            ValidationError: If user cannot be enrolled (no invitation and self-enrollment disabled).
         """
-        # Create the invitation to have record of the Data tracking agreements.
+
+        if is_user_an_active_catalog_learner(user=user, catalog=catalog):
+            return ValidationError(self.ERROR_USER_ALREADY_ENROLLED)
+
         invitation_service = CatalogLearnerInvitationService()
+        invitation = invitation_service.get_latest_sent_invitation(
+            user=user, catalog=catalog
+        )
+
+        if invitation:
+            invitation_service.accept_invitation(
+                invitation_id=invitation.id,
+                user=user
+            )
+            invitation.refresh_from_db()
+            return invitation.learner
+
+        if not catalog.is_self_enrollment:
+            raise ValidationError(self.ERROR_NOT_PENDING_INVITATION)
+
         invitation = invitation_service.create_new_invitation(
             invite_email=user.email,
             catalog_id=catalog.id,
@@ -82,37 +103,6 @@ class PartnerCatalogService():
         )
         learner.refresh_from_db()
         return learner
-
-    @transaction.atomic
-    def accept_catalog_invitation(self, user, catalog) -> CatalogLearner:
-        """
-        Accept a pending invitation for a user in a catalog.
-
-        Finds the user's pending invitation and accepts it, creating or updating
-        the CatalogLearner and triggering all associated business logic.
-
-        Args:
-            user: The user accepting the invitation.
-            catalog: The catalog for which to accept the invitation.
-        Returns:
-            The created or updated CatalogLearner instance.
-        Raises:
-            ValidationError: If no pending invitation is found.
-        """
-        invitation_service = CatalogLearnerInvitationService()
-        invitation = invitation_service.get_latest_sent_invitation(
-            user=user, catalog=catalog
-        )
-
-        if not invitation:
-            raise ValidationError(self.ERROR_NOT_PENDING_INVITATION)
-
-        invitation_service.accept_invitation(
-            invitation_id=invitation.id,
-            user=user
-        )
-        invitation.refresh_from_db()
-        return invitation.learner
 
     @transaction.atomic
     def decline_catalog_invitation(self, user, catalog) -> CatalogLearnerInvitation:
