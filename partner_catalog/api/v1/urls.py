@@ -16,11 +16,9 @@ from partner_catalog.api.v1.views import (
 
 router = DefaultRouter()
 router.register(r"partners", PartnerViewset, basename="partner")
+router.register(r"catalogs", PartnerCatalogViewSet, basename="partner-catalog")
 
-partners_router = NestedDefaultRouter(router, r"partners", lookup="partner")
-partners_router.register(r"catalogs", PartnerCatalogViewSet, basename="partner-catalog")
-
-catalogs_router = NestedDefaultRouter(partners_router, r"catalogs", lookup="catalog")
+catalogs_router = NestedDefaultRouter(router, r"catalogs", lookup="catalog")
 catalogs_router.register(r"learners", CatalogLearnerViewset, basename="catalog-learners")
 catalogs_router.register(r"courses", CatalogCourseViewSet, basename="catalog-courses")
 catalogs_router.register(r"email_regexes", CatalogEmailRegexViewSet, basename="catalog-email-regexes")
@@ -31,7 +29,6 @@ courses_router.register(r"enrollments", CatalogCourseEnrollmentViewSet, basename
 
 urlpatterns = [
     path("", include(router.urls)),
-    path("", include(partners_router.urls)),
     path("", include(catalogs_router.urls)),
     path("", include(courses_router.urls)),
 ]
