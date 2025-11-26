@@ -302,12 +302,12 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
     image_thumb.short_description = "Image"
 
     def add_learner(self, obj):
-        """Generate a link to add a new learner to this catalog."""
-        learner_model = CatalogLearner
-        add_learner_url = reverse(
-            f"admin:{learner_model._meta.app_label}_{learner_model._meta.model_name}_add"
+        """Generate a link to add a new invitation for this catalog."""
+        invitation_model = CatalogLearnerInvitation
+        add_invitation_url = reverse(
+            f"admin:{invitation_model._meta.app_label}_{invitation_model._meta.model_name}_add"
         )
-        full_url = f"{add_learner_url}?catalog={obj.pk}"
+        full_url = f"{add_invitation_url}?catalog={obj.pk}"
 
         return format_html(
             '<a href="{}" style="font-weight: bold;"> Add Learner </a>',
