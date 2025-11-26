@@ -12,6 +12,9 @@ from django.apps import apps
 from django.core.exceptions import ValidationError
 
 from partner_catalog.helpers.regex_cache import compiled_email_regexes_for_catalog
+from partner_catalog.models import CatalogLearnerInvitation
+
+Status = CatalogLearnerInvitation.Status
 
 
 def email_matches_catalog(email: str | None, catalog_id: str) -> bool:
@@ -34,7 +37,7 @@ def email_matches_catalog(email: str | None, catalog_id: str) -> bool:
     return False
 
 
-def can_access_catalog_courses(*, user, catalog) -> bool:
+def can_access_catalog(*, user, catalog) -> bool:
     """
     Determine if a user is allowed to see courses in a given corporate partner catalog.
 
@@ -47,13 +50,13 @@ def can_access_catalog_courses(*, user, catalog) -> bool:
 
     Access is granted if:
         - The user is staff or a superuser,
-        - The catalog is public,
+        - The catalog is self-enrollment,
         - The user is an active enrolled learner in the catalog,
         - The user's email matches any of the catalog's allowed regex patterns.
     """
     if getattr(user, "is_staff", False) or getattr(user, "is_superuser", False):
         return True
-    if getattr(catalog, "is_public", False):
+    if getattr(catalog, "is_self_enrollment", False):
         return True
     if not getattr(user, "is_authenticated", False):
         return False
@@ -145,7 +148,7 @@ def can_course_be_added_to_catalog(*, catalog, course) -> bool:  # pylint: disab
     return True
 
 
-def validate_enrollment_request(*, user, catalog) -> None:
+def validate_catalog_enrollment_request(*, invitation) -> None:
     """
     Validate if a user can enroll in the specified catalog.
 
@@ -156,8 +159,8 @@ def validate_enrollment_request(*, user, catalog) -> None:
         ValidationError: If the user cannot enroll in the catalog.
     """
 
-    if not is_catalog_available(catalog=catalog):
+    if not is_catalog_available(catalog=invitation.catalog):
         raise ValidationError("Catalog is not available for enrollment.")
 
-    if not can_access_catalog_courses(user=user, catalog=catalog):
-        raise ValidationError("User is not allowed to enroll in this catalog.")
+    if invitation.status != Status.ACCEPTED:
+        raise ValidationError("Invitation must be accepted to enroll in the catalog.")

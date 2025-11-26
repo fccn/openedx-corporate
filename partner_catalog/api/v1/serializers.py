@@ -18,6 +18,7 @@ from partner_catalog.models import (
     PartnerCatalog,
 )
 from partner_catalog.services.assessments import get_assessments_counts
+from partner_catalog.services.catalogs import PartnerCatalogService
 from partner_catalog.services.progress import (
     compute_catalog_completion_rate,
     compute_catalog_course_completion_rate,
@@ -98,11 +99,14 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
         queryset=Partner.objects.all()
     )
 
+    image = serializers.ImageField(read_only=True)
     email_regexes = serializers.SerializerMethodField()
+    org = serializers.SerializerMethodField()
     courses = serializers.IntegerField(source="courses_count", read_only=True)
     enrollments = serializers.IntegerField(source="total_enrollments", read_only=True)
     certified = serializers.IntegerField(source="certified_count", read_only=True)
     completion_rate = serializers.SerializerMethodField()
+    status = serializers.SerializerMethodField(read_only=True)
 
     class Meta:
         model = PartnerCatalog
@@ -122,12 +126,16 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
             "enrollments",
             "certified",
             "completion_rate",
+            "org",
+            "image",
+            "status",
         ]
         read_only_fields = [
             "id",
             "email_regexes",
             "courses",
             "slug",
+            "image",
         ]
         extra_kwargs = {
             "authorization_message": {
@@ -145,12 +153,25 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
             )
         return attrs
 
+    def get_org(self, obj):
+        return obj.partner.organization.short_name
+
     def get_email_regexes(self, obj):
         return list(obj.catalog_email_regexes.all().values_list("regex", flat=True))
 
     def get_completion_rate(self, obj):
         rate_statistics = compute_catalog_completion_rate(obj.id)
         return rate_statistics.get("completion_rate")
+
+    def get_status(self, obj):
+        """Return the catalog status for the current user."""
+        request = self.context.get("request")
+        if not request or not request.user.is_authenticated:
+            return None
+        return PartnerCatalogService.get_user_catalog_invitation_status(
+            catalog=obj,
+            user=request.user
+        )
 
 
 class CatalogLearnerSerializer(serializers.ModelSerializer):

@@ -2,7 +2,7 @@
 
 from django.db.models import Count, OuterRef, Q, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
-from edx_rest_framework_extensions.permissions import IsAuthenticated
+from edx_rest_framework_extensions.permissions import IsAuthenticated, IsStaff, IsSuperuser
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
@@ -126,15 +126,18 @@ class PartnerCatalogViewSet(viewsets.ModelViewSet):
         qs = annotate_catalog_certified_count(qs)
         return qs
 
-    @action(detail=True, methods=["post"], url_path="enroll")
-    def enroll(self, request, *args, **kwargs):
-        """Allow a user to self-enroll in a catalog."""
-        catalog = self.get_object()
-        user = request.user
+    def get_permission_classes(self):
+        """Get permission classes based on action."""
 
-        learner = self.service.self_enroll_user_in_catalog(user=user, catalog=catalog)
-        serializer = CatalogLearnerSerializer(learner)
-        return Response(serializer.data, status=status.HTTP_200_OK)
+        admin_only_actions = [
+            "create",
+            "update",
+            "destroy",
+        ]
+
+        if self.action in admin_only_actions:
+            return [IsStaff | IsSuperuser]
+        return self.permission_classes
 
 
 class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
@@ -326,22 +329,6 @@ class CatalogLearnerInvitationViewSet(
 
         output_serializer = self.get_serializer(invitation)
         return Response(output_serializer.data, status=status.HTTP_201_CREATED)
-
-    @action(detail=True, methods=["post"], url_path="accept")
-    def accept_invite(self, request, pk=None, **kwargs):
-        """Accept an invitation."""
-        invitation = self.service.accept_invitation(invitation_id=pk, user=request.user)
-
-        serializer = CatalogLearnerInvitationSerializer(invitation)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-    @action(detail=True, methods=["post"], url_path="decline")
-    def decline_invite(self, request, pk=None, **kwargs):
-        """Decline an invitation."""
-        invitation = self.service.decline_invitation(invitation_id=pk, user=request.user)
-
-        serializer = CatalogLearnerInvitationSerializer(invitation)
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=True, methods=["post"], url_path="remove")
     def remove_invite(self, request, pk=None, **kwargs):

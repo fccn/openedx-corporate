@@ -1,11 +1,11 @@
 """Service layer for catalog operations."""
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
 from django.db import transaction
+from rest_framework.exceptions import ValidationError
 
 from partner_catalog.models import CatalogLearner, CatalogLearnerInvitation
-from partner_catalog.policies.catalogs import validate_enrollment_request
+from partner_catalog.policies.catalogs import validate_catalog_enrollment_request
 from partner_catalog.services.invitations import CatalogLearnerInvitationService
 
 User = get_user_model()
@@ -64,11 +64,7 @@ class PartnerCatalogService():
             id=invitation_id
         )
 
-        user = User.objects.get(id=invitation.user_id)
-        validate_enrollment_request(
-            catalog=invitation.catalog,
-            user=user
-        )
+        validate_catalog_enrollment_request(invitation=invitation)
 
         learner, created = CatalogLearner.objects.get_or_create(
             user_id=invitation.user_id,
@@ -107,3 +103,40 @@ class PartnerCatalogService():
         # This triggers _compute_active() which sets active=False
         learner.save()
         return learner
+
+    @staticmethod
+    def get_user_catalog_invitation_status(catalog, user):
+        """
+        Get the invitation status for a user on a specific catalog.
+
+        Returns the status display string of the user's current invitation.
+        The user may be a CatalogLearner with a current invitation, or may have
+        a latest sent invitation without being enrolled as a learner.
+
+        Args:
+            catalog: PartnerCatalog instance
+            user: User instance
+
+        Returns:
+            str or None: Status display string (e.g., "Sent", "Accepted", "Declined")
+        """
+        if not user or not user.is_authenticated:
+            return None
+
+        learner = CatalogLearner.objects.filter(
+            catalog=catalog,
+            user=user
+        ).select_related('current_invitation').first()
+
+        if learner and learner.current_invitation:
+            return learner.current_invitation.get_status_display()
+
+        invitation_service = CatalogLearnerInvitationService()
+        invitation = invitation_service.get_latest_sent_invitation(
+            user=user, catalog=catalog
+        )
+
+        if invitation:
+            return invitation.get_status_display()
+
+        return None
