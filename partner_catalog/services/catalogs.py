@@ -1,10 +1,11 @@
 """Service layer for catalog operations."""
 
 from django.contrib.auth import get_user_model
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
-from partner_catalog.models import CatalogLearner, CatalogLearnerInvitation, CatalogManager
+from partner_catalog.models import CatalogEmailRegex, CatalogLearner, CatalogLearnerInvitation, CatalogManager
 from partner_catalog.policies.catalogs import is_user_an_active_catalog_learner, validate_catalog_enrollment_request
 from partner_catalog.services.invitations import CatalogLearnerInvitationService
 
@@ -248,3 +249,33 @@ class PartnerCatalogService():
             user=user,
             active=True
         ).exists()
+
+    @staticmethod
+    @transaction.atomic
+    def update_email_regexes(catalog, patterns):
+        """
+        Update email regex patterns for a catalog.
+
+        Args:
+            catalog: PartnerCatalog instance
+            patterns: List of regex pattern strings
+
+        Raises:
+            ValidationError: If any pattern is invalid
+        """
+        existing_regexes = catalog.catalog_email_regexes.all()
+        existing_patterns = set(existing_regexes.values_list('regex', flat=True))
+        new_patterns = set(patterns)
+
+        patterns_to_delete = existing_patterns - new_patterns
+        patterns_to_create = new_patterns - existing_patterns
+
+        if patterns_to_delete:
+            existing_regexes.filter(regex__in=patterns_to_delete).delete()
+
+        for pattern in patterns_to_create:
+            try:
+                email_regex = CatalogEmailRegex(catalog=catalog, regex=pattern)
+                email_regex.save()
+            except DjangoValidationError as exc:
+                raise ValidationError({"email_regexes": exc.messages}) from exc

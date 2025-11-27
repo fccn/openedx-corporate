@@ -131,7 +131,6 @@ class PartnerCatalogViewSet(viewsets.ModelViewSet):
 
         admin_only_actions = [
             "create",
-            "update",
             "destroy",
         ]
 
