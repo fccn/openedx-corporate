@@ -9,8 +9,6 @@ from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
 from partner_catalog.api.v1.filters import PartnerCatalogFilter, PartnerFilter
-from flex_catalog.serializers import CourseOverviewSimpleSerializer
-from partner_catalog.api.v1.filters import PartnerFilter
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
 from partner_catalog.api.v1.schemas import (
     add_courses_schema,
@@ -20,6 +18,7 @@ from partner_catalog.api.v1.schemas import (
     remove_courses_schema,
 )
 from partner_catalog.api.v1.serializers import (
+    BasicCourseOverviewSerializer,
     BulkRemoveInvitationSerializer,
     CatalogCourseEnrollmentSerializer,
     CatalogCourseSerializer,
@@ -48,7 +47,6 @@ from partner_catalog.services.certificates import (
     annotate_partner_certified_count,
 )
 from partner_catalog.services.invitations import CatalogLearnerInvitationService
-from partner_catalog.services.partners import PartnerService
 
 
 class PartnerViewset(viewsets.ReadOnlyModelViewSet):
@@ -65,8 +63,6 @@ class PartnerViewset(viewsets.ReadOnlyModelViewSet):
     search_fields = ["organization__short_name", "organization__name"]
     ordering_fields = ["organization__name", "organization__short_name", "id"]
     ordering = ["organization__short_name"]
-
-    service = PartnerService()
 
     def get_queryset(self):
         """
@@ -89,17 +85,6 @@ class PartnerViewset(viewsets.ReadOnlyModelViewSet):
         )
         qs = annotate_partner_certified_count(qs)
         return qs
-
-    @action(detail=True, methods=["get"], url_path="course_offering")
-    def course_offering(self, request, **kwargs):
-        """
-        Get all courses available for a partner to add to catalogs.
-        """
-        partner = self.get_object()
-        courses = self.service.get_available_courses(partner)
-
-        serializer = CourseOverviewSimpleSerializer(courses, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 class PartnerCatalogViewSet(viewsets.ModelViewSet):
@@ -210,6 +195,26 @@ class PartnerCatalogViewSet(viewsets.ModelViewSet):
             {"deleted_count": deleted_count},
             status=status.HTTP_200_OK
         )
+
+    @action(detail=True, methods=["get"], url_path="available_courses")
+    def available_courses(self, request, **kwargs):
+        """
+        List courses available to add to this catalog.
+
+        Returns courses from both the base catalog and partner's organization offering
+        that are not yet in the catalog.
+        """
+        catalog = self.get_object()
+        courses = self.service.get_available_courses_for_catalog(catalog)
+
+        base_courses = BasicCourseOverviewSerializer(courses['base'], many=True).data
+        org_courses = BasicCourseOverviewSerializer(courses['organization'], many=True).data
+
+        response_data = {
+            'base': base_courses,
+            'organization': org_courses,
+        }
+        return Response(response_data)
 
 
 class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
