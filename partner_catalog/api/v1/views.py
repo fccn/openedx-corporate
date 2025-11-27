@@ -19,7 +19,6 @@ from partner_catalog.api.v1.serializers import (
     BulkRemoveInvitationSerializer,
     CatalogCourseEnrollmentSerializer,
     CatalogCourseSerializer,
-    CatalogEmailRegexSerializer,
     CatalogLearnerInvitationSerializer,
     CatalogLearnerSerializer,
     InvitationActionSerializer,
@@ -30,7 +29,6 @@ from partner_catalog.api.v1.tasks import bulk_remove_invitations, bulk_upload_in
 from partner_catalog.models import (
     CatalogCourse,
     CatalogCourseEnrollment,
-    CatalogEmailRegex,
     CatalogLearner,
     CatalogLearnerInvitation,
     Partner,
@@ -230,28 +228,6 @@ class CatalogCourseViewSet(
         )
         qs = annotate_course_certified_count(qs)
         return qs
-
-
-class CatalogEmailRegexViewSet(
-    InjectNestedFKMixin, viewsets.ModelViewSet
-):
-    """ViewSet for catalog email regex patterns."""
-
-    queryset = CatalogEmailRegex.objects.all()
-    serializer_class = CatalogEmailRegexSerializer
-    permission_classes = [IsPartnerCatalogManager]
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["catalog"]
-
-    # Mixin config
-    nested_lookup_kwarg = "catalog_pk"
-    target_field_name = "catalog_id"
-
-    def get_queryset(self):
-        """Get the queryset for catalog email regex patterns."""
-        qs = self.queryset
-        catalog_pk = self.kwargs.get("catalog_pk")
-        return qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
 
 
 class CatalogLearnerInvitationViewSet(

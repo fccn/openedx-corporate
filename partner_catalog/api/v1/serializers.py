@@ -12,7 +12,6 @@ from partner_catalog.edxapp_wrapper.course_module import course_overview
 from partner_catalog.models import (
     CatalogCourse,
     CatalogCourseEnrollment,
-    CatalogEmailRegex,
     CatalogLearner,
     CatalogLearnerInvitation,
     Partner,
@@ -300,19 +299,6 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
     def get_completion_rate(self, obj):
         rate_statistics = compute_catalog_course_completion_rate(obj.id)
         return rate_statistics.get("completion_rate")
-
-
-class CatalogEmailRegexSerializer(serializers.ModelSerializer):
-    """Serializer for catalog email regex patterns."""
-
-    catalog_id = serializers.PrimaryKeyRelatedField(
-        source="catalog", queryset=PartnerCatalog.objects.all()
-    )
-
-    class Meta:
-        model = CatalogEmailRegex
-        fields = ["id", "catalog_id", "regex"]
-        read_only_fields = ["id"]
 
 
 class CatalogLearnerInvitationSerializer(serializers.ModelSerializer):
