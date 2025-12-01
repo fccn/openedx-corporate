@@ -186,3 +186,109 @@ def bulk_status_invitations_schema(func):
         },
         tags=["Invitations"]
     )(func)
+
+
+def add_courses_schema(func):
+    return extend_schema(
+        summary="Add courses to catalog",
+        description=dedent("""
+        Add one or multiple courses to a catalog at a specific position.
+
+        If position is specified, existing courses will be shifted.
+        If position is omitted, courses are appended at the end.
+        """),
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'course_ids': {
+                        'type': 'array',
+                        'items': {'type': 'string'},
+                        'description': 'List of course IDs to add',
+                        'example': ["course-v1:edX+DemoX+Demo_Course"]
+                    },
+                    'position': {
+                        'type': 'integer',
+                        'description': 'Insert position (optional)',
+                        'nullable': True,
+                        'example': 0
+                    }
+                },
+                'required': ['course_ids']
+            }
+        },
+        responses={
+            201: OpenApiResponse(
+                description="Courses added successfully. Returns list of CatalogCourse objects.",
+                examples=[
+                    OpenApiExample(
+                        'Success',
+                        value=[
+                            {
+                                "id": 1,
+                                "catalog_id": 1,
+                                "position": 0,
+                                "course_run": {
+                                    "id": "course-v1:edX+DemoX+Demo_Course",
+                                    "display_name": "Demo Course"
+                                },
+                                "enrollments": 0,
+                                "certified": 0,
+                                "completion_rate": 0.0
+                            }
+                        ]
+                    )
+                ]
+            ),
+            400: OpenApiResponse(
+                description="Validation error",
+                examples=[
+                    OpenApiExample('Missing Field', value={"course_ids": "This field is required."}),
+                    OpenApiExample('Not Found', value={"detail": "Courses not found: course-v1:edX+Invalid"})
+                ]
+            )
+        },
+        tags=["Catalogs"]
+    )(func)
+
+
+def remove_courses_schema(func):
+    return extend_schema(
+        summary="Remove courses from catalog",
+        description=dedent("""
+        Remove one or multiple courses from a catalog.
+
+        Positions are reorganized automatically after deletion.
+        """),
+        request={
+            'application/json': {
+                'type': 'object',
+                'properties': {
+                    'catalog_course_ids': {
+                        'type': 'array',
+                        'items': {'type': 'integer'},
+                        'description': 'List of CatalogCourse IDs to remove',
+                        'example': [1, 2, 3]
+                    }
+                },
+                'required': ['catalog_course_ids']
+            }
+        },
+        responses={
+            200: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Courses removed successfully",
+                examples=[
+                    OpenApiExample('Success', value={"deleted_count": 3})
+                ]
+            ),
+            400: OpenApiResponse(
+                description="Validation error",
+                examples=[
+                    OpenApiExample('Missing Field', value={"catalog_course_ids": "This field is required."}),
+                    OpenApiExample('Not Found', value={"detail": "CatalogCourse IDs not found: 999"})
+                ]
+            )
+        },
+        tags=["Catalogs"]
+    )(func)
