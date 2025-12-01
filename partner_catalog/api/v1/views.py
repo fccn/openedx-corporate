@@ -243,7 +243,11 @@ class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
 
 
 class CatalogCourseViewSet(
-    InjectNestedFKMixin, viewsets.ModelViewSet,
+    InjectNestedFKMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
 ):
     """
     ViewSet for Corporate Partner Catalog Course data.

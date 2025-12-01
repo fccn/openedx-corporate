@@ -18,6 +18,7 @@ from partner_catalog.models import (
     PartnerCatalog,
 )
 from partner_catalog.services.assessments import get_assessments_counts
+from partner_catalog.services.catalog_courses import CatalogCourseService
 from partner_catalog.services.catalogs import PartnerCatalogService
 from partner_catalog.services.progress import (
     compute_catalog_completion_rate,
@@ -295,6 +296,25 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
             "completion_rate",
         ]
         read_only_fields = ["id"]
+
+    def get_fields(self):
+        """Make course_overview and catalog_id read-only on update."""
+        fields = super().get_fields()
+
+        if self.instance is not None:
+            fields["course_overview"].read_only = True
+            fields["catalog_id"].read_only = True
+
+        return fields
+
+    def update(self, instance, validated_data):
+        """Update catalog course position if changed."""
+        new_position = validated_data.get("position")
+
+        if new_position is not None and new_position != instance.position:
+            return CatalogCourseService.update_course_position(instance, new_position)
+
+        return super().update(instance, validated_data)
 
     def get_completion_rate(self, obj):
         rate_statistics = compute_catalog_course_completion_rate(obj.id)
