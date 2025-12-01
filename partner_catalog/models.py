@@ -275,27 +275,6 @@ class CatalogCourse(models.Model):
             ),
         ]
 
-    def clean(self):
-        """Validate that the course is part of the partner course offerings or base catalog."""
-        super().clean()
-
-        # Check if the course is in the base catalog
-        base_catalog = BaseCatalog.get_instance()
-        if base_catalog.get_course_runs().filter(id=self.course_overview_id).exists():
-            return
-
-        # Check if the course belongs to the partner's organization
-        organization = self.catalog.partner.organization
-        course_org = self.course_overview.org
-
-        if organization.short_name != course_org:
-            raise ValidationError({"course_overview": "Course is not part of the partner's offerings."})
-
-    def save(self, *args, **kwargs):
-        """Ensure clean is called before saving."""
-        self.clean()
-        super().save(*args, **kwargs)
-
     def __str__(self):
         """Return string representation of the CatalogCourse instance."""
         return (
