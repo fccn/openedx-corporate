@@ -123,3 +123,20 @@ def annotate_certified_count(qs, users_qs, courses_qs):
             output_field=IntegerField(),
         )
     )
+
+
+def user_has_certificate(course_id, user_id):
+    """Check if a user has a passed certificate for a given course.
+
+    Args:
+        course_id: The course ID to check.
+        user_id: The user ID to check.
+
+    Returns:
+        bool: True if the user has a passed certificate, False otherwise.
+    """
+    return GeneratedCertificate.objects.filter(
+        course_id=course_id,
+        user_id=user_id,
+        status__in=CertificateStatuses.PASSED_STATUSES,
+    ).exists()

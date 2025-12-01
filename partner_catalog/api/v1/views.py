@@ -216,6 +216,21 @@ class PartnerCatalogViewSet(viewsets.ModelViewSet):
         }
         return Response(response_data)
 
+    @action(detail=True, methods=["get"], url_path="enrollments")
+    def enrollments(self, request, pk=None):
+        """Get all course enrollments for this catalog."""
+        enrollments = CatalogCourseEnrollment.objects.filter(
+            catalog_course__catalog_id=pk
+        ).select_related("user", "catalog_course", "catalog_course__course_overview")
+
+        page = self.paginate_queryset(enrollments)
+        if page is not None:
+            serializer = CatalogCourseEnrollmentSerializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+
+        serializer = CatalogCourseEnrollmentSerializer(enrollments, many=True)
+        return Response(serializer.data)
+
 
 class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
     """
