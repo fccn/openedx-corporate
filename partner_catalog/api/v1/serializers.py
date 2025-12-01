@@ -108,7 +108,9 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
     )
     org = serializers.SerializerMethodField()
     courses = serializers.IntegerField(source="courses_count", read_only=True)
-    enrollments = serializers.IntegerField(source="total_enrollments", read_only=True)
+    enrollments = serializers.IntegerField(read_only=True)
+    total_learners = serializers.IntegerField(read_only=True)
+    active_learners = serializers.IntegerField(read_only=True)
     certified = serializers.IntegerField(source="certified_count", read_only=True)
     completion_rate = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField(read_only=True)
@@ -136,6 +138,8 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
             "authorization_message",
             "courses",
             "enrollments",
+            "total_learners",
+            "active_learners",
             "certified",
             "completion_rate",
             "org",
