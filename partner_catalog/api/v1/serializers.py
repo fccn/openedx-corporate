@@ -17,9 +17,9 @@ from partner_catalog.models import (
     Partner,
     PartnerCatalog,
 )
-from partner_catalog.services.assessments import get_assessments_counts
 from partner_catalog.services.catalog_courses import CatalogCourseService
 from partner_catalog.services.catalogs import PartnerCatalogService
+from partner_catalog.services.certificates import user_has_certificate
 from partner_catalog.services.progress import (
     compute_catalog_completion_rate,
     compute_catalog_course_completion_rate,
@@ -47,7 +47,7 @@ class UserSimpleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "username", "email", "full_name"]
+        fields = ["id", "username", "email", "full_name", "last_login"]
 
     def get_full_name(self, obj):
         """Return the user's full name, or username/email if full name is not set."""
@@ -373,9 +373,11 @@ class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
 
     user = UserSimpleSerializer(read_only=True)
     catalog_course = serializers.PrimaryKeyRelatedField(read_only=True)
+    course_overview = BasicCourseOverviewSerializer(
+        source="catalog_course.course_overview", read_only=True
+    )
     progress = serializers.SerializerMethodField()
-    completed_assessments = serializers.SerializerMethodField()
-    pending_assessments = serializers.SerializerMethodField()
+    has_certificate = serializers.SerializerMethodField()
 
     class Meta:
         model = CatalogCourseEnrollment
@@ -385,10 +387,10 @@ class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
             "catalog_course",
             "active",
             "progress",
-            "completed_assessments",
-            "pending_assessments",
+            "course_overview",
+            "has_certificate",
         ]
-        read_only_fields = ["id", "user", "catalog_course"]
+        read_only_fields = ["id", "user", "catalog_course", "course_overview", "has_certificate"]
 
     def get_progress(self, obj):
         """Return user's progress percent in this course run."""
@@ -397,21 +399,12 @@ class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
             return None
         return compute_progress_percent_by_user(course_key_str=key, user=obj.user)
 
-    def get_completed_assessments(self, obj):
-        """Return count of completed graded assessments for this user in this course run."""
+    def get_has_certificate(self, obj):
+        """Return whether the user has a certificate for this course run."""
         key = self._course_key_str(obj)
         if not key:
-            return None
-        result = get_assessments_counts(key, obj.user)
-        return result.get("completed")
-
-    def get_pending_assessments(self, obj):
-        """Return count of pending graded assessments for this user in this course run."""
-        key = self._course_key_str(obj)
-        if not key:
-            return None
-        result = get_assessments_counts(key, obj.user)
-        return result.get("pending")
+            return False
+        return user_has_certificate(course_id=key, user_id=obj.user.id)
 
     def _course_key_str(self, obj):
         co = getattr(obj.catalog_course, "course_overview", None)
