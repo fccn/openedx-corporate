@@ -5,7 +5,14 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework.exceptions import ValidationError
 
-from partner_catalog.models import CatalogEmailRegex, CatalogLearner, CatalogLearnerInvitation, CatalogManager
+from partner_catalog.edxapp_wrapper.course_module import course_overview
+from partner_catalog.models import (
+    BaseCatalog,
+    CatalogEmailRegex,
+    CatalogLearner,
+    CatalogLearnerInvitation,
+    CatalogManager,
+)
 from partner_catalog.policies.catalogs import is_user_an_active_catalog_learner, validate_catalog_enrollment_request
 from partner_catalog.services.invitations import CatalogLearnerInvitationService
 
@@ -279,3 +286,34 @@ class PartnerCatalogService():
                 email_regex.save()
             except DjangoValidationError as exc:
                 raise ValidationError({"email_regexes": exc.messages}) from exc
+
+    def get_available_courses_for_catalog(self, catalog):
+        """
+        Get all courses available to add to a catalog.
+
+        Returns courses from the base catalog and partner's offering
+        that are not yet in this catalog.
+
+        Args:
+            catalog: The PartnerCatalog instance.
+
+        Returns:
+            dict: Dictionary with 'base' and 'organization' querysets of available courses.
+        """
+        CourseOverview = course_overview()
+        base_catalog = BaseCatalog.get_instance()
+        existing_course_ids = catalog.catalog_courses.values_list('course_overview_id', flat=True)
+
+        base_available = (
+            base_catalog.courses.exclude(id__in=existing_course_ids)
+            if base_catalog else CourseOverview.objects.none()
+        )
+        org_available = (
+            catalog.partner.get_partner_course_offering()
+            .exclude(id__in=existing_course_ids)
+        )
+
+        return {
+            'base': base_available,
+            'organization': org_available
+        }

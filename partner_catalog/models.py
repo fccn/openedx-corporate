@@ -3,6 +3,7 @@
 from importlib import import_module
 
 import regex
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError
 from django.db import models
@@ -29,8 +30,8 @@ class BaseCatalog(FlexibleCatalogModel):
     @staticmethod
     def get_instance():
         """Get the singleton BaseCatalog instance."""
-        catalog_slug = getattr("settings", "PARTNER_CATALOG_BASE_CATALOG_SLUG", "base-catalog")
-        catalog_name = getattr("settings", "PARTNER_CATALOG_BASE_CATALOG_NAME", "Base Catalog")
+        catalog_slug = getattr(settings, "PARTNER_CATALOG_BASE_CATALOG_SLUG", "base-catalog")
+        catalog_name = getattr(settings, "PARTNER_CATALOG_BASE_CATALOG_NAME", "Base Catalog")
 
         base_catalog, _ = BaseCatalog.objects.get_or_create(
             slug=catalog_slug,
@@ -120,6 +121,16 @@ class Partner(models.Model):
     def __str__(self):
         """Return a string representation of the Partner instance."""
         return f"Partner for {self.organization.short_name}"
+
+    def get_partner_course_offering(self):
+        """
+        Get courses specific to this partner's organization only.
+
+        Returns:
+            QuerySet of CourseOverview instances.
+        """
+        CourseOverview = course_overview()
+        return CourseOverview.objects.filter(org=self.organization.short_name)
 
 
 class PartnerCatalog(FlexibleCatalogModel):

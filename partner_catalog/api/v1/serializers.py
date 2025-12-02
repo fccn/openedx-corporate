@@ -31,6 +31,15 @@ User = get_user_model()
 CourseOverview = course_overview()
 
 
+class BasicCourseOverviewSerializer(serializers.ModelSerializer):
+    """Minimal serializer for CourseOverview with only id and display_name."""
+
+    class Meta:
+        model = CourseOverview
+        fields = ["id", "display_name"]
+        read_only_fields = ["display_name"]
+
+
 class UserSimpleSerializer(serializers.ModelSerializer):
     """Minimal serializer for user data."""
 

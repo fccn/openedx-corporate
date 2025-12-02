@@ -18,6 +18,7 @@ from partner_catalog.api.v1.schemas import (
     remove_courses_schema,
 )
 from partner_catalog.api.v1.serializers import (
+    BasicCourseOverviewSerializer,
     BulkRemoveInvitationSerializer,
     CatalogCourseEnrollmentSerializer,
     CatalogCourseSerializer,
@@ -194,6 +195,26 @@ class PartnerCatalogViewSet(viewsets.ModelViewSet):
             {"deleted_count": deleted_count},
             status=status.HTTP_200_OK
         )
+
+    @action(detail=True, methods=["get"], url_path="available_courses")
+    def available_courses(self, request, **kwargs):
+        """
+        List courses available to add to this catalog.
+
+        Returns courses from both the base catalog and partner's organization offering
+        that are not yet in the catalog.
+        """
+        catalog = self.get_object()
+        courses = self.service.get_available_courses_for_catalog(catalog)
+
+        base_courses = BasicCourseOverviewSerializer(courses['base'], many=True).data
+        org_courses = BasicCourseOverviewSerializer(courses['organization'], many=True).data
+
+        response_data = {
+            'base': base_courses,
+            'organization': org_courses,
+        }
+        return Response(response_data)
 
 
 class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
