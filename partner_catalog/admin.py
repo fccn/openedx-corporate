@@ -218,6 +218,7 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
         "add_learner",
         "add_course",
         "add_manager",
+        "image_thumb",
     ]
     list_filter = [
         "partner",
@@ -233,7 +234,7 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
     readonly_fields = ["course_keys", "slug"]
 
     fieldsets = (
-        ("Basic Information", {"fields": ("name", "partner", "slug")}),
+        ("Basic Information", {"fields": ("name", "partner", "slug", "image")}),
         (
             "Enrollment Settings",
             {
@@ -286,6 +287,19 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
         return obj.catalog_learners.count()
 
     learner_count.short_description = "Learners"
+
+    def image_thumb(self, obj):
+        """Display a thumbnail preview of the catalog image if available."""
+        if obj.image:
+            return format_html(
+                '<img src="{}" width="64" height="36" style="object-fit:cover;border-radius:4px;" />',
+                obj.image.url,
+            )
+        return format_html(
+            '<span style="color: #999; font-style: italic;">No image</span>'
+        )
+
+    image_thumb.short_description = "Image"
 
     def add_learner(self, obj):
         """Generate a link to add a new learner to this catalog."""
