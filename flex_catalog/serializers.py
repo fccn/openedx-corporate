@@ -24,6 +24,7 @@ class CourseOverviewSimpleSerializer(serializers.ModelSerializer):
             "end",
             "enrollment_start",
             "enrollment_end",
+            "course_image_url"
         ]
 
 

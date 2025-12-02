@@ -26,14 +26,9 @@ class IsPartnerCatalogManager(BasePermission):
             return True
 
         catalog_pk = view.kwargs.get("catalog_pk")
-        partner_pk = view.kwargs.get("partner_pk")
-
         qs = CatalogManager.objects.filter(user=user, active=True)
+
         if catalog_pk:
             qs = qs.filter(catalog_id=catalog_pk)
-        elif partner_pk:
-            qs = qs.filter(catalog__partner_id=partner_pk)
-        else:
-            return True
 
         return qs.exists()
