@@ -8,7 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
-from partner_catalog.api.v1.filters import PartnerFilter
+from partner_catalog.api.v1.filters import PartnerCatalogFilter, PartnerFilter
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
 from partner_catalog.api.v1.schemas import (
     bulk_remove_invitations_schema,
@@ -64,10 +64,18 @@ class PartnerViewset(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         """
-        Limit non-staff users to partners where they are active members.
-        Staff/superusers see all.
+        Limit non-staff users to partners where they are active managers.
+        Staff/superusers see all partners.
         """
         qs = self.queryset
+        user = self.request.user
+
+        if not (user.is_staff or user.is_superuser):
+            qs = qs.filter(
+                catalogs__catalog_managers__user=user,
+                catalogs__catalog_managers__active=True
+            ).distinct()
+
         qs = qs.annotate(
             catalogs_count=Count("catalogs", distinct=True),
             courses_count=Count("catalogs__catalog_courses", distinct=True),
@@ -77,9 +85,7 @@ class PartnerViewset(viewsets.ReadOnlyModelViewSet):
         return qs
 
 
-class PartnerCatalogViewSet(
-    InjectNestedFKMixin, viewsets.ModelViewSet
-):
+class PartnerCatalogViewSet(viewsets.ModelViewSet):
     """
     ViewSet for Corporate Partner Catalog data.
     Provides access to corporate partner catalog information.
@@ -94,14 +100,11 @@ class PartnerCatalogViewSet(
         filters.SearchFilter,
         filters.OrderingFilter,
     ]
+    filterset_class = PartnerCatalogFilter
     filterset_fields = ["partner"]
     search_fields = ["name", "slug"]
     ordering_fields = ["name", "id", "available_start_date", "available_end_date"]
     ordering = ["name"]
-
-    # Mixin config
-    nested_lookup_kwarg = "partner_pk"
-    target_field_name = "partner"
 
     service = PartnerCatalogService()
 
@@ -109,9 +112,6 @@ class PartnerCatalogViewSet(
         """Limit catalogs to those the user manages or views; staff see all."""
         qs = self.queryset
         user = self.request.user
-        partner_pk = self.kwargs.get("partner_pk")
-        if partner_pk:
-            qs = qs.filter(partner_id=partner_pk)
 
         if not (user.is_staff or user.is_superuser):
             qs = qs.filter(
@@ -219,9 +219,6 @@ class CatalogCourseViewSet(
         catalog_pk = self.kwargs.get("catalog_pk")
         qs = qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
 
-        partner_pk = self.kwargs.get("partner_pk")
-        qs = qs.filter(catalog__partner_id=partner_pk) if partner_pk else qs
-
         qs = qs.annotate(
             enrollments_count=Count(
                 "enrollments",
@@ -271,6 +268,10 @@ class CatalogLearnerInvitationViewSet(
         filters.OrderingFilter,
     ]
 
+    # Mixin config
+    nested_lookup_kwarg = "catalog_pk"
+    target_field_name = "catalog_id"
+
     def get_queryset(self):
         """Get the queryset for catalog learner invitations."""
         qs = self.queryset
@@ -315,10 +316,11 @@ class CatalogLearnerInvitationViewSet(
         """Create a new invitation."""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        catalog_id = self.kwargs.get('catalog_pk')
 
         invitation = self.service.create_new_invitation(
             invite_email=serializer.validated_data.get('invite_email'),
-            catalog_id=serializer.validated_data.get('catalog').id,
+            catalog_id=catalog_id,
             invited_by=request.user,
         )
 
