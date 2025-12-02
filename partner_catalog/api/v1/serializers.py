@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.db import transaction
 from rest_framework import serializers
 
 from flex_catalog.serializers import CourseOverviewSimpleSerializer
@@ -11,7 +12,6 @@ from partner_catalog.edxapp_wrapper.course_module import course_overview
 from partner_catalog.models import (
     CatalogCourse,
     CatalogCourseEnrollment,
-    CatalogEmailRegex,
     CatalogLearner,
     CatalogLearnerInvitation,
     Partner,
@@ -100,13 +100,24 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
     )
 
     image = serializers.ImageField(read_only=True)
-    email_regexes = serializers.SerializerMethodField()
+    email_regexes = serializers.ListField(
+        child=serializers.CharField(max_length=500),
+        required=False,
+        allow_empty=True,
+    )
     org = serializers.SerializerMethodField()
     courses = serializers.IntegerField(source="courses_count", read_only=True)
     enrollments = serializers.IntegerField(source="total_enrollments", read_only=True)
     certified = serializers.IntegerField(source="certified_count", read_only=True)
     completion_rate = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField(read_only=True)
+
+    MANAGER_EDITABLE_FIELDS = [
+        "email_regexes",
+        "authorization_message",
+        "alternative_link",
+        "support_email",
+    ]
 
     class Meta:
         model = PartnerCatalog
@@ -129,10 +140,11 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
             "org",
             "image",
             "status",
+            "support_email",
+            "alternative_link",
         ]
         read_only_fields = [
             "id",
-            "email_regexes",
             "courses",
             "slug",
             "image",
@@ -153,6 +165,21 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
             )
         return attrs
 
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+
+        if user and (user.is_staff or user.is_superuser):
+            return fields
+
+        if request and request.method in ['PUT', 'PATCH']:
+            for field_name in fields:
+                if field_name not in self.MANAGER_EDITABLE_FIELDS:
+                    fields[field_name].read_only = True
+
+        return fields
+
     def get_org(self, obj):
         return obj.partner.organization.short_name
 
@@ -172,6 +199,21 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
             catalog=obj,
             user=request.user
         )
+
+    def update(self, instance, validated_data):
+        """Update PartnerCatalog instance, including email regexes."""
+        email_regexes = validated_data.pop('email_regexes', None)
+        with transaction.atomic():
+            instance = super().update(instance, validated_data)
+            if email_regexes is not None:
+                PartnerCatalogService.update_email_regexes(instance, email_regexes)
+
+        return instance
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        data["email_regexes"] = self.get_email_regexes(instance)
+        return data
 
 
 class CatalogLearnerSerializer(serializers.ModelSerializer):
@@ -257,19 +299,6 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
     def get_completion_rate(self, obj):
         rate_statistics = compute_catalog_course_completion_rate(obj.id)
         return rate_statistics.get("completion_rate")
-
-
-class CatalogEmailRegexSerializer(serializers.ModelSerializer):
-    """Serializer for catalog email regex patterns."""
-
-    catalog_id = serializers.PrimaryKeyRelatedField(
-        source="catalog", queryset=PartnerCatalog.objects.all()
-    )
-
-    class Meta:
-        model = CatalogEmailRegex
-        fields = ["id", "catalog_id", "regex"]
-        read_only_fields = ["id"]
 
 
 class CatalogLearnerInvitationSerializer(serializers.ModelSerializer):
