@@ -11,9 +11,11 @@ from rest_framework.response import Response
 from partner_catalog.api.v1.filters import PartnerCatalogFilter, PartnerFilter
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
 from partner_catalog.api.v1.schemas import (
+    add_courses_schema,
     bulk_remove_invitations_schema,
     bulk_status_invitations_schema,
     bulk_upload_invitations_schema,
+    remove_courses_schema,
 )
 from partner_catalog.api.v1.serializers import (
     BulkRemoveInvitationSerializer,
@@ -35,6 +37,7 @@ from partner_catalog.models import (
     PartnerCatalog,
 )
 from partner_catalog.permissions import IsPartnerCatalogManager
+from partner_catalog.services.catalog_courses import CatalogCourseService
 from partner_catalog.services.catalogs import PartnerCatalogService
 from partner_catalog.services.certificates import (
     annotate_catalog_certified_count,
@@ -136,6 +139,60 @@ class PartnerCatalogViewSet(viewsets.ModelViewSet):
             return [IsStaff | IsSuperuser]
         return self.permission_classes
 
+    @add_courses_schema
+    @action(detail=True, methods=["post"], url_path="add_courses")
+    def add_courses(self, request, **kwargs):
+        """
+        Add courses to a catalog.
+
+        Expects: {"course_ids": [...], "position": int (optional)}
+        Returns: List of created CatalogCourse instances
+        """
+        catalog = self.get_object()
+        course_ids = request.data.get("course_ids", [])
+        position = request.data.get("position")
+
+        if not course_ids:
+            return Response(
+                {"course_ids": "This field is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        created_courses = CatalogCourseService.add_catalog_courses(
+            catalog=catalog,
+            course_overview_ids=course_ids,
+            position=position
+        )
+        serializer = CatalogCourseSerializer(created_courses, many=True)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @remove_courses_schema
+    @action(detail=True, methods=["post"], url_path="remove_courses")
+    def remove_courses(self, request, **kwargs):
+        """
+        Remove courses from a catalog.
+
+        Expects: {"catalog_course_ids": [...]}
+        Returns: Number of courses deleted
+        """
+        catalog = self.get_object()
+        catalog_course_ids = request.data.get("catalog_course_ids", [])
+
+        if not catalog_course_ids:
+            return Response(
+                {"catalog_course_ids": "This field is required."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        deleted_count = CatalogCourseService.remove_catalog_courses(
+            catalog=catalog,
+            catalog_course_ids=catalog_course_ids
+        )
+        return Response(
+            {"deleted_count": deleted_count},
+            status=status.HTTP_200_OK
+        )
+
 
 class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
     """
@@ -186,7 +243,11 @@ class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
 
 
 class CatalogCourseViewSet(
-    InjectNestedFKMixin, viewsets.ModelViewSet,
+    InjectNestedFKMixin,
+    mixins.RetrieveModelMixin,
+    mixins.UpdateModelMixin,
+    mixins.ListModelMixin,
+    viewsets.GenericViewSet,
 ):
     """
     ViewSet for Corporate Partner Catalog Course data.

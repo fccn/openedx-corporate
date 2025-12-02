@@ -12,7 +12,7 @@ from django.apps import apps
 from django.core.exceptions import ValidationError
 
 from partner_catalog.helpers.regex_cache import compiled_email_regexes_for_catalog
-from partner_catalog.models import CatalogLearnerInvitation
+from partner_catalog.models import BaseCatalog, CatalogLearnerInvitation
 
 Status = CatalogLearnerInvitation.Status
 
@@ -125,7 +125,7 @@ def is_catalog_available(*, catalog) -> bool:
     return catalog.active and has_catalog_capacity(catalog=catalog)
 
 
-def can_course_be_added_to_catalog(*, catalog, course) -> bool:  # pylint: disable=unused-argument
+def can_course_be_added_to_catalog(*, catalog, course) -> bool:
     """
     Check if a course can be added to the specified catalog based on its active status.
 
@@ -138,13 +138,16 @@ def can_course_be_added_to_catalog(*, catalog, course) -> bool:  # pylint: disab
         - its part of the catalogs partner(s) offerings or
         - is listed on the BaseCatalog list.
     """
-    # TODO: Implement logic to check if a course can be added to the catalog.
-    # A course can be added if its part of the catalogs partner(s) offerings or
-    # is listed on the BaseCatalog list.
+    base_catalog = BaseCatalog.get_instance()
 
-    # This functionality was implemented in PR #23 as part of the model clean() method.
-    # Once that is verified, this function can be updated accordingly.
+    if base_catalog.get_course_runs().filter(id=course.id).exists():
+        return True
 
+    catalog_org = catalog.partner.organization
+    course_org = course.org
+
+    if catalog_org.short_name != course_org:
+        return False
     return True
 
 
