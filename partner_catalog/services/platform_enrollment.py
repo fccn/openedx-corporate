@@ -34,7 +34,6 @@ def ensure_edx_platform_enrollment(*, user_id: int, catalog_course_id: str) -> N
     Raises:
         Exception: If enrollment creation or update fails.
     """
-
     User = get_user_model()
     user = User.objects.only("id", "username").get(pk=user_id)
 
@@ -48,12 +47,11 @@ def ensure_edx_platform_enrollment(*, user_id: int, catalog_course_id: str) -> N
     course_id = str(cc.course_overview.id)
     catalog_id = str(getattr(cc, "catalog_id", None) or cc.catalog.id)
 
+    # TODO: Add attributes logic to link the catalog ids when
+    # called outside PARTNER CATALOG context
     payload = {
         "username": user.username,
         "course_id": course_id,
-        "enrollment_attributes": [
-            {"namespace": "cpa", "name": "catalog_id", "value": catalog_id}
-        ],
     }
 
     try:
