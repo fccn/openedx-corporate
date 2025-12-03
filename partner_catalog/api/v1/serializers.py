@@ -102,7 +102,8 @@ class PartnerSerializer(serializers.ModelSerializer):
         return None
 
 
-class PartnerCatalogCourseSerializer(serializers.ModelSerializer):
+class SimpleCatalogCourseSerializer(serializers.ModelSerializer):
+    """Simplified serializer for courses in a corporate partner catalog."""
     order = serializers.IntegerField(source='position', read_only=True)
     course_key = serializers.SerializerMethodField()
 
@@ -121,13 +122,6 @@ class PartnerCatalogCourseSerializer(serializers.ModelSerializer):
 class PartnerCatalogSerializer(serializers.ModelSerializer):
     """Serializer for Corporate Partner Catalog data."""
 
-    partner = PartnerSerializer()
-    
-    steps = PartnerCatalogCourseSerializer(
-        source='catalog_courses',
-        many=True,
-        read_only=True,
-    )
     image = serializers.ImageField(read_only=True)
     email_regexes = serializers.ListField(
         child=serializers.CharField(max_length=500),
@@ -175,8 +169,6 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
             "status",
             "support_email",
             "alternative_link",
-            "is_manager",
-            "steps",
         ]
         read_only_fields = [
             "id",
@@ -482,8 +474,12 @@ class LearnerPartnerCatalogSerializer(serializers.ModelSerializer):
     Provides essential catalog information without management fields.
     Includes status, enrollment info, and user-specific data.
     """
-
-    org = serializers.CharField(source="partner.organization.short_name", read_only=True)
+    partner = PartnerSerializer()
+    steps = SimpleCatalogCourseSerializer(
+        source='catalog_courses',
+        many=True,
+        read_only=True,
+    )
     image = serializers.ImageField(read_only=True)
     courses = serializers.IntegerField(source="courses_count", read_only=True)
     enrollments = serializers.IntegerField(source="total_enrollments", read_only=True)
@@ -496,7 +492,7 @@ class LearnerPartnerCatalogSerializer(serializers.ModelSerializer):
             "id",
             "name",
             "slug",
-            "org",
+            "partner",
             "image",
             "is_self_enrollment",
             "available_start_date",
@@ -508,6 +504,7 @@ class LearnerPartnerCatalogSerializer(serializers.ModelSerializer):
             "enrollments",
             "status",
             "is_manager",
+            "steps",
         ]
         read_only_fields = fields
 
