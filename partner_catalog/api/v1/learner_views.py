@@ -21,6 +21,7 @@ from partner_catalog.api.v1.serializers import (
 )
 from partner_catalog.models import CatalogCourse, CatalogLearner, CatalogLearnerInvitation, PartnerCatalog
 from partner_catalog.services.catalogs import PartnerCatalogService
+from partner_catalog.services.enrollments import CatalogCourseEnrollmentService
 
 
 class LearnerCatalogViewSet(viewsets.ReadOnlyModelViewSet):
@@ -139,6 +140,8 @@ class LearnerCatalogCourseViewSet(InjectNestedFKMixin, viewsets.ReadOnlyModelVie
     nested_lookup_kwarg = "catalog_pk"
     target_field_name = "catalog_id"
 
+    enrollment_service = CatalogCourseEnrollmentService()
+
     def get_queryset(self):
         """
         Queryset of catalog courses from the learners level.
@@ -156,4 +159,25 @@ class LearnerCatalogCourseViewSet(InjectNestedFKMixin, viewsets.ReadOnlyModelVie
                 filter=Q(enrollments__active=True),
                 distinct=True,
             )
+        )
+
+    @action(detail=True, methods=["post"], url_path="enroll")
+    def enroll(self, request, **kwargs):
+        """
+        Enroll the current user in a catalog course.
+
+        This action allows a user to enroll in a specific catalog course if they
+        are an active learner in the catalog and meet enrollment requirements.
+        """
+        catalog_course = self.get_object()
+        user = request.user
+
+        self.enrollment_service.create_or_activate_course_enrollment(
+            user_id=user.id,
+            catalog_course_id=catalog_course.id,
+        )
+
+        return Response(
+            {"detail": "Successfully enrolled in the course."},
+            status=status.HTTP_200_OK,
         )

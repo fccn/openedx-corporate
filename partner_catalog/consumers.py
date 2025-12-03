@@ -20,6 +20,7 @@ from partner_catalog.events.signals import (
     CATALOG_LEARNER_INVITATION_REMOVED_V1,
 )
 from partner_catalog.services.catalogs import PartnerCatalogService
+from partner_catalog.services.enrollments import CatalogCourseEnrollmentService
 
 logger = logging.getLogger("partner_catalog.events")
 
@@ -94,9 +95,14 @@ def handle_catalog_learner_invitation_removed(
 ) -> None:
     """Handle removal/revocation of a CatalogLearnerInvitation."""
     try:
-        service = PartnerCatalogService()
-        learner = service.deactivate_learner_from_invitation(invitation.id)
+        catalog_service = PartnerCatalogService()
+        enrollments_service = CatalogCourseEnrollmentService()
 
+        learner = catalog_service.deactivate_learner_from_invitation(invitation.id)
+        enrollments_service.deactivate_enrollments_by_catalog(
+            user_id=learner.user_id,
+            catalog_id=invitation.catalog_id,
+        )
         logger.info(
             "CATALOG_LEARNER_INVITATION_REMOVED: Learner %s deactivated catalog_id=%s removed_by_id=%s",
             learner.id,
