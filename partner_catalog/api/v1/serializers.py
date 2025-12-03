@@ -102,13 +102,32 @@ class PartnerSerializer(serializers.ModelSerializer):
         return None
 
 
+class PartnerCatalogCourseSerializer(serializers.ModelSerializer):
+    order = serializers.IntegerField(source='position', read_only=True)
+    course_key = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CatalogCourse
+        ordering = ["position"]
+        fields = [
+            "order",
+            "course_key",
+        ]
+
+    def get_course_key(self, obj):
+        return str(obj.course_overview.id)
+
+
 class PartnerCatalogSerializer(serializers.ModelSerializer):
     """Serializer for Corporate Partner Catalog data."""
 
-    partner = serializers.PrimaryKeyRelatedField(
-        queryset=Partner.objects.all()
+    partner = PartnerSerializer()
+    
+    steps = PartnerCatalogCourseSerializer(
+        source='catalog_courses',
+        many=True,
+        read_only=True,
     )
-
     image = serializers.ImageField(read_only=True)
     email_regexes = serializers.ListField(
         child=serializers.CharField(max_length=500),
@@ -156,6 +175,8 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
             "status",
             "support_email",
             "alternative_link",
+            "is_manager",
+            "steps",
         ]
         read_only_fields = [
             "id",
