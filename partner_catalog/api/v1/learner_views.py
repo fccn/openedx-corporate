@@ -140,6 +140,9 @@ class LearnerCatalogCourseViewSet(InjectNestedFKMixin, viewsets.ReadOnlyModelVie
     nested_lookup_kwarg = "catalog_pk"
     target_field_name = "catalog_id"
 
+    lookup_field = "course_overview_id"
+    lookup_url_kwarg = "course_id"
+
     enrollment_service = CatalogCourseEnrollmentService()
 
     def get_queryset(self):

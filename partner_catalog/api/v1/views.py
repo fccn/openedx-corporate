@@ -311,6 +311,9 @@ class CatalogCourseViewSet(
     nested_lookup_kwarg = "catalog_pk"
     target_field_name = "catalog_id"
 
+    lookup_field = "course_overview_id"
+    lookup_url_kwarg = "course_id"
+
     def get_queryset(self):
         """Get the queryset for catalog courses."""
         qs = self.queryset
