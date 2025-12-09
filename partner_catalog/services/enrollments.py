@@ -23,7 +23,7 @@ class CatalogCourseEnrollmentService:
 
     @transaction.atomic
     def create_or_activate_course_enrollment(
-        self, *, user_id, catalog_course_id
+        self, *, user_id, catalog_course_id, gdpr_required=True
     ) -> CatalogCourseEnrollment:
         """
         Create or activate a catalog course enrollment for a user.
@@ -42,6 +42,7 @@ class CatalogCourseEnrollmentService:
         if not can_user_enroll_in_catalog_course(
             user=User.objects.get(id=user_id),
             catalog_course=catalog_course,
+            gdpr_required=gdpr_required,
         ):
             raise ValidationError(self.ERROR_USER_NOT_ALLOWED_TO_ENROLL)
 
