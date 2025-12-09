@@ -3,6 +3,7 @@
 from django.contrib.auth import get_user_model
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from partner_catalog.edxapp_wrapper.course_module import course_overview
@@ -109,6 +110,67 @@ class PartnerCatalogService():
             invitation_id=learner.current_invitation.id,
             user=user
         )
+        learner.refresh_from_db()
+        return learner
+
+    @transaction.atomic
+    def accept_gdpr_consent(self, user, catalog) -> CatalogLearner:
+        """
+        Accept GDPR consent for a user in a catalog.
+
+        Args:
+            user: The user accepting GDPR consent.
+            catalog: The catalog for which to accept GDPR consent.
+        Returns:
+            The updated CatalogLearner instance.
+        Raises:
+            ValidationError: If the user is not an active learner in the catalog.
+        """
+        if not is_user_an_active_catalog_learner(user=user, catalog=catalog):
+            raise ValidationError(self.ERROR_USER_NOT_ENROLLED)
+
+        learner = CatalogLearner.objects.get(catalog=catalog, user=user, active=True)
+        learner.gdpr_consent_status = CatalogLearner.GDPRConsentStatus.ACCEPTED
+        learner.gdpr_consent_updated_at = timezone.now()
+        learner.save(update_fields=["gdpr_consent_status", "gdpr_consent_updated_at"])
+
+        return learner
+
+    @transaction.atomic
+    def reject_gdpr_consent(self, user, catalog) -> CatalogLearner:
+        """
+        Reject GDPR consent for a user in a catalog.
+
+        This will mark the GDPR consent as rejected and remove the user
+        from the catalog by revoking their invitation.
+
+        Args:
+            user: The user rejecting GDPR consent.
+            catalog: The catalog for which to reject GDPR consent.
+        Returns:
+            The deactivated CatalogLearner instance.
+        Raises:
+            ValidationError: If the user is not an active learner in the catalog.
+        """
+        if not is_user_an_active_catalog_learner(user=user, catalog=catalog):
+            raise ValidationError(self.ERROR_USER_NOT_ENROLLED)
+
+        learner = CatalogLearner.objects.select_related('current_invitation').get(
+            catalog=catalog, user=user, active=True
+        )
+
+        # Update GDPR consent status to rejected
+        learner.gdpr_consent_status = CatalogLearner.GDPRConsentStatus.REJECTED
+        learner.gdpr_consent_updated_at = timezone.now()
+        learner.save(update_fields=["gdpr_consent_status", "gdpr_consent_updated_at"])
+
+        # Remove the user from the catalog
+        invitation_service = CatalogLearnerInvitationService()
+        invitation_service.remove_invitation(
+            invitation_id=learner.current_invitation.id,
+            user=user
+        )
+
         learner.refresh_from_db()
         return learner
 

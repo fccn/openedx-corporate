@@ -6,6 +6,7 @@ They provide read-only access to catalogs and courses where the user is an activ
 
 from django.db.models import Count, Exists, OuterRef, Q
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from edx_rest_framework_extensions.permissions import IsAuthenticated
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
@@ -16,6 +17,7 @@ from partner_catalog.api.v1.mixins import InjectNestedFKMixin
 from partner_catalog.api.v1.serializers import (
     CatalogLearnerInvitationSerializer,
     CatalogLearnerSerializer,
+    GDPRConsentSerializer,
     LearnerCatalogCourseSerializer,
     LearnerPartnerCatalogSerializer,
 )
@@ -117,6 +119,53 @@ class LearnerCatalogViewSet(viewsets.ReadOnlyModelViewSet):
         )
         serializer = CatalogLearnerInvitationSerializer(invitation)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(
+        request=GDPRConsentSerializer,
+        responses={200: GDPRConsentSerializer},
+        description="Get or update GDPR consent status for the current user in this catalog.",
+    )
+    @action(detail=True, methods=["get", "post"], url_path="gdpr_consent")
+    def gdpr_consent(self, request, **kwargs):
+        """
+        Get or update GDPR consent status for the current user in this catalog.
+
+        GET: Returns current GDPR consent status.
+        POST: Updates GDPR consent status. Accepts 'gdpr_consent_status' in request body
+              with values: 'accepted' or 'rejected'.
+              - If 'accepted': Updates the consent status.
+              - If 'rejected': Updates the consent status and removes the user from the catalog.
+
+        The user must be enrolled in the catalog (active learner) to access this endpoint.
+        Course enrollment is blocked until GDPR consent is accepted.
+        """
+        catalog = self.get_object()
+        user = request.user
+
+        if request.method == "GET":
+            try:
+                learner = CatalogLearner.objects.get(catalog=catalog, user=user, active=True)
+            except CatalogLearner.DoesNotExist:
+                return Response(
+                    {"detail": "User is not an active learner in this catalog."},
+                    status=status.HTTP_404_NOT_FOUND,
+                )
+            serializer = GDPRConsentSerializer(learner)
+            return Response(serializer.data)
+
+        # POST method - update consent status via service
+        serializer = GDPRConsentSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        new_status = serializer.validated_data["gdpr_consent_status"]
+
+        if new_status == CatalogLearner.GDPRConsentStatus.ACCEPTED:
+            learner = self.catalog_service.accept_gdpr_consent(user=user, catalog=catalog)
+        else:
+            learner = self.catalog_service.reject_gdpr_consent(user=user, catalog=catalog)
+
+        output_serializer = GDPRConsentSerializer(learner)
+        return Response(output_serializer.data)
 
 
 class LearnerCatalogCourseViewSet(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):

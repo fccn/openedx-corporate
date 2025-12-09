@@ -273,6 +273,8 @@ class CatalogLearnerSerializer(serializers.ModelSerializer):
     )
     enrollments = serializers.IntegerField(source="enrollments_count", read_only=True)
     certified = serializers.IntegerField(source="certified_count", read_only=True)
+    gdpr_consent_status = serializers.CharField(read_only=True)
+    gdpr_consent_updated_at = serializers.DateTimeField(read_only=True)
 
     class Meta:
         model = CatalogLearner
@@ -287,8 +289,38 @@ class CatalogLearnerSerializer(serializers.ModelSerializer):
             "removed_at",
             "enrollments",
             "certified",
+            "gdpr_consent_status",
+            "gdpr_consent_updated_at",
         ]
         read_only_fields = ["id"]
+
+
+class GDPRConsentSerializer(serializers.Serializer):
+    """
+    Serializer for GDPR consent status.
+
+    Used for both input (updating status) and output (returning current status).
+    - Input: Accepts 'gdpr_consent_status' with values 'accepted' or 'rejected'.
+    - Output: Returns 'gdpr_consent_status' and 'gdpr_consent_updated_at' from learner instance.
+    """
+
+    gdpr_consent_status = serializers.ChoiceField(
+        choices=[
+            (CatalogLearner.GDPRConsentStatus.ACCEPTED, "Accepted"),
+            (CatalogLearner.GDPRConsentStatus.REJECTED, "Rejected"),
+            (CatalogLearner.GDPRConsentStatus.PENDING, "Pending"),
+        ],
+        help_text="GDPR consent status.",
+    )
+    gdpr_consent_updated_at = serializers.DateTimeField(read_only=True)
+
+    def create(self, validated_data):
+        """No-op: this serializer is not used to create DB objects."""
+        return validated_data
+
+    def update(self, instance, validated_data):
+        """No-op: this serializer does not mutate instances directly."""
+        return instance
 
 
 class CatalogCourseSerializer(serializers.ModelSerializer):
