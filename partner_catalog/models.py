@@ -363,6 +363,13 @@ class CatalogLearner(models.Model):
     the catalog in CatalogLearnerInvitation.
     """
 
+    class GDPRConsentStatus(models.TextChoices):
+        """Possible GDPR consent statuses for a learner."""
+
+        PENDING = "pending", "Pending"
+        ACCEPTED = "accepted", "Accepted"
+        REJECTED = "rejected", "Rejected"
+
     id = models.AutoField(primary_key=True)
     catalog = models.ForeignKey(
         "PartnerCatalog",
@@ -379,6 +386,18 @@ class CatalogLearner(models.Model):
         null=False,
         blank=False,
         related_name="current_for_learner",
+    )
+
+    gdpr_consent_status = models.CharField(
+        max_length=10,
+        choices=GDPRConsentStatus.choices,
+        default=GDPRConsentStatus.PENDING,
+        help_text="GDPR consent status. Course enrollment is blocked until accepted.",
+    )
+    gdpr_consent_updated_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when GDPR consent status was last updated.",
     )
 
     class Meta:

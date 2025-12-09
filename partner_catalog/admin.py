@@ -389,11 +389,12 @@ class CatalogLearnerAdmin(admin.ModelAdmin):
         "user_email",
         "catalog",
         "active",
+        "gdpr_consent_status",
         "invited_at",
         "removed_at",
         "created_at",
     ]
-    list_filter = ["catalog__partner", "active"]
+    list_filter = ["catalog__partner", "active", "gdpr_consent_status"]
     search_fields = ["user__username", "user__email", "catalog__name"]
     ordering = ["catalog__name", "user__username"]
     date_hierarchy = "created_at"
@@ -412,11 +413,22 @@ class CatalogLearnerAdmin(admin.ModelAdmin):
         "removed_at",
         "invited_by_display",
         "removed_by_display",
+        "gdpr_consent_status",
+        "gdpr_consent_updated_at",
     ]
 
     fieldsets = (
         ("Learner Assignment", {"fields": ("catalog", "user", "current_invitation")}),
         ("Status", {"fields": ("active", "created_at")}),
+        (
+            "GDPR Consent",
+            {
+                "fields": (
+                    "gdpr_consent_status",
+                    "gdpr_consent_updated_at",
+                )
+            },
+        ),
         (
             "Invitation Details",
             {
