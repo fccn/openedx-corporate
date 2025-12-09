@@ -16,6 +16,7 @@ from partner_catalog.api.v1.schemas import (
     bulk_status_invitations_schema,
     bulk_upload_invitations_schema,
     remove_courses_schema,
+    report_schema,
 )
 from partner_catalog.api.v1.serializers import (
     BasicCourseOverviewSerializer,
@@ -29,6 +30,7 @@ from partner_catalog.api.v1.serializers import (
     PartnerSerializer,
 )
 from partner_catalog.api.v1.tasks import bulk_remove_invitations, bulk_upload_invitations
+from partner_catalog.helpers.reports import generate_csv_report
 from partner_catalog.models import (
     CatalogCourse,
     CatalogCourseEnrollment,
@@ -231,6 +233,29 @@ class PartnerCatalogViewSet(viewsets.ModelViewSet):
         serializer = CatalogCourseEnrollmentSerializer(enrollments, many=True)
         return Response(serializer.data)
 
+    @report_schema
+    @action(detail=True, methods=["get"], url_path="enrollments/report")
+    def enrollments_report(self, request, pk=None):
+        """Download CSV report of all course enrollments for this catalog."""
+        enrollments = CatalogCourseEnrollment.objects.filter(
+            catalog_course__catalog_id=pk
+        ).select_related("user", "catalog_course", "catalog_course__course_overview")
+
+        serializer = CatalogCourseEnrollmentSerializer(enrollments, many=True)
+        report_fields = [
+            "user__full_name",
+            "user__email",
+            "active",
+            "user__last_login",
+            "course_overview__display_name",
+            "course_overview__id",
+            "progress",
+            "has_certificate",
+        ]
+        return generate_csv_report(
+            serializer.data, report_fields, filename="enrollments_report.csv"
+        )
+
 
 class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
     """
@@ -278,6 +303,27 @@ class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
         qs = qs.annotate(enrollments_count=Subquery(enrollments_subquery))
         qs = annotate_learner_certified_count(qs)
         return qs
+
+    @report_schema
+    @action(detail=False, methods=["get"], url_path="report")
+    def report(self, request, *args, **kwargs):
+        """Download CSV report of all learners in this catalog."""
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        report_fields = [
+            "user__full_name",
+            "user__email",
+            "active",
+            "invite_sent_at",
+            "accepted_at",
+            "user__last_login",
+            "enrollments",
+            "certified",
+            "removed_at",
+        ]
+        return generate_csv_report(
+            serializer.data, report_fields, filename="learners_report.csv"
+        )
 
 
 class CatalogCourseViewSet(
@@ -327,6 +373,27 @@ class CatalogCourseViewSet(
         )
         qs = annotate_course_certified_count(qs)
         return qs
+
+    @report_schema
+    @action(detail=False, methods=["get"], url_path="report")
+    def report(self, request, *args, **kwargs):
+        """Download CSV report of all courses in this catalog."""
+        queryset = self.filter_queryset(self.get_queryset())
+        serializer = self.get_serializer(queryset, many=True)
+        report_fields = [
+            "course_run__display_name",
+            "position",
+            "course_run__start",
+            "course_run__end",
+            "course_run__enrollment_start",
+            "course_run__enrollment_end",
+            "enrollments",
+            "certified",
+            "completion_rate",
+        ]
+        return generate_csv_report(
+            serializer.data, report_fields, filename="courses_report.csv"
+        )
 
 
 class CatalogLearnerInvitationViewSet(
