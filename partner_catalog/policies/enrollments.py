@@ -45,6 +45,6 @@ def has_an_edx_platform_enrollment(*, user_id: int, course_id) -> bool:
 
     User = get_user_model()
     user = User.objects.only("id", "username").get(pk=user_id)
-    enrollment = get_enrollment(username=user.username, course_id=course_id)
+    enrollment = get_enrollment(username=user.username, course_id=str(course_id))
 
     return enrollment is not None
