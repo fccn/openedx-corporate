@@ -5,6 +5,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated, IsStaff, IsSuperuser
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
@@ -411,12 +412,11 @@ class CatalogLearnerInvitationViewSet(
                     invited_by=request.user,
                 )
                 created_invitations.append(invitation)
-            except Exception as e:
+            except ValidationError as e:
                 errors.append({
                     'email': email,
                     'error': str(e.detail[0]) if hasattr(e, 'detail') else str(e)
                 })
-
         output_serializer = self.get_serializer(created_invitations, many=True)
 
         response_data = {
