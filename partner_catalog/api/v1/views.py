@@ -497,7 +497,7 @@ class CatalogEnrollmentsViewSet(viewsets.ReadOnlyModelViewSet):
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
 
     filterset_fields = ["active", "user"]
-    search_fields = ["user__username", "user__email"]
+    search_fields = ["user__username", "user__first_name", "user__last_name", "user__email"]
     ordering_fields = ["id"]
     ordering = ["-id"]
 
