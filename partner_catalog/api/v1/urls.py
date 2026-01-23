@@ -8,6 +8,7 @@ from partner_catalog.api.v1.learner_views import LearnerCatalogCourseViewSet, Le
 from partner_catalog.api.v1.views import (
     CatalogCourseEnrollmentViewSet,
     CatalogCourseViewSet,
+    CatalogEnrollmentsViewSet,
     CatalogLearnerInvitationViewSet,
     CatalogLearnerViewset,
     PartnerCatalogViewSet,
@@ -26,6 +27,7 @@ manage_catalogs_router = NestedDefaultRouter(router, r"manage/catalogs", lookup=
 manage_catalogs_router.register(r"learners", CatalogLearnerViewset, basename="catalog-learners")
 manage_catalogs_router.register(r"courses", CatalogCourseViewSet, basename="catalog-courses")
 manage_catalogs_router.register(r"invitations", CatalogLearnerInvitationViewSet, basename="catalog-learner-invitations")
+manage_catalogs_router.register(r"enrollments", CatalogEnrollmentsViewSet, basename="catalog-enrollments")
 
 courses_router = NestedDefaultRouter(manage_catalogs_router, r"courses", lookup="course")
 courses_router.register(r"enrollments", CatalogCourseEnrollmentViewSet, basename="catalog-course-enrollments")

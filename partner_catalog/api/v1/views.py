@@ -216,21 +216,6 @@ class PartnerCatalogViewSet(viewsets.ModelViewSet):
         }
         return Response(response_data)
 
-    @action(detail=True, methods=["get"], url_path="enrollments")
-    def enrollments(self, request, pk=None):
-        """Get all course enrollments for this catalog."""
-        enrollments = CatalogCourseEnrollment.objects.filter(
-            catalog_course__catalog_id=pk
-        ).select_related("user", "catalog_course", "catalog_course__course_overview")
-
-        page = self.paginate_queryset(enrollments)
-        if page is not None:
-            serializer = CatalogCourseEnrollmentSerializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-
-        serializer = CatalogCourseEnrollmentSerializer(enrollments, many=True)
-        return Response(serializer.data)
-
 
 class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
     """
@@ -512,3 +497,31 @@ class CatalogCourseEnrollmentViewSet(
         qs = self.queryset
         course_pk = self.kwargs.get("course_pk")
         return qs.filter(catalog_course_id=course_pk) if course_pk else qs
+
+
+class CatalogEnrollmentsViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for retrieving enrollments across all courses in a specific corporate partner catalog.
+
+    This view provides read-only access to all user enrollments associated with a given PartnerCatalog,
+    including user details and course enrollment information. Useful for administrators to list and audit
+    active or historical enrollments for compliance and support purposes.
+    """
+
+    serializer_class = CatalogCourseEnrollmentSerializer
+    permission_classes = [IsPartnerCatalogManager]
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+
+    filterset_fields = ["active", "user"]
+    search_fields = ["user__username", "user__first_name", "user__last_name", "user__email"]
+    ordering_fields = ["id"]
+    ordering = ["-id"]
+
+    def get_queryset(self):
+        catalog_pk = self.kwargs["catalog_pk"]
+        return (
+            CatalogCourseEnrollment.objects.filter(
+                catalog_course__catalog_id=catalog_pk
+            )
+            .select_related("user", "catalog_course", "catalog_course__course_overview")
+        )
