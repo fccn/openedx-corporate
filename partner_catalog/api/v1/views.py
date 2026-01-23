@@ -1,6 +1,6 @@
 """Partner Catalog API v1 Views."""
 
-from django.db.models import Count, OuterRef, Q, Subquery
+from django.db.models import Count, F, OuterRef, Q, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated, IsStaff, IsSuperuser
 from rest_framework import filters, mixins, status, viewsets
@@ -238,7 +238,7 @@ class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
     Provides access to corporate partner catalog learner information.
     """
 
-    queryset = CatalogLearner.objects.select_related("catalog", "user")
+    queryset = CatalogLearner.objects.select_related("catalog", "user", "current_invitation")
     serializer_class = CatalogLearnerSerializer
     permission_classes = [IsPartnerCatalogManager]
     filter_backends = [
@@ -247,13 +247,15 @@ class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
         filters.OrderingFilter,
     ]
     filterset_fields = ["catalog", "active", "user"]
-    search_fields = ["user__username", "user__email"]
+    search_fields = ["user__username", "user__first_name", "user__last_name", "user__email"]
     ordering_fields = [
         "id",
         "user_id",
         "accepted_at",
         "removed_at",
         "active",
+        "invite_sent_at",
+        "user__last_login",
     ]
     ordering = ["id"]
 
@@ -268,6 +270,12 @@ class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
 
         if catalog_pk:
             qs = qs.filter(catalog_id=catalog_pk)
+
+        qs = qs.annotate(
+            invite_sent_at=F("current_invitation__invited_at"),
+            accepted_at=F("current_invitation__accepted_at"),
+            removed_at=F("current_invitation__removed_at"),
+        )
 
         enrollments_subquery = CatalogCourseEnrollment.objects.filter(
             user_id=OuterRef("user_id"),
