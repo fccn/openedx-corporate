@@ -247,7 +247,7 @@ class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
         filters.OrderingFilter,
     ]
     filterset_fields = ["catalog", "active", "user"]
-    search_fields = ["user__username", "user__email"]
+    search_fields = ["user__username", "user__first_name", "user__last_name", "user__email"]
     ordering_fields = [
         "id",
         "user_id",
