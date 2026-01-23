@@ -255,6 +255,7 @@ class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
         "removed_at",
         "active",
         "invite_sent_at",
+        "user__last_login",
     ]
     ordering = ["id"]
 
