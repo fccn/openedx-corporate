@@ -414,7 +414,7 @@ class CatalogLearnerInvitationViewSet(
             except Exception as e:
                 errors.append({
                     'email': email,
-                    'error': str(e)
+                    'error': str(e.detail[0]) if hasattr(e, 'detail') else str(e)
                 })
 
         output_serializer = self.get_serializer(created_invitations, many=True)
