@@ -492,6 +492,14 @@ class CatalogCourseEnrollmentViewSet(
 
 
 class CatalogEnrollmentsViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    ViewSet for retrieving enrollments across all courses in a specific corporate partner catalog.
+
+    This view provides read-only access to all user enrollments associated with a given PartnerCatalog,
+    including user details and course enrollment information. Useful for administrators to list and audit
+    active or historical enrollments for compliance and support purposes.
+    """
+
     serializer_class = CatalogCourseEnrollmentSerializer
     permission_classes = [IsPartnerCatalogManager]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]

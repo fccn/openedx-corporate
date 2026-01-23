@@ -8,11 +8,11 @@ from partner_catalog.api.v1.learner_views import LearnerCatalogCourseViewSet, Le
 from partner_catalog.api.v1.views import (
     CatalogCourseEnrollmentViewSet,
     CatalogCourseViewSet,
+    CatalogEnrollmentsViewSet,
     CatalogLearnerInvitationViewSet,
     CatalogLearnerViewset,
     PartnerCatalogViewSet,
     PartnerViewset,
-    CatalogEnrollmentsViewSet
 )
 
 router = DefaultRouter()
