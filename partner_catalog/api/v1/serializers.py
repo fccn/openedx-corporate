@@ -355,8 +355,13 @@ class CatalogLearnerInvitationSerializer(serializers.ModelSerializer):
     catalog_id = serializers.PrimaryKeyRelatedField(
         source="catalog",
         queryset=PartnerCatalog.objects.all(),
+        required=False,
     )
-    invite_email = serializers.EmailField()
+    invite_email = serializers.ListField(
+        child=serializers.EmailField(),
+        min_length=1,
+        help_text="List of email addresses to invite. Can be a single email string or a list of emails."
+    )
 
     class Meta:
         model = CatalogLearnerInvitation
@@ -375,6 +380,30 @@ class CatalogLearnerInvitationSerializer(serializers.ModelSerializer):
             "accepted_at",
             "declined_at",
         ]
+
+    def validate_invite_email(self, value):
+        """Normalize input: convert single email string to list if needed."""
+        if isinstance(value, str):
+            return [value]
+        if isinstance(value, list):
+            return value
+        raise serializers.ValidationError("invite_email must be a string or a list of strings.")
+
+    def to_representation(self, instance):
+        """
+        Represent invite_email as a single string for each invitation.
+
+        The write-time API accepts a list of emails so the view can create
+        multiple invitations in one request, but each individual
+        CatalogLearnerInvitation instance only stores a single email address.
+        DRF's ListField would normally iterate over that string and return a
+        list of characters, so we override the representation to expose the
+        actual stored email value.
+        """
+        data = super().to_representation(instance)
+        # Ensure the response shows the stored email string, not a char list.
+        data["invite_email"] = getattr(instance, "invite_email", None)
+        return data
 
     def get_status(self, obj):
         """Return the display string for the invitation status."""

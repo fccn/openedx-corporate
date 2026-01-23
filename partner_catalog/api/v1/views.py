@@ -5,6 +5,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated, IsStaff, IsSuperuser
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
@@ -391,19 +392,47 @@ class CatalogLearnerInvitationViewSet(
         return CatalogLearnerInvitationSerializer
 
     def create(self, request, *args, **kwargs):
-        """Create a new invitation."""
+        """Create one or more invitations."""
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         catalog_id = self.kwargs.get('catalog_pk')
 
-        invitation = self.service.create_new_invitation(
-            invite_email=serializer.validated_data.get('invite_email'),
-            catalog_id=catalog_id,
-            invited_by=request.user,
-        )
+        invite_emails = serializer.validated_data.get('invite_email', [])
 
-        output_serializer = self.get_serializer(invitation)
-        return Response(output_serializer.data, status=status.HTTP_201_CREATED)
+        created_invitations = []
+        errors = []
+
+        for email in invite_emails:
+            try:
+                invitation = self.service.create_new_invitation(
+                    invite_email=email,
+                    catalog_id=catalog_id,
+                    invited_by=request.user,
+                )
+                created_invitations.append(invitation)
+            except ValidationError as e:
+                errors.append({
+                    'email': email,
+                    'error': str(e.detail[0]) if hasattr(e, 'detail') else str(e)
+                })
+        output_serializer = self.get_serializer(created_invitations, many=True)
+
+        response_data = {
+            'invitations': output_serializer.data,
+            'created_count': len(created_invitations),
+            'total_requested': len(invite_emails),
+        }
+
+        # Include errors if any occurred
+        if errors:
+            response_data['errors'] = errors
+            # Return partial success status if some succeeded
+            if created_invitations:
+                return Response(response_data, status=status.HTTP_207_MULTI_STATUS)
+            # Return error status if all failed
+            return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(response_data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["post"], url_path="remove")
     def remove_invite(self, request, pk=None, **kwargs):
