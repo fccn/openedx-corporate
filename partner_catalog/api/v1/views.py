@@ -8,7 +8,7 @@ from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
-from partner_catalog.api.v1.filters import PartnerCatalogFilter, PartnerFilter
+from partner_catalog.api.v1.filters import CatalogCourseOrderingFilter, PartnerCatalogFilter, PartnerFilter
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
 from partner_catalog.api.v1.schemas import (
     add_courses_schema,
@@ -293,12 +293,17 @@ class CatalogCourseViewSet(
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
-        filters.OrderingFilter,
+        CatalogCourseOrderingFilter,
     ]
     filterset_fields = ["catalog", "course_overview"]
     search_fields = ["course_overview__display_name"]
-    ordering_fields = ["id", "position"]
     ordering = ["position"]
+    ordering_fields = [
+        "id", "position",
+        "course_start", "course_end",
+        "enrollment_start", "enrollment_end",
+        "enrollments", "certified",
+    ]
 
     # Mixin config
     nested_lookup_kwarg = "catalog_pk"
