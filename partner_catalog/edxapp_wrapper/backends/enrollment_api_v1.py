@@ -7,6 +7,7 @@ from openedx.core.djangoapps.enrollments.api import add_enrollment as api_add_en
 from openedx.core.djangoapps.enrollments.api import get_enrollment as api_get_enrollment
 from openedx.core.djangoapps.enrollments.api import update_enrollment as api_update_enrollment
 
+
 def add_enrollment(
     *,
     username,
@@ -58,6 +59,7 @@ def get_enrollment(
     )
     return enrollment
 
+
 def update_enrollment(
     *,
     username,
@@ -66,6 +68,19 @@ def update_enrollment(
     is_active: Optional[bool] = None,
     enrollment_attributes: Optional[List[Dict[str, Any]]] = None,
 ):
+    """
+    Update an existing enrollment for a user and course.
+
+    Args:
+        username: The username of the learner.
+        course_id: The course key identifying the course.
+        mode: Optional new enrollment mode.
+        is_active: Optional flag to activate/deactivate the enrollment.
+        enrollment_attributes: Optional list of extra attributes.
+
+    Returns:
+        The updated enrollment object returned by the enrollment API.
+    """
     enrollment = api_update_enrollment(
         username=username,
         course_id=course_id,

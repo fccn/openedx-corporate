@@ -1,5 +1,11 @@
+"""
+Utilities for inspecting a user's enrollment mode in the LMS.
+"""
+
 from django.contrib.auth import get_user_model
+
 from partner_catalog.edxapp_wrapper.enrollment_api import get_enrollment
+
 
 def get_platform_enrollment_mode(*, user_id: int, course_id: str) -> str:
     """

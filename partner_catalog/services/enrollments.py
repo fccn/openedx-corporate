@@ -10,12 +10,12 @@ from django.db import IntegrityError, transaction
 
 from partner_catalog.models import CatalogCourse, CatalogCourseEnrollment
 from partner_catalog.policies.enrollments import can_user_enroll_in_catalog_course
-from partner_catalog.policies.limits import can_consume_user_limit, can_consume_course_limit
+from partner_catalog.policies.limits import can_consume_course_limit, can_consume_user_limit
 from partner_catalog.policies.platform_enrollment import get_platform_enrollment_mode
 from partner_catalog.services.platform_enrollment import (
-    upgrade_to_verified,
-    ensure_edx_platform_enrollment,
     downgrade_to_audit,
+    ensure_edx_platform_enrollment,
+    upgrade_to_verified,
 )
 
 User = get_user_model()

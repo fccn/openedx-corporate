@@ -25,6 +25,9 @@ from unittest.mock import MagicMock
 import pytest
 from django.core.exceptions import ValidationError
 
+# pytest fixtures intentionally reuse and shadow names; avoid noisy pylint warnings.
+# pylint: disable=redefined-outer-name
+
 
 # --------------------------------------------------------------------
 # Atomic no-op + service import/unwrap
@@ -43,7 +46,7 @@ def enrollments_module_no_atomic(monkeypatch):
     2) unwrap methods already decorated with @transaction.atomic
        so calling them doesn't try to connect to DB.
     """
-    import partner_catalog.services.enrollments as m
+    import partner_catalog.services.enrollments as m  # pylint: disable=import-outside-toplevel
 
     monkeypatch.setattr(m.transaction, "atomic", _noop_atomic)
 
@@ -95,7 +98,8 @@ def test_create_or_activate_access_denied_raises_and_no_lms_calls(
     enrollments_module_no_atomic,
     svc,
 ):
-    m = enrollments_module_no_atomic
+    # Fixture is required for side effects (monkeypatching), even if not referenced below.
+    _ = enrollments_module_no_atomic
 
     user_get = mocker.patch("partner_catalog.services.enrollments.User.objects.get")
     cc_select_related = mocker.patch("partner_catalog.services.enrollments.CatalogCourse.objects.select_related")
@@ -342,7 +346,11 @@ def test_existing_enrollment_mode_none_calls_ensure_not_create(
     result = svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=fake_course.id)
 
     assert result is fake_enrollment
-    ensure.assert_called_once_with(user_id=1, catalog_course_id=fake_enrollment.catalog_course_id, target_mode="verified")
+    ensure.assert_called_once_with(
+        user_id=1,
+        catalog_course_id=fake_enrollment.catalog_course_id,
+        target_mode="verified",
+    )
     upgrade.assert_not_called()
     cce_create.assert_not_called()
 

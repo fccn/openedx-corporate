@@ -592,6 +592,8 @@ class CatalogCourseEnrollment(models.Model):
     active = models.BooleanField(default=True)
 
     class Meta:
+        """Metadata options for CatalogCourseEnrollment."""
+
         constraints = [
             # One license per user per course, across all catalogs
             models.UniqueConstraint(
@@ -608,12 +610,16 @@ class CatalogCourseEnrollment(models.Model):
         ]
 
     def save(self, *args, **kwargs):
+        """
+        Persist the enrollment, keeping course_overview aligned with catalog_course.
+        """
         # Safety net: keep course_overview in sync with the catalog_course
         if self.catalog_course_id and (not self.course_overview_id):
             self.course_overview = self.catalog_course.course_overview
         super().save(*args, **kwargs)
 
     def __str__(self):
+        """Return a readable representation of the enrollment."""
         state = "active" if self.active else "inactive"
         return (
             f"Enrollment(user_id={self.user_id}, "

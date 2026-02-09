@@ -1,10 +1,10 @@
-from __future__ import annotations
+"""Helpers for keeping LMS enrollments in sync with catalog enrollments."""
 
 import logging
 
 from django.contrib.auth import get_user_model
 
-from partner_catalog.edxapp_wrapper.enrollment_api import add_enrollment, update_enrollment, get_enrollment
+from partner_catalog.edxapp_wrapper.enrollment_api import add_enrollment, get_enrollment, update_enrollment
 from partner_catalog.models import CatalogCourse
 
 logger = logging.getLogger(__name__)
