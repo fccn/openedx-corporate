@@ -46,3 +46,20 @@ def get_enrollment(
         username=username,
         course_id=course_id,
     )
+
+
+def update_enrollment(
+    *,
+    username,
+    course_id,
+    mode: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    enrollment_attributes: Optional[List[Dict[str, Any]]] = None,
+):
+    return _backend().update_enrollment(
+        username=username,
+        course_id=course_id,
+        mode=mode,
+        is_active=is_active,
+        enrollment_attributes=enrollment_attributes,
+    )

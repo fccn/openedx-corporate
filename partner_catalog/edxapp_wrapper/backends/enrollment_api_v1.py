@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 # pylint: disable=import-error
 from openedx.core.djangoapps.enrollments.api import add_enrollment as api_add_enrollment
 from openedx.core.djangoapps.enrollments.api import get_enrollment as api_get_enrollment
-
+from openedx.core.djangoapps.enrollments.api import update_enrollment as api_update_enrollment
 
 def add_enrollment(
     *,
@@ -55,5 +55,22 @@ def get_enrollment(
     enrollment = api_get_enrollment(
         username=username,
         course_id=course_id,
+    )
+    return enrollment
+
+def update_enrollment(
+    *,
+    username,
+    course_id,
+    mode: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    enrollment_attributes: Optional[List[Dict[str, Any]]] = None,
+):
+    enrollment = api_update_enrollment(
+        username=username,
+        course_id=course_id,
+        mode=mode,
+        is_active=is_active,
+        enrollment_attributes=enrollment_attributes,
     )
     return enrollment

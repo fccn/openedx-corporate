@@ -1,38 +1,27 @@
-"""
-Services to enroll a user in edX (LMS) from a CorporatePartnerCatalogCourse,
-setting the enrollment attribute cpa/catalog_id. No return value.
-"""
-
 from __future__ import annotations
 
 import logging
 
 from django.contrib.auth import get_user_model
 
-from partner_catalog.edxapp_wrapper.enrollment_api import add_enrollment
+from partner_catalog.edxapp_wrapper.enrollment_api import add_enrollment, update_enrollment, get_enrollment
 from partner_catalog.models import CatalogCourse
 
 logger = logging.getLogger(__name__)
 
+HONOR = "honor"
+AUDIT = "audit"
+VERIFIED = "verified"
 
-def ensure_edx_platform_enrollment(*, user_id: int, catalog_course_id: str) -> None:
+
+def ensure_edx_platform_enrollment(*, user_id: int, catalog_course_id: int, target_mode: str = VERIFIED) -> None:
     """
-    Ensures that a user is enrolled in the edX platform course corresponding to the given
-    CorporatePartnerCatalogCourse, and sets the enrollment attribute 'cpa/catalog_id'.
+    Ensure LMS enrollment exists and (if applicable) is in target_mode.
 
-    This function is idempotent and can be called multiple times for the same user and course.
-    It will create the enrollment if it does not exist, and update the enrollment attributes
-    as needed.
-
-    Args:
-        user_id (int): The ID of the user to enroll.
-        catalog_course_id (str): The ID of the CorporatePartnerCatalogCourse.
-
-    Returns:
-        None
-
-    Raises:
-        Exception: If enrollment creation or update fails.
+    - If honor: do nothing
+    - If none: add_enrollment(mode=target_mode)
+    - If audit and target_mode=verified: update_enrollment(mode=verified)
+    - If verified already: no-op
     """
     User = get_user_model()
     user = User.objects.only("id", "username").get(pk=user_id)
@@ -47,22 +36,50 @@ def ensure_edx_platform_enrollment(*, user_id: int, catalog_course_id: str) -> N
     course_id = str(cc.course_overview.id)
     catalog_id = str(getattr(cc, "catalog_id", None) or cc.catalog.id)
 
-    # TODO: Add attributes logic to link the catalog ids when
-    # called outside PARTNER CATALOG context
-    payload = {
-        "username": user.username,
-        "course_id": course_id,
-    }
-
     try:
-        add_enrollment(**payload)
+        existing = get_enrollment(username=user.username, course_id=course_id)
+
+        if existing:
+            mode = (existing.get("mode") or "").lower()
+
+            # honor self-enroll: do not touch
+            if mode == HONOR:
+                logger.info(
+                    "Honor enrollment detected; skipping LMS changes (user_id=%s, course_id=%s, catalog_id=%s)",
+                    user_id, course_id, catalog_id
+                )
+                return
+
+            # already in target mode
+            if mode == target_mode:
+                return
+
+            # upgrade/downgrade
+            update_enrollment(username=user.username, course_id=course_id, mode=target_mode)
+            logger.info(
+                "Enrollment updated (user_id=%s, course_id=%s, %s -> %s, catalog_id=%s)",
+                user_id, course_id, mode, target_mode, catalog_id
+            )
+            return
+
+        # no enrollment => create with target mode
+        add_enrollment(username=user.username, course_id=course_id, mode=target_mode)
         logger.info(
-            "Enrollment ensured (user_id=%s, course_id=%s, catalog_id=%s)",
-            user_id, course_id, catalog_id
+            "Enrollment created (user_id=%s, course_id=%s, mode=%s, catalog_id=%s)",
+            user_id, course_id, target_mode, catalog_id
         )
+
     except Exception:
         logger.exception(
-            "Failed to ensure enrollment (user_id=%s, course_id=%s, catalog_id=%s)",
-            user_id, course_id, catalog_id
+            "Failed to ensure enrollment (user_id=%s, course_id=%s, target_mode=%s, catalog_id=%s)",
+            user_id, course_id, target_mode, catalog_id
         )
         raise
+
+
+def upgrade_to_verified(*, user_id: int, catalog_course_id: int) -> None:
+    ensure_edx_platform_enrollment(user_id=user_id, catalog_course_id=catalog_course_id, target_mode=VERIFIED)
+
+
+def downgrade_to_audit(*, user_id: int, catalog_course_id: int) -> None:
+    ensure_edx_platform_enrollment(user_id=user_id, catalog_course_id=catalog_course_id, target_mode=AUDIT)
