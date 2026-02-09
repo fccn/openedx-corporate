@@ -9,8 +9,14 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
 from partner_catalog.models import CatalogCourse, CatalogCourseEnrollment
-from partner_catalog.policies.enrollments import can_user_enroll_in_catalog_course, has_an_edx_platform_enrollment
-from partner_catalog.services.platform_enrollment import ensure_edx_platform_enrollment
+from partner_catalog.policies.enrollments import can_user_enroll_in_catalog_course
+from partner_catalog.policies.limits import can_consume_user_limit, can_consume_course_limit
+from partner_catalog.policies.platform_enrollment import get_platform_enrollment_mode
+from partner_catalog.services.platform_enrollment import (
+    upgrade_to_verified,
+    ensure_edx_platform_enrollment,
+    downgrade_to_audit,
+)
 
 User = get_user_model()
 
@@ -20,89 +26,182 @@ class CatalogCourseEnrollmentService:
 
     ERROR_USER_NOT_ENROLLED = "User is not enrolled in the specified catalog course."
     ERROR_USER_NOT_ALLOWED_TO_ENROLL = "User is not allowed to enroll in this catalog course."
+    ERROR_HONOR_SELF_ENROLLMENT = "User already has honor enrollment; no catalog license is consumed."
+    ERROR_UNSUPPORTED_ENROLLMENT_MODE = "Unsupported enrollment mode for LMS enrollment."
 
-    @transaction.atomic
-    def create_or_activate_course_enrollment(
-        self, *, user_id, catalog_course_id
-    ) -> CatalogCourseEnrollment:
+    def _get_platform_mode(self, *, user_id: int, course_overview_id) -> str:
         """
-        Create or activate a catalog course enrollment for a user.
+        Wrapper to fetch LMS enrollment mode for a user/course.
 
-        Creates a new enrollment if it doesn't exist, or reactivates an existing inactive one.
-        Validates that the user has an edX platform enrollment and is allowed to enroll.
-
-        Args:
-            user_id: The user ID to enroll.
-            catalog_course_id: The CatalogCourse ID to enroll the user in.
-        Returns:
-            The CatalogCourseEnrollment instance.
+        Returns: 'none' | 'honor' | 'audit' | 'verified' | 'unknown'
         """
-        catalog_course = CatalogCourse.objects.get(id=catalog_course_id)
-
-        if not can_user_enroll_in_catalog_course(
-            user=User.objects.get(id=user_id),
-            catalog_course=catalog_course,
-        ):
-            raise ValidationError(self.ERROR_USER_NOT_ALLOWED_TO_ENROLL)
-
-        if not has_an_edx_platform_enrollment(
+        return get_platform_enrollment_mode(
             user_id=user_id,
-            course_id=catalog_course.course_overview_id,
-        ):
+            course_id=str(course_overview_id),
+        )
+
+    def _sync_lms_for_catalog_access(
+        self,
+        *,
+        user_id: int,
+        catalog_course_id: int,
+        course_overview_id,
+    ) -> str:
+        """
+        Ensure LMS enrollment matches catalog entitlement (verified),
+        based on current LMS mode.
+
+        Returns the mode observed (after refresh).
+        """
+        mode = self._get_platform_mode(user_id=user_id, course_overview_id=course_overview_id)
+
+        if mode == "honor":
+            # honor self-enroll: do not touch
+            return mode
+
+        if mode == "unknown":
+            raise ValidationError(self.ERROR_UNSUPPORTED_ENROLLMENT_MODE)
+
+        if mode == "none":
             ensure_edx_platform_enrollment(
                 user_id=user_id,
                 catalog_course_id=catalog_course_id,
+                target_mode="verified",
             )
+        elif mode == "audit":
+            upgrade_to_verified(user_id=user_id, catalog_course_id=catalog_course_id)
+        # verified => no-op
+
+        return mode
+
+    @transaction.atomic
+    def create_or_activate_course_enrollment(self, *, user_id, catalog_course_id) -> CatalogCourseEnrollment:
+        """
+        Create or activate a catalog course enrollment for a user.
+
+        - Uses (user, course_overview) uniqueness (one license per course).
+        - First catalog to grant license prevails (does not reassign catalog_course).
+        - Enforces catalog limits only when a new license would be created.
+        - Syncs LMS enrollment:
+            * none -> verified (create)
+            * audit -> verified (upgrade)
+            * verified -> no-op
+            * honor -> do not consume license (raise ValidationError for caller to redirect)
+        """
+        user = User.objects.get(id=user_id)
+        catalog_course = (
+            CatalogCourse.objects
+            .select_related("course_overview", "catalog")
+            .get(id=catalog_course_id)
+        )
+        course_overview_id = catalog_course.course_overview_id
+
+        if not can_user_enroll_in_catalog_course(user=user, catalog_course=catalog_course):
+            raise ValidationError(self.ERROR_USER_NOT_ALLOWED_TO_ENROLL)
+
+        # Early honor check (so we don't consume licenses for self-enrolled honor users)
+        mode = self._get_platform_mode(user_id=user_id, course_overview_id=course_overview_id)
+        if mode == "honor":
+            raise ValidationError(self.ERROR_HONOR_SELF_ENROLLMENT)
+        if mode == "unknown":
+            raise ValidationError(self.ERROR_UNSUPPORTED_ENROLLMENT_MODE)
+
+        enrollment = (
+            CatalogCourseEnrollment.objects
+            .select_for_update()
+            .filter(user_id=user_id, course_overview_id=course_overview_id)
+            .first()
+        )
+
+        if enrollment:
+            if not enrollment.active:
+                enrollment.active = True
+                enrollment.save(update_fields=["active"])
+
+            # Re-check mode close to LMS sync to reduce race issues
+            self._sync_lms_for_catalog_access(
+                user_id=user_id,
+                catalog_course_id=enrollment.catalog_course_id,
+                course_overview_id=course_overview_id,
+            )
+            return enrollment
+
+        # New license creation path: enforce limits
+        catalog = catalog_course.catalog
+
+        if not can_consume_user_limit(catalog=catalog):
+            raise ValidationError("User limit reached for this catalog.")
+
+        if not can_consume_course_limit(catalog=catalog, course_overview_id=course_overview_id):
+            raise ValidationError("Course enrollment limit reached for this catalog.")
+
+        # Re-check mode close to LMS sync to reduce race issues
+        self._sync_lms_for_catalog_access(
+            user_id=user_id,
+            catalog_course_id=catalog_course_id,
+            course_overview_id=course_overview_id,
+        )
 
         try:
-            enrollment = CatalogCourseEnrollment.objects.create(
+            return CatalogCourseEnrollment.objects.create(
                 user_id=user_id,
                 catalog_course_id=catalog_course_id,
+                course_overview_id=course_overview_id,
                 active=True,
             )
         except IntegrityError:
-            enrollment = CatalogCourseEnrollment.objects.get(
-                user_id=user_id,
-                catalog_course_id=catalog_course_id,
+            # Race: another request created the license concurrently
+            enrollment = (
+                CatalogCourseEnrollment.objects
+                .select_for_update()
+                .get(user_id=user_id, course_overview_id=course_overview_id)
             )
-            enrollment.active = True
-            enrollment.save(update_fields=["active"])
-
-        return enrollment
+            if not enrollment.active:
+                enrollment.active = True
+                enrollment.save(update_fields=["active"])
+            return enrollment
 
     @transaction.atomic
     def deactivate_course_enrollment(self, *, catalog_course_enrollment_id) -> None:
         """
-        Deactivate a specific catalog course enrollment.
+        Deactivate a specific catalog course enrollment (license).
 
-        Args:
-            catalog_course_enrollment_id: The CatalogCourseEnrollment ID to deactivate.
+        Also applies LMS downgrade to audit for the owner catalog-course.
         """
         try:
-            catalog_course_enrollment = CatalogCourseEnrollment.objects.get(
+            e = CatalogCourseEnrollment.objects.select_related("catalog_course", "course_overview").get(
                 id=catalog_course_enrollment_id,
             )
         except CatalogCourseEnrollment.DoesNotExist as exc:
             raise ValidationError(self.ERROR_USER_NOT_ENROLLED) from exc
 
-        catalog_course_enrollment.active = False
-        catalog_course_enrollment.save(update_fields=["active"])
+        if e.active:
+            e.active = False
+            e.save(update_fields=["active"])
+
+        downgrade_to_audit(user_id=e.user_id, catalog_course_id=e.catalog_course_id)
 
     @transaction.atomic
     def deactivate_enrollments_by_catalog(self, *, user_id, catalog_id) -> None:
         """
-        Deactivate multiple catalog course enrollments for a user.
+        Deactivate all *owned* licenses for a user by catalog.
 
-        Args:
-            user_id: The user ID to deactivate enrollments for.
-            catalog_course_ids: A list of catalog course IDs to deactivate enrollments from.
+        Only affects enrollments whose owner (catalog_course.catalog_id) matches catalog_id.
+        Applies LMS downgrade to audit for each affected enrollment.
         """
-        catalog_course_ids = CatalogCourse.objects.filter(
-            catalog_id=catalog_id
-        ).values_list("id", flat=True)
+        owned_catalog_course_ids = list(
+            CatalogCourseEnrollment.objects.filter(
+                user_id=user_id,
+                active=True,
+                catalog_course__catalog_id=catalog_id,
+            ).values_list("catalog_course_id", flat=True)
+        )
 
         CatalogCourseEnrollment.objects.filter(
             user_id=user_id,
-            catalog_course_id__in=catalog_course_ids,
             active=True,
+            catalog_course__catalog_id=catalog_id,
         ).update(active=False)
+
+        for cc_id in owned_catalog_course_ids:
+            downgrade_to_audit(user_id=user_id, catalog_course_id=cc_id)
