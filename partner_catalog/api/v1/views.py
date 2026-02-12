@@ -11,7 +11,6 @@ from rest_framework.response import Response
 
 from partner_catalog.api.v1.filters import CatalogCourseOrderingFilter, PartnerCatalogFilter, PartnerFilter
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
-from partner_catalog.helpers.mixins import CSVExportMixin
 from partner_catalog.api.v1.schemas import (
     add_courses_schema,
     bulk_remove_invitations_schema,
@@ -31,6 +30,7 @@ from partner_catalog.api.v1.serializers import (
     PartnerSerializer,
 )
 from partner_catalog.api.v1.tasks import bulk_remove_invitations, bulk_upload_invitations
+from partner_catalog.helpers.mixins import CSVExportMixin
 from partner_catalog.models import (
     CatalogCourse,
     CatalogCourseEnrollment,
