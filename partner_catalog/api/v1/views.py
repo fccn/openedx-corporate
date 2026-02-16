@@ -30,6 +30,7 @@ from partner_catalog.api.v1.serializers import (
     PartnerSerializer,
 )
 from partner_catalog.api.v1.tasks import bulk_remove_invitations, bulk_upload_invitations
+from partner_catalog.helpers.mixins import CSVExportMixin
 from partner_catalog.models import (
     CatalogCourse,
     CatalogCourseEnrollment,
@@ -88,7 +89,7 @@ class PartnerViewset(viewsets.ReadOnlyModelViewSet):
         return qs
 
 
-class PartnerCatalogViewSet(viewsets.ModelViewSet):
+class PartnerCatalogViewSet(CSVExportMixin, viewsets.ModelViewSet):
     """
     ViewSet for Corporate Partner Catalog data.
     Provides access to corporate partner catalog information.
@@ -98,6 +99,26 @@ class PartnerCatalogViewSet(viewsets.ModelViewSet):
     queryset = PartnerCatalog.objects.all()
     serializer_class = PartnerCatalogSerializer
     permission_classes = [IsPartnerCatalogManager]
+
+    csv_filename = "catalogs_report.csv"
+    csv_fields = [
+        "name", "slug", "status", "courses", "enrollments",
+        "total_learners", "active_learners", "certified", "completion_rate",
+        "available_start_date", "available_end_date",
+    ]
+    csv_labels = {
+        "name": "Catalog Name",
+        "slug": "Slug",
+        "status": "Status",
+        "courses": "Courses",
+        "enrollments": "Enrollments",
+        "total_learners": "Total Learners",
+        "active_learners": "Active Learners",
+        "certified": "Certified",
+        "completion_rate": "Completion Rate",
+        "available_start_date": "Available Start Date",
+        "available_end_date": "Available End Date",
+    }
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
@@ -218,7 +239,7 @@ class PartnerCatalogViewSet(viewsets.ModelViewSet):
         return Response(response_data)
 
 
-class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
+class CatalogLearnerViewset(CSVExportMixin, InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for Corporate Partner Catalog Learner data.
     Provides access to corporate partner catalog learner information.
@@ -227,6 +248,23 @@ class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
     queryset = CatalogLearner.objects.select_related("catalog", "user", "current_invitation")
     serializer_class = CatalogLearnerSerializer
     permission_classes = [IsPartnerCatalogManager]
+
+    csv_filename = "learners_report.csv"
+    csv_fields = [
+        "user.full_name", "user.email", "active", "invite_sent_at",
+        "accepted_at", "user.last_login", "enrollments", "certified", "removed_at",
+    ]
+    csv_labels = {
+        "user.full_name": "Full Name",
+        "user.email": "Email",
+        "active": "Active",
+        "invite_sent_at": "Invite Sent At",
+        "accepted_at": "Accepted At",
+        "user.last_login": "Last Login",
+        "enrollments": "Enrollments",
+        "certified": "Certified",
+        "removed_at": "Removed At",
+    }
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
@@ -275,6 +313,7 @@ class CatalogLearnerViewset(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
 
 
 class CatalogCourseViewSet(
+    CSVExportMixin,
     InjectNestedFKMixin,
     mixins.RetrieveModelMixin,
     mixins.UpdateModelMixin,
@@ -291,6 +330,24 @@ class CatalogCourseViewSet(
     )
     serializer_class = CatalogCourseSerializer
     permission_classes = [IsPartnerCatalogManager]
+
+    csv_filename = "courses_report.csv"
+    csv_fields = [
+        "course_run.display_name", "position", "course_run.start", "course_run.end",
+        "course_run.enrollment_start", "course_run.enrollment_end",
+        "enrollments", "certified", "completion_rate",
+    ]
+    csv_labels = {
+        "course_run.display_name": "Course Name",
+        "position": "Position",
+        "course_run.start": "Start Date",
+        "course_run.end": "End Date",
+        "course_run.enrollment_start": "Enrollment Start",
+        "course_run.enrollment_end": "Enrollment End",
+        "enrollments": "Enrollments",
+        "certified": "Certified",
+        "completion_rate": "Completion Rate",
+    }
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
@@ -502,7 +559,7 @@ class CatalogLearnerInvitationViewSet(
 
 
 class CatalogCourseEnrollmentViewSet(
-    viewsets.ReadOnlyModelViewSet, InjectNestedFKMixin
+    CSVExportMixin, viewsets.ReadOnlyModelViewSet, InjectNestedFKMixin
 ):
     """
     ViewSet for Catalog Course Enrollments.
@@ -512,6 +569,20 @@ class CatalogCourseEnrollmentViewSet(
     queryset = CatalogCourseEnrollment.objects.select_related("user", "catalog_course")
     serializer_class = CatalogCourseEnrollmentSerializer
     permission_classes = [IsPartnerCatalogManager]
+
+    csv_filename = "course_enrollments_report.csv"
+    csv_fields = [
+        "user.full_name", "user.email", "active", "user.last_login",
+        "progress", "has_certificate",
+    ]
+    csv_labels = {
+        "user.full_name": "Full Name",
+        "user.email": "Email",
+        "active": "Active",
+        "user.last_login": "Last Login",
+        "progress": "Progress",
+        "has_certificate": "Has Certificate",
+    }
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
@@ -533,7 +604,7 @@ class CatalogCourseEnrollmentViewSet(
         return qs.filter(catalog_course_id=course_pk) if course_pk else qs
 
 
-class CatalogEnrollmentsViewSet(viewsets.ReadOnlyModelViewSet):
+class CatalogEnrollmentsViewSet(CSVExportMixin, viewsets.ReadOnlyModelViewSet):
     """
     ViewSet for retrieving enrollments across all courses in a specific corporate partner catalog.
 
@@ -544,6 +615,23 @@ class CatalogEnrollmentsViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = CatalogCourseEnrollmentSerializer
     permission_classes = [IsPartnerCatalogManager]
+
+    csv_filename = "enrollments_report.csv"
+    csv_fields = [
+        "user.full_name", "user.email", "active", "user.last_login",
+        "course_overview.display_name", "course_overview.id",
+        "progress", "has_certificate",
+    ]
+    csv_labels = {
+        "user.full_name": "Full Name",
+        "user.email": "Email",
+        "active": "Active",
+        "user.last_login": "Last Login",
+        "course_overview.display_name": "Course Name",
+        "course_overview.id": "Course ID",
+        "progress": "Progress",
+        "has_certificate": "Has Certificate",
+    }
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
 
     filterset_fields = ["active", "user"]
