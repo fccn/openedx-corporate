@@ -254,7 +254,7 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
         (
             "Additional Information",
             {
-                "fields": ("authorization_message",),
+                "fields": ("authorization_message", "support_email", "alternative_link"),
             },
         ),
         (
