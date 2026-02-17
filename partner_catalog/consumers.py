@@ -21,6 +21,7 @@ from partner_catalog.events.signals import (
 )
 from partner_catalog.services.catalogs import PartnerCatalogService
 from partner_catalog.services.enrollments import CatalogCourseEnrollmentService
+from partner_catalog.tasks.emails import send_catalog_invitation_created_email
 
 logger = logging.getLogger("partner_catalog.events")
 
@@ -32,14 +33,19 @@ def handle_catalog_learner_invitation_created(
     **_kwargs: Any
 ) -> None:
     """Handle creation of a CatalogLearnerInvitation."""
-    # TODO: Add the needed logic when an invitation is created, like send notification email.
-    # TODO: Catch errors, retry or set the invitation status to FAILED
-    logger.info(
-        "CATALOG_LEARNER_INVITATION_CREATED: id=%s catalog_id=%s status=%s",
-        invitation.id,
-        invitation.catalog_id,
-        invitation.status,
-    )
+    # Enqueue email sending to Celery worker (do not send inline).
+    try:
+        logger.info(
+            "Enqueueing invitation created email: id=%s catalog_id=%s",
+            invitation.id,
+            invitation.catalog_id,
+        )
+        send_catalog_invitation_created_email.delay(invitation.id)
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception(
+            "Failed to enqueue invitation created email for id=%s",
+            getattr(invitation, "id", None),
+        )
 
 
 @receiver(CATALOG_LEARNER_INVITATION_ACCEPTED_V1)
