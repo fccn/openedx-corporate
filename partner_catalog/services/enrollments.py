@@ -5,9 +5,16 @@ This module provides services for managing enrollments in catalog courses for co
 from __future__ import annotations
 
 from django.contrib.auth import get_user_model
-from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
 
+from partner_catalog.exceptions import (
+    CourseLimitReached,
+    HonorSelfEnrollment,
+    NotAllowedToEnroll,
+    UnsupportedEnrollmentMode,
+    UserLimitReached,
+    UserNotEnrolled,
+)
 from partner_catalog.models import CatalogCourse, CatalogCourseEnrollment
 from partner_catalog.policies.enrollments import can_user_enroll_in_catalog_course
 from partner_catalog.policies.limits import can_consume_course_limit, can_consume_user_limit
@@ -23,11 +30,6 @@ User = get_user_model()
 
 class CatalogCourseEnrollmentService:
     """Service class for managing catalog courses enrollments logic."""
-
-    ERROR_USER_NOT_ENROLLED = "User is not enrolled in the specified catalog course."
-    ERROR_USER_NOT_ALLOWED_TO_ENROLL = "User is not allowed to enroll in this catalog course."
-    ERROR_HONOR_SELF_ENROLLMENT = "User already has honor enrollment; no catalog license is consumed."
-    ERROR_UNSUPPORTED_ENROLLMENT_MODE = "Unsupported enrollment mode for LMS enrollment."
 
     def _get_platform_mode(self, *, user_id: int, course_overview_id) -> str:
         """
@@ -60,7 +62,7 @@ class CatalogCourseEnrollmentService:
             return mode
 
         if mode == "unknown":
-            raise ValidationError(self.ERROR_UNSUPPORTED_ENROLLMENT_MODE)
+            raise UnsupportedEnrollmentMode()
 
         if mode == "none":
             ensure_edx_platform_enrollment(
@@ -86,7 +88,7 @@ class CatalogCourseEnrollmentService:
             * none -> verified (create)
             * audit -> verified (upgrade)
             * verified -> no-op
-            * honor -> do not consume license (raise ValidationError for caller to redirect)
+            * honor -> do not consume license (no-op for catalog; caller can redirect)
         """
         user = User.objects.get(id=user_id)
         catalog_course = (
@@ -97,14 +99,14 @@ class CatalogCourseEnrollmentService:
         course_overview_id = catalog_course.course_overview_id
 
         if not can_user_enroll_in_catalog_course(user=user, catalog_course=catalog_course):
-            raise ValidationError(self.ERROR_USER_NOT_ALLOWED_TO_ENROLL)
+            raise NotAllowedToEnroll()
 
-        # Early honor check (so we don't consume licenses for self-enrolled honor users)
+        # Early honor/unknown check (so we don't consume licenses)
         mode = self._get_platform_mode(user_id=user_id, course_overview_id=course_overview_id)
         if mode == "honor":
-            raise ValidationError(self.ERROR_HONOR_SELF_ENROLLMENT)
+            raise HonorSelfEnrollment()
         if mode == "unknown":
-            raise ValidationError(self.ERROR_UNSUPPORTED_ENROLLMENT_MODE)
+            raise UnsupportedEnrollmentMode()
 
         enrollment = (
             CatalogCourseEnrollment.objects
@@ -130,10 +132,10 @@ class CatalogCourseEnrollmentService:
         catalog = catalog_course.catalog
 
         if not can_consume_user_limit(catalog=catalog):
-            raise ValidationError("User limit reached for this catalog.")
+            raise UserLimitReached()
 
         if not can_consume_course_limit(catalog=catalog, course_overview_id=course_overview_id):
-            raise ValidationError("Course enrollment limit reached for this catalog.")
+            raise CourseLimitReached()
 
         # Re-check mode close to LMS sync to reduce race issues
         self._sync_lms_for_catalog_access(
@@ -173,7 +175,7 @@ class CatalogCourseEnrollmentService:
                 id=catalog_course_enrollment_id,
             )
         except CatalogCourseEnrollment.DoesNotExist as exc:
-            raise ValidationError(self.ERROR_USER_NOT_ENROLLED) from exc
+            raise UserNotEnrolled() from exc
 
         if e.active:
             e.active = False

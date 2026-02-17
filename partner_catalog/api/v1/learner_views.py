@@ -4,6 +4,7 @@ These views are intended for regular learners/users to consume catalog data.
 They provide read-only access to catalogs and courses where the user is an active learner.
 """
 
+from django.core.exceptions import ValidationError
 from django.db.models import Count, Exists, OuterRef, Q
 from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated
@@ -180,7 +181,4 @@ class LearnerCatalogCourseViewSet(InjectNestedFKMixin, viewsets.ReadOnlyModelVie
             catalog_course_id=catalog_course.id,
         )
 
-        return Response(
-            {"detail": "Successfully enrolled in the course."},
-            status=status.HTTP_200_OK,
-        )
+        return Response({"detail": "Successfully enrolled in the course."}, status=status.HTTP_200_OK)
