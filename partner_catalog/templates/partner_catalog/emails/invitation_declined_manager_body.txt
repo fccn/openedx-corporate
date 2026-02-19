@@ -1,0 +1,13 @@
+Hello,
+
+{{ invitee_email }} has declined the invitation to join the {{ catalog_name }} catalog on your corporate learning platform.
+
+No further action is required. You may send a new invitation at any time.
+
+Visit the catalog:
+{{ catalog_url }}
+
+Need help? Contact {{ support_email }}
+
+---
+This is a notification email. You do not need to reply to this message.

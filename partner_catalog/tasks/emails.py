@@ -47,3 +47,16 @@ def send_catalog_invitation_accepted_manager_email(_self: Any, invitation_id: in
     except Exception:  # pragma: no cover - task retry behavior
         logger.exception("Error sending acceptance manager email for id=%s", invitation_id)
         raise
+
+
+@shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def send_catalog_invitation_declined_manager_email(_self: Any, invitation_id: int) -> None:
+    """Task: send declined notification email to the manager who created the invitation.
+
+    The heavy lifting is delegated to InvitationEmailService to keep logic testable.
+    """
+    try:
+        InvitationEmailService().send_invitation_declined_manager(invitation_id)
+    except Exception:  # pragma: no cover - task retry behavior
+        logger.exception("Error sending declined manager email for id=%s", invitation_id)
+        raise

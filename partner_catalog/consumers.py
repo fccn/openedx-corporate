@@ -25,6 +25,7 @@ from partner_catalog.tasks.emails import (
     send_catalog_invitation_accepted_learner_email,
     send_catalog_invitation_accepted_manager_email,
     send_catalog_invitation_created_email,
+    send_catalog_invitation_declined_manager_email,
 )
 
 logger = logging.getLogger("partner_catalog.events")
@@ -102,13 +103,19 @@ def handle_catalog_learner_invitation_declined(
     **_kwargs: Any
 ) -> None:
     """Handle declination of a CatalogLearnerInvitation."""
-    # TODO: add the needed logic when an invitation is declined.
     logger.info(
         "CATALOG_LEARNER_INVITATION_DECLINED: id=%s catalog_id=%s user_id=%s",
         invitation.id,
         invitation.catalog_id,
         invitation.user_id,
     )
+    try:
+        send_catalog_invitation_declined_manager_email.delay(invitation.id)
+    except Exception:  # pragma: no cover - defensive logging  # pylint: disable=broad-exception-caught
+        logger.exception(
+            "Failed to enqueue declined manager email for id=%s",
+            getattr(invitation, "id", None),
+        )
 
 
 @receiver(CATALOG_LEARNER_INVITATION_REMOVED_V1)

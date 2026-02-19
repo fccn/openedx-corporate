@@ -101,7 +101,7 @@ class InvitationEmailService:
 
     def send_invitation_accepted_invitee(self, invitation_id: int) -> None:
         """Load invitation and send the 'invitation accepted' confirmation email to the invitee."""
-        from partner_catalog.models import CatalogLearnerInvitation
+        from partner_catalog.models import CatalogLearnerInvitation  # pylint: disable=import-outside-toplevel
 
         try:
             invitation = (
@@ -179,7 +179,7 @@ class InvitationEmailService:
 
     def send_invitation_accepted_manager(self, invitation_id: int) -> None:
         """Load invitation and send the 'invitation accepted' notification email to the manager."""
-        from partner_catalog.models import CatalogLearnerInvitation
+        from partner_catalog.models import CatalogLearnerInvitation  # pylint: disable=import-outside-toplevel
 
         try:
             invitation = (
@@ -254,4 +254,83 @@ class InvitationEmailService:
             logger.info("Sent acceptance manager email id=%s to %s", invitation_id, manager.email)
         except Exception:  # pragma: no cover - external mail failures
             logger.exception("Failed sending acceptance manager email id=%s to %s", invitation_id, manager.email)
+            raise
+
+    def send_invitation_declined_manager(self, invitation_id: int) -> None:
+        """Load invitation and send the 'invitation declined' notification email to the manager."""
+        from partner_catalog.models import CatalogLearnerInvitation  # pylint: disable=import-outside-toplevel
+
+        try:
+            invitation = (
+                CatalogLearnerInvitation.objects.select_related(
+                    "catalog", "catalog__partner", "catalog__partner__organization", "invited_by"
+                ).get(pk=invitation_id)
+            )
+        except CatalogLearnerInvitation.DoesNotExist:
+            logger.warning("Invitation id=%s not found, skipping declined manager email", invitation_id)
+            return
+
+        manager = invitation.invited_by
+        if not manager or not getattr(manager, "email", None):
+            logger.warning("Invitation id=%s has no invited_by with email, skipping declined manager email", invitation_id)
+            return
+
+        catalog = invitation.catalog
+        partner = getattr(catalog, "partner", None)
+        org = getattr(partner, "organization", None)
+
+        partner_slug = getattr(org, "short_name", None) or getattr(org, "name", None) or ""
+        catalog_slug = getattr(catalog, "slug", "") or ""
+        catalog_url = build_catalog_url(partner_slug=partner_slug, catalog_slug=catalog_slug)
+        partner_name = getattr(org, "short_name", None) or getattr(org, "name", None) or "Partner"
+
+        partner_logo_url: Optional[str] = None
+        if getattr(org, "logo", None):
+            logo = org.logo
+            if hasattr(logo, "url"):
+                raw_url = logo.url
+                if raw_url and not raw_url.startswith("http"):
+                    lms_root = getattr(settings, "LMS_ROOT_URL", "").rstrip("/")
+                    raw_url = lms_root + raw_url
+                partner_logo_url = raw_url
+
+        brand_primary_color = (
+            getattr(catalog, "brand_primary_color", None)
+            or getattr(partner, "brand_primary_color", None)
+            or getattr(org, "brand_primary_color", None)
+            or "#6B7280"
+        )
+
+        support_email = (
+            catalog.support_email
+            or getattr(settings, "DEFAULT_SUPPORT_EMAIL", None)
+            or getattr(settings, "DEFAULT_FROM_EMAIL", None)
+            or "support@example.com"
+        )
+
+        catalog_name = getattr(catalog, "name", None) or catalog_slug
+
+        context = {
+            "catalog_name": catalog_name,
+            "catalog_url": catalog_url,
+            "partner_name": partner_name,
+            "partner_logo_url": partner_logo_url,
+            "brand_primary_color": brand_primary_color,
+            "support_email": support_email,
+            "invitee_email": invitation.invite_email,
+        }
+
+        subject = render_to_string("partner_catalog/emails/invitation_declined_manager_subject.txt", context).strip()
+        text_body = render_to_string("partner_catalog/emails/invitation_declined_manager_body.txt", context)
+        html_body = render_to_string("partner_catalog/emails/invitation_declined_manager_body.html", context)
+
+        from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None) or support_email
+        msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=from_email, to=[manager.email])
+        msg.attach_alternative(html_body, "text/html")
+
+        try:
+            msg.send()
+            logger.info("Sent declined manager email id=%s to %s", invitation_id, manager.email)
+        except Exception:  # pragma: no cover - external mail failures
+            logger.exception("Failed sending declined manager email id=%s to %s", invitation_id, manager.email)
             raise

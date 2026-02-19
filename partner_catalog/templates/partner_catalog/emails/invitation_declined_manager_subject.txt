@@ -1,0 +1,1 @@
+{{ invitee_email }} has declined the invitation to {{ catalog_name }}
