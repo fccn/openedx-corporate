@@ -1,0 +1,13 @@
+Hello,
+
+{{ invitee_email }} has accepted the invitation to join the {{ catalog_name }} catalog on your corporate learning platform.
+
+They now have access to the catalog and can start exploring available courses.
+
+Visit the catalog:
+{{ catalog_url }}
+
+Need help? Contact {{ support_email }}
+
+---
+This is a notification email. You do not need to reply to this message.

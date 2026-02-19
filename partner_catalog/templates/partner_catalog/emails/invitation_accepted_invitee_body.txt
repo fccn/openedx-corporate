@@ -1,0 +1,11 @@
+Hello,
+
+You've successfully joined the {{ catalog_name }} catalog on {{ partner_name }}'s corporate learning platform.
+
+You can now explore available courses by visiting the catalog:
+{{ catalog_url }}
+
+Need help? Contact {{ support_email }}
+
+---
+This is a notification email. You do not need to reply to this message.

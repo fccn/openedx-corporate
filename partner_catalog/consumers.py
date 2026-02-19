@@ -21,7 +21,11 @@ from partner_catalog.events.signals import (
 )
 from partner_catalog.services.catalogs import PartnerCatalogService
 from partner_catalog.services.enrollments import CatalogCourseEnrollmentService
-from partner_catalog.tasks.emails import send_catalog_invitation_created_email
+from partner_catalog.tasks.emails import (
+    send_catalog_invitation_accepted_learner_email,
+    send_catalog_invitation_accepted_manager_email,
+    send_catalog_invitation_created_email,
+)
 
 logger = logging.getLogger("partner_catalog.events")
 
@@ -75,6 +79,20 @@ def handle_catalog_learner_invitation_accepted(
             exc_info=True
         )
         raise ValidationError("Error processing invitation acceptance.") from exc
+
+    try:
+        logger.info(
+            "Enqueueing acceptance emails: id=%s catalog_id=%s",
+            invitation.id,
+            invitation.catalog_id,
+        )
+        send_catalog_invitation_accepted_learner_email.delay(invitation.id)
+        send_catalog_invitation_accepted_manager_email.delay(invitation.id)
+    except Exception:  # pragma: no cover - defensive logging
+        logger.exception(
+            "Failed to enqueue acceptance emails for id=%s",
+            getattr(invitation, "id", None),
+        )
 
 
 @receiver(CATALOG_LEARNER_INVITATION_DECLINED_V1)

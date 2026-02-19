@@ -1,0 +1,1 @@
+{{ invitee_email }} has accepted the invitation to {{ catalog_name }}
