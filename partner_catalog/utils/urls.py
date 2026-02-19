@@ -11,7 +11,7 @@ def build_catalog_url(partner_slug: str, catalog_slug: str) -> str:
     If not configured, returns a relative path.
     """
     base = getattr(settings, "CORPORATE_CATALOGS_MFE_BASE_URL", "") or ""
-    base = base.rstrip("/")
     if not base:
-        return f"/corporate-catalogs/catalog/{partner_slug}/{catalog_slug}"
+        base = getattr(settings, "LMS_ROOT_URL", "").rstrip("/")
+    base = base.rstrip("/")
     return f"{base}/corporate-catalogs/catalog/{partner_slug}/{catalog_slug}"

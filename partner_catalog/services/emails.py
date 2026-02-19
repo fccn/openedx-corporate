@@ -52,7 +52,11 @@ class InvitationEmailService:
         if getattr(org, "logo", None):
             logo = org.logo
             if hasattr(logo, "url"):
-                partner_logo_url = logo.url
+                raw_url = logo.url
+                if raw_url and not raw_url.startswith("http"):
+                    lms_root = getattr(settings, "LMS_ROOT_URL", "").rstrip("/")
+                    raw_url = lms_root + raw_url
+                partner_logo_url = raw_url
 
         brand_primary_color = (
             getattr(catalog, "brand_primary_color", None)

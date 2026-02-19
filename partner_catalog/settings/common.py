@@ -45,3 +45,8 @@ def plugin_settings(settings):
     # Base Catalog settings
     settings.PARTNER_CATALOG_BASE_CATALOG_SLUG = "NAU-base-catalog"
     settings.PARTNER_CATALOG_BASE_CATALOG_NAME = "NAU Base Catalog"
+
+    # URL of the Corporate Catalogs MFE (e.g. "http://apps.local.openedx.io").
+    # Used to build catalog links in invitation emails.
+    # Falls back to LMS_ROOT_URL in build_catalog_url() if not set.
+    settings.CORPORATE_CATALOGS_MFE_BASE_URL = getattr(settings, "CORPORATE_CATALOGS_MFE_BASE_URL", "")
