@@ -20,7 +20,7 @@ class InvitationEmailService:
 
         The email contains a link to the MFE catalog (no token) and basic branding.
         """
-        from partner_catalog.models import CatalogLearnerInvitation
+        from partner_catalog.models import CatalogLearnerInvitation  # pylint: disable=import-outside-toplevel
 
         try:
             invitation = (
