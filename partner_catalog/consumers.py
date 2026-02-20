@@ -88,7 +88,7 @@ def handle_catalog_learner_invitation_accepted(
         )
         send_catalog_invitation_accepted_learner_email.delay(invitation.id)
         send_catalog_invitation_accepted_manager_email.delay(invitation.id)
-    except Exception:  # pragma: no cover - defensive logging
+    except Exception:  # pragma: no cover - defensive logging  # pylint: disable=broad-exception-caught
         logger.exception(
             "Failed to enqueue acceptance emails for id=%s",
             getattr(invitation, "id", None),
