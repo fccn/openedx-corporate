@@ -24,7 +24,7 @@ def send_catalog_invitation_created_email(_self: Any, invitation_id: int) -> Non
 
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def send_catalog_invitation_accepted_learner_email(self: Any, invitation_id: int) -> None:
+def send_catalog_invitation_accepted_learner_email(_self: Any, invitation_id: int) -> None:
     """Task: send acceptance confirmation email to the invitee.
 
     The heavy lifting is delegated to InvitationEmailService to keep logic testable.
@@ -37,7 +37,7 @@ def send_catalog_invitation_accepted_learner_email(self: Any, invitation_id: int
 
 
 @shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def send_catalog_invitation_accepted_manager_email(self: Any, invitation_id: int) -> None:
+def send_catalog_invitation_accepted_manager_email(_self: Any, invitation_id: int) -> None:
     """Task: send acceptance notification email to the manager who created the invitation.
 
     The heavy lifting is delegated to InvitationEmailService to keep logic testable.
