@@ -41,7 +41,7 @@ def handle_catalog_learner_invitation_created(
             invitation.catalog_id,
         )
         send_catalog_invitation_created_email.delay(invitation.id)
-    except Exception:  # pragma: no cover - defensive logging
+    except Exception:  # pragma: no cover - defensive logging  # pylint: disable=broad-exception-caught
         logger.exception(
             "Failed to enqueue invitation created email for id=%s",
             getattr(invitation, "id", None),
