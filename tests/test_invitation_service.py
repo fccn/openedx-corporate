@@ -14,7 +14,6 @@ from rest_framework.exceptions import ValidationError
 
 from partner_catalog.models import CatalogLearnerInvitation
 from partner_catalog.services.invitations import CatalogLearnerInvitationService
-
 from tests.factories import make_catalog, make_invitation, make_user
 
 Status = CatalogLearnerInvitation.Status

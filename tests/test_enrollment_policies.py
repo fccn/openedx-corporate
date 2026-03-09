@@ -13,7 +13,6 @@ policy function in the current code — those test plan items are N/A.
 from datetime import timedelta
 
 import pytest
-
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
@@ -22,7 +21,6 @@ from partner_catalog.policies.catalogs import (
     is_catalog_available,
     validate_catalog_enrollment_request,
 )
-
 from tests.factories import make_catalog, make_invitation, make_learner, make_user
 
 

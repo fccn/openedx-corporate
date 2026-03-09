@@ -8,12 +8,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from organizations.models import Organization
 
-from partner_catalog.models import (
-    CatalogLearner,
-    CatalogLearnerInvitation,
-    Partner,
-    PartnerCatalog,
-)
+from partner_catalog.models import CatalogLearner, CatalogLearnerInvitation, Partner, PartnerCatalog
 
 User = get_user_model()
 

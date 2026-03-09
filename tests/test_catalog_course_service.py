@@ -18,7 +18,6 @@ import pytest
 
 from partner_catalog.models import CatalogCourse
 from partner_catalog.services.catalog_courses import CatalogCourseService, CourseOverview
-
 from tests.factories import make_catalog
 
 PATCH_POLICY = "partner_catalog.services.catalog_courses.can_course_be_added_to_catalog"
