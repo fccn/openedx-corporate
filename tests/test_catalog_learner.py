@@ -7,10 +7,12 @@ Covers:
 - PartnerCatalogService.deactivate_learner_from_invitation
 """
 
+# pylint: disable=redefined-outer-name
+
 import pytest
 from django.utils import timezone
 
-from partner_catalog.models import CatalogLearner, CatalogLearnerInvitation
+from partner_catalog.models import CatalogLearnerInvitation
 from partner_catalog.services.catalogs import PartnerCatalogService
 
 from tests.factories import make_catalog, make_invitation, make_learner, make_user

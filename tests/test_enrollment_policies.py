@@ -10,8 +10,9 @@ Note: course_enrollments_limit is a model field but is not enforced by any
 policy function in the current code — those test plan items are N/A.
 """
 
-import pytest
 from datetime import timedelta
+
+import pytest
 
 from django.core.exceptions import ValidationError
 from django.utils import timezone
