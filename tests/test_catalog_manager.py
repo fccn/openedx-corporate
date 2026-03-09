@@ -14,7 +14,6 @@ from django.db import IntegrityError
 from partner_catalog.models import CatalogManager
 from tests.factories import make_catalog, make_partner, make_user
 
-
 # ---------------------------------------------------------------------------
 # Valid assignment
 # ---------------------------------------------------------------------------

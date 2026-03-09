@@ -14,7 +14,6 @@ from django.utils.text import slugify
 
 from tests.factories import make_catalog, make_organization, make_partner
 
-
 # ---------------------------------------------------------------------------
 # PartnerCatalog.active — date-based availability window
 # ---------------------------------------------------------------------------
