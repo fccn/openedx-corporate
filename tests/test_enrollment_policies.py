@@ -23,7 +23,6 @@ from partner_catalog.policies.catalogs import (
 )
 from tests.factories import make_catalog, make_invitation, make_learner, make_user
 
-
 # ---------------------------------------------------------------------------
 # has_catalog_capacity
 # ---------------------------------------------------------------------------
