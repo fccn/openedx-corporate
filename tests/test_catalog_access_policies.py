@@ -17,7 +17,6 @@ from django.utils import timezone
 from partner_catalog.helpers.regex_cache import clear_email_regex_cache
 from partner_catalog.models import CatalogEmailRegex
 from partner_catalog.policies.catalogs import can_access_catalog
-
 from tests.factories import make_catalog, make_invitation, make_learner, make_user
 
 

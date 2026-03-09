@@ -12,7 +12,6 @@ from django.core.exceptions import ValidationError
 from partner_catalog.helpers.regex_cache import clear_email_regex_cache
 from partner_catalog.models import CatalogEmailRegex
 from partner_catalog.policies.catalogs import email_matches_catalog
-
 from tests.factories import make_catalog
 
 
