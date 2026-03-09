@@ -12,8 +12,9 @@ CourseOverviewTestModel has no `org` field, so `course_overview()` is mocked
 to avoid a FieldError and keep tests focused on the filter logic.
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from tests.factories import make_organization, make_partner
 

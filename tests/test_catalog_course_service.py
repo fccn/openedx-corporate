@@ -12,8 +12,9 @@ Note: can_course_be_added_to_catalog is mocked in all add tests to isolate
 the service's positioning logic from the catalog policy layer.
 """
 
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 from partner_catalog.models import CatalogCourse
 from partner_catalog.services.catalog_courses import CatalogCourseService, CourseOverview
@@ -103,7 +104,7 @@ def test_remove_catalog_course_deletes_it():
     catalog = make_catalog()
     c0, c1 = make_course(), make_course()
 
-    cc0 = make_catalog_course(catalog, c0, position=0)
+    make_catalog_course(catalog, c0, position=0)
     cc1 = make_catalog_course(catalog, c1, position=1)
 
     deleted = CatalogCourseService.remove_catalog_courses(catalog, [cc1.id])

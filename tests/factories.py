@@ -2,7 +2,6 @@
 Simple factory helpers for creating test model instances.
 """
 
-import uuid
 from datetime import timedelta
 
 from django.contrib.auth import get_user_model
@@ -28,6 +27,7 @@ def _unique_id():
 
 
 def make_user(username=None, email=None, is_staff=False, is_superuser=False):
+    """Create and return a User instance with a unique username."""
     username = username or f"user_{_unique_id()}"
     email = email or f"{username}@example.com"
     return User.objects.create_user(
@@ -40,6 +40,7 @@ def make_user(username=None, email=None, is_staff=False, is_superuser=False):
 
 
 def make_organization(short_name=None):
+    """Create and return an Organization with a unique short_name."""
     short_name = short_name or f"org_{_unique_id()}"
     return Organization.objects.create(
         name=f"Organization {short_name}",
@@ -48,11 +49,13 @@ def make_organization(short_name=None):
 
 
 def make_partner(organization=None):
+    """Create and return a Partner, creating an Organization if none is provided."""
     organization = organization or make_organization()
     return Partner.objects.create(organization=organization)
 
 
 def make_catalog(partner=None, slug=None, **kwargs):
+    """Create and return a PartnerCatalog with sensible date defaults."""
     partner = partner or make_partner()
     now = timezone.now()
     defaults = {
@@ -69,6 +72,7 @@ def make_catalog(partner=None, slug=None, **kwargs):
 
 
 def make_invitation(catalog, invite_email=None, user=None, invited_by=None, **kwargs):
+    """Create and return a CatalogLearnerInvitation for the given catalog."""
     invite_email = invite_email or f"learner_{_unique_id()}@example.com"
     return CatalogLearnerInvitation.objects.create(
         catalog=catalog,
@@ -80,6 +84,7 @@ def make_invitation(catalog, invite_email=None, user=None, invited_by=None, **kw
 
 
 def make_learner(catalog, user, invitation):
+    """Create and return a CatalogLearner linked to the given catalog, user, and invitation."""
     return CatalogLearner.objects.create(
         catalog=catalog,
         user=user,

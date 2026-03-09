@@ -5,6 +5,8 @@ Covers business logic for invitation creation, status transitions, and model-lev
 constraints (accepted/declined mutual exclusion, unique active invitation).
 """
 
+# pylint: disable=redefined-outer-name
+
 import pytest
 from django.db import IntegrityError
 from django.utils import timezone
@@ -51,7 +53,8 @@ def test_create_invitation_has_status_sent(service, catalog, learner_user):
 
 @pytest.mark.django_db
 def test_create_invitation_raises_if_sent_already_exists(service, catalog, learner_user):
-    """create_new_invitation raises ValidationError when a SENT invitation already exists for the same (catalog, email)."""
+    """create_new_invitation raises ValidationError when a SENT invitation already exists
+    for the same (catalog, email)."""
     service.create_new_invitation(
         invite_email=learner_user.email,
         catalog_id=catalog.id,
@@ -68,7 +71,8 @@ def test_create_invitation_raises_if_sent_already_exists(service, catalog, learn
 
 @pytest.mark.django_db
 def test_create_invitation_raises_if_accepted_already_exists(service, catalog, learner_user):
-    """create_new_invitation raises ValidationError when an ACCEPTED invitation already exists for the same (catalog, email)."""
+    """create_new_invitation raises ValidationError when an ACCEPTED invitation already exists
+    for the same (catalog, email)."""
     # Create and accept an invitation
     invitation = service.create_new_invitation(
         invite_email=learner_user.email,

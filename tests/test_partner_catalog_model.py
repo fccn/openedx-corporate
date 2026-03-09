@@ -6,13 +6,11 @@ Covers:
 - PartnerCatalog.save() slug auto-generation
 """
 
-import pytest
 from datetime import timedelta
 
+import pytest
 from django.utils import timezone
 from django.utils.text import slugify
-
-from partner_catalog.models import PartnerCatalog
 
 from tests.factories import make_catalog, make_organization, make_partner
 
