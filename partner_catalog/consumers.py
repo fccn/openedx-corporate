@@ -21,6 +21,8 @@ from partner_catalog.events.signals import (
 )
 from partner_catalog.services.catalogs import PartnerCatalogService
 from partner_catalog.services.enrollments import CatalogCourseEnrollmentService
+from partner_catalog.services.enrollments import CatalogCourseEnrollmentService
+from partner_catalog.models import CatalogCourse
 
 logger = logging.getLogger("partner_catalog.events")
 
@@ -53,6 +55,22 @@ def handle_catalog_learner_invitation_accepted(
 
         catalog_service = PartnerCatalogService()
         _, created = catalog_service.create_or_update_learner_from_invitation(invitation.id)
+
+        enrollment_service = CatalogCourseEnrollmentService()
+        catalog_courses = CatalogCourse.objects.filter(catalog_id=invitation.catalog_id)
+
+        for catalog_course in catalog_courses:
+            try:
+                enrollment_service.create_or_activate_course_enrollment(
+                    user_id=invitation.user_id,
+                    catalog_course_id=catalog_course.id,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed syncing catalog course enrollment user_id=%s catalog_course_id=%s",
+                    invitation.user_id,
+                    catalog_course.id,
+                )
 
         logger.info(
             "CATALOG_LEARNER_INVITATION_ACCEPTED: Learner %s for invitation id=%s catalog_id=%s user_id=%s",
