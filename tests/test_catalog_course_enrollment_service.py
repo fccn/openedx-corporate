@@ -39,6 +39,12 @@ def _noop_atomic(*args, **kwargs):
     yield
 
 
+def _immediate_on_commit(func, *args, **kwargs):
+    """Execute on_commit callbacks immediately in NO-DB unit tests."""
+    del args, kwargs
+    func()
+
+
 @pytest.fixture
 def enrollments_module_no_atomic(monkeypatch):
     """
@@ -48,8 +54,12 @@ def enrollments_module_no_atomic(monkeypatch):
        so calling them doesn't try to connect to DB.
     """
     import partner_catalog.services.enrollments as m  # pylint: disable=import-outside-toplevel
+    import partner_catalog.xapi.emitter as xapi_emitter  # pylint: disable=import-outside-toplevel
 
     monkeypatch.setattr(m.transaction, "atomic", _noop_atomic)
+    monkeypatch.setattr(m.transaction, "on_commit", _immediate_on_commit)
+    monkeypatch.setattr(xapi_emitter.transaction, "on_commit", _immediate_on_commit)
+    monkeypatch.setattr(xapi_emitter, "tracker", None)
 
     Service = m.CatalogCourseEnrollmentService
 
@@ -524,6 +534,7 @@ def test_deactivate_course_enrollment_sets_inactive_and_downgrades(
         id=123,
         user_id=1,
         catalog_course_id=999,
+        course_overview_id=101,
         active=True,
         save=MagicMock(),
     )
@@ -566,9 +577,12 @@ def test_deactivate_enrollments_by_catalog_updates_and_downgrades_each_owned(
     cce_filter = mocker.patch("partner_catalog.services.enrollments.CatalogCourseEnrollment.objects.filter")
     downgrade = mocker.patch("partner_catalog.services.enrollments.downgrade_to_audit")
 
-    # First filter().values_list(...) call
+    # First filter().select_related(...) call
     qs1 = MagicMock()
-    qs1.values_list.return_value = [111, 222]
+    qs1.select_related.return_value = [
+        SimpleNamespace(catalog_course_id=111, course_overview_id=101, catalog_course=None),
+        SimpleNamespace(catalog_course_id=222, course_overview_id=202, catalog_course=None),
+    ]
 
     # Second filter().update(...) call
     qs2 = MagicMock()
