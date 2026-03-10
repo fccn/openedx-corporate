@@ -1,5 +1,21 @@
 """Common settings for partner_catalog app."""
 
+from partner_catalog.xapi.constants import ALL_EVENTS as PARTNER_CATALOG_XAPI_EVENTS
+
+try:
+    from event_routing_backends.utils.settings import event_tracking_backends_config
+except ImportError:  # pragma: no cover
+    event_tracking_backends_config = None
+
+
+def _append_unique(target_list, values):
+    """
+    Append values to a list while preserving order and avoiding duplicates.
+    """
+    for value in values:
+        if value not in target_list:
+            target_list.append(value)
+
 
 def plugin_settings(settings):
     """
@@ -45,3 +61,25 @@ def plugin_settings(settings):
     # Base Catalog settings
     settings.PARTNER_CATALOG_BASE_CATALOG_SLUG = "NAU-base-catalog"
     settings.PARTNER_CATALOG_BASE_CATALOG_NAME = "NAU Base Catalog"
+
+    # Whitelist partner catalog xAPI events for event-routing-backends.
+    if not hasattr(settings, "EVENT_TRACKING_BACKENDS_ALLOWED_XAPI_EVENTS"):
+        settings.EVENT_TRACKING_BACKENDS_ALLOWED_XAPI_EVENTS = []
+    if not hasattr(settings, "EVENT_TRACKING_BACKENDS_ALLOWED_CALIPER_EVENTS"):
+        settings.EVENT_TRACKING_BACKENDS_ALLOWED_CALIPER_EVENTS = []
+    if not hasattr(settings, "EVENT_TRACKING_BACKENDS"):
+        settings.EVENT_TRACKING_BACKENDS = {}
+
+    _append_unique(
+        settings.EVENT_TRACKING_BACKENDS_ALLOWED_XAPI_EVENTS,
+        PARTNER_CATALOG_XAPI_EVENTS,
+    )
+
+    if event_tracking_backends_config:
+        settings.EVENT_TRACKING_BACKENDS.update(
+            event_tracking_backends_config(
+                settings,
+                settings.EVENT_TRACKING_BACKENDS_ALLOWED_XAPI_EVENTS,
+                settings.EVENT_TRACKING_BACKENDS_ALLOWED_CALIPER_EVENTS,
+            )
+        )

@@ -23,12 +23,39 @@ from partner_catalog.services.platform_enrollment import (
     ensure_edx_platform_enrollment,
     upgrade_to_verified,
 )
+from partner_catalog.xapi.constants import (
+    EVENT_NAME_COURSE_ENROLLMENT_ACTIVATED,
+    EVENT_NAME_COURSE_ENROLLMENT_BLOCKED,
+    EVENT_NAME_COURSE_ENROLLMENT_DEACTIVATED,
+)
+from partner_catalog.xapi.emitter import emit_catalog_course_enrollment_tracking_event
 
 User = get_user_model()
 
 
 class CatalogCourseEnrollmentService:
     """Service class for managing catalog courses enrollments logic."""
+
+    @staticmethod
+    def _catalog_dimensions(catalog_course=None, fallback_catalog=None):
+        """
+        Return ``(catalog_id, partner_id)`` for tracking payloads.
+        """
+        catalog_id = None
+        partner_id = None
+
+        if catalog_course is not None:
+            catalog_id = getattr(catalog_course, "catalog_id", None)
+            catalog = getattr(catalog_course, "catalog", None)
+            if catalog is not None:
+                catalog_id = catalog_id or getattr(catalog, "id", None)
+                partner_id = getattr(catalog, "partner_id", None)
+
+        if fallback_catalog is not None:
+            catalog_id = catalog_id or getattr(fallback_catalog, "id", None)
+            partner_id = partner_id or getattr(fallback_catalog, "partner_id", None)
+
+        return catalog_id, partner_id
 
     def _get_platform_mode(self, *, user_id: int, course_overview_id) -> str:
         """
@@ -39,6 +66,35 @@ class CatalogCourseEnrollmentService:
         return get_platform_enrollment_mode(
             user_id=user_id,
             course_id=str(course_overview_id),
+        )
+
+    def _emit_blocked_enrollment_event(
+        self,
+        *,
+        user_id: int,
+        catalog_course,
+        course_overview_id,
+        blocked_reason: str,
+        enrollment_mode: str | None = None,
+    ) -> None:
+        """
+        Emit a blocked enrollment tracking event for functional analytics.
+        """
+        catalog = getattr(catalog_course, "catalog", None)
+        catalog_id, partner_id = self._catalog_dimensions(
+            catalog_course=catalog_course,
+            fallback_catalog=catalog,
+        )
+        emit_catalog_course_enrollment_tracking_event(
+            event_name=EVENT_NAME_COURSE_ENROLLMENT_BLOCKED,
+            user_id=user_id,
+            catalog_id=catalog_id,
+            partner_id=partner_id,
+            course_id=str(course_overview_id),
+            catalog_course_id=getattr(catalog_course, "id", None),
+            enrollment_mode=enrollment_mode,
+            blocked_reason=blocked_reason,
+            on_commit=False,
         )
 
     def _sync_lms_for_catalog_access(
@@ -110,15 +166,36 @@ class CatalogCourseEnrollmentService:
             .get(id=catalog_course_id)
         )
         course_overview_id = catalog_course.course_overview_id
+        catalog = catalog_course.catalog
 
         if not can_user_enroll_in_catalog_course(user=user, catalog_course=catalog_course):
+            self._emit_blocked_enrollment_event(
+                user_id=user_id,
+                catalog_course=catalog_course,
+                course_overview_id=course_overview_id,
+                blocked_reason=NotAllowedToEnroll.default_code,
+            )
             raise NotAllowedToEnroll()
 
         # Early honor/unknown check (so we don't consume licenses)
         mode = self._get_platform_mode(user_id=user_id, course_overview_id=course_overview_id)
         if mode == "honor":
+            self._emit_blocked_enrollment_event(
+                user_id=user_id,
+                catalog_course=catalog_course,
+                course_overview_id=course_overview_id,
+                blocked_reason=HonorSelfEnrollment.default_code,
+                enrollment_mode=mode,
+            )
             raise HonorSelfEnrollment()
         if mode == "unknown":
+            self._emit_blocked_enrollment_event(
+                user_id=user_id,
+                catalog_course=catalog_course,
+                course_overview_id=course_overview_id,
+                blocked_reason=UnsupportedEnrollmentMode.default_code,
+                enrollment_mode=mode,
+            )
             raise UnsupportedEnrollmentMode()
 
         enrollment = (
@@ -129,6 +206,7 @@ class CatalogCourseEnrollmentService:
         )
 
         if enrollment:
+            was_inactive = not enrollment.active
             if not enrollment.active:
                 enrollment.active = True
                 enrollment.save(update_fields=["active"])
@@ -139,6 +217,22 @@ class CatalogCourseEnrollmentService:
                 catalog_course_id=enrollment.catalog_course_id,
                 course_overview_id=course_overview_id,
             )
+
+            if was_inactive:
+                enrollment_catalog_course = getattr(enrollment, "catalog_course", None)
+                catalog_id, partner_id = self._catalog_dimensions(
+                    catalog_course=enrollment_catalog_course,
+                    fallback_catalog=catalog,
+                )
+                emit_catalog_course_enrollment_tracking_event(
+                    event_name=EVENT_NAME_COURSE_ENROLLMENT_ACTIVATED,
+                    user_id=user_id,
+                    catalog_id=catalog_id,
+                    partner_id=partner_id,
+                    course_id=str(course_overview_id),
+                    catalog_course_id=enrollment.catalog_course_id,
+                    enrollment_mode="verified",
+                )
             return enrollment
 
         is_paid = is_paid_course(course_overview_id=course_overview_id)
@@ -153,9 +247,14 @@ class CatalogCourseEnrollmentService:
             return None
 
         # New paid-license creation path: enforce bag limits
-        catalog = catalog_course.catalog
-
         if not can_consume_course_limit(catalog=catalog):
+            self._emit_blocked_enrollment_event(
+                user_id=user_id,
+                catalog_course=catalog_course,
+                course_overview_id=course_overview_id,
+                blocked_reason=CourseLimitReached.default_code,
+                enrollment_mode=mode,
+            )
             raise CourseLimitReached()
 
         # Re-check mode close to LMS sync to reduce race issues
@@ -166,12 +265,26 @@ class CatalogCourseEnrollmentService:
         )
 
         try:
-            return CatalogCourseEnrollment.objects.create(
+            created_enrollment = CatalogCourseEnrollment.objects.create(
                 user_id=user_id,
                 catalog_course_id=catalog_course_id,
                 course_overview_id=course_overview_id,
                 active=True,
             )
+            catalog_id, partner_id = self._catalog_dimensions(
+                catalog_course=catalog_course,
+                fallback_catalog=catalog,
+            )
+            emit_catalog_course_enrollment_tracking_event(
+                event_name=EVENT_NAME_COURSE_ENROLLMENT_ACTIVATED,
+                user_id=user_id,
+                catalog_id=catalog_id,
+                partner_id=partner_id,
+                course_id=str(course_overview_id),
+                catalog_course_id=catalog_course_id,
+                enrollment_mode="verified",
+            )
+            return created_enrollment
         except IntegrityError:
             # Race: another request created the license concurrently
             enrollment = (
@@ -179,9 +292,25 @@ class CatalogCourseEnrollmentService:
                 .select_for_update()
                 .get(user_id=user_id, course_overview_id=course_overview_id)
             )
+            was_inactive = not enrollment.active
             if not enrollment.active:
                 enrollment.active = True
                 enrollment.save(update_fields=["active"])
+            if was_inactive:
+                enrollment_catalog_course = getattr(enrollment, "catalog_course", None)
+                catalog_id, partner_id = self._catalog_dimensions(
+                    catalog_course=enrollment_catalog_course,
+                    fallback_catalog=catalog,
+                )
+                emit_catalog_course_enrollment_tracking_event(
+                    event_name=EVENT_NAME_COURSE_ENROLLMENT_ACTIVATED,
+                    user_id=user_id,
+                    catalog_id=catalog_id,
+                    partner_id=partner_id,
+                    course_id=str(course_overview_id),
+                    catalog_course_id=enrollment.catalog_course_id,
+                    enrollment_mode="verified",
+                )
             return enrollment
 
     @transaction.atomic
@@ -192,15 +321,34 @@ class CatalogCourseEnrollmentService:
         Also applies LMS downgrade to audit for the owner catalog-course.
         """
         try:
-            e = CatalogCourseEnrollment.objects.select_related("catalog_course", "course_overview").get(
+            e = CatalogCourseEnrollment.objects.select_related(
+                "catalog_course",
+                "catalog_course__catalog",
+                "course_overview",
+            ).get(
                 id=catalog_course_enrollment_id,
             )
         except CatalogCourseEnrollment.DoesNotExist as exc:
             raise UserNotEnrolled() from exc
 
+        was_active = e.active
         if e.active:
             e.active = False
             e.save(update_fields=["active"])
+
+        if was_active:
+            catalog_id, partner_id = self._catalog_dimensions(
+                catalog_course=getattr(e, "catalog_course", None),
+            )
+            emit_catalog_course_enrollment_tracking_event(
+                event_name=EVENT_NAME_COURSE_ENROLLMENT_DEACTIVATED,
+                user_id=e.user_id,
+                catalog_id=catalog_id,
+                partner_id=partner_id,
+                course_id=str(e.course_overview_id),
+                catalog_course_id=e.catalog_course_id,
+                enrollment_mode="audit",
+            )
 
         downgrade_to_audit(user_id=e.user_id, catalog_course_id=e.catalog_course_id)
 
@@ -212,13 +360,14 @@ class CatalogCourseEnrollmentService:
         Only affects enrollments whose owner (catalog_course.catalog_id) matches catalog_id.
         Applies LMS downgrade to audit for each affected enrollment.
         """
-        owned_catalog_course_ids = list(
+        owned_enrollments = list(
             CatalogCourseEnrollment.objects.filter(
                 user_id=user_id,
                 active=True,
                 catalog_course__catalog_id=catalog_id,
-            ).values_list("catalog_course_id", flat=True)
+            ).select_related("catalog_course", "catalog_course__catalog")
         )
+        owned_catalog_course_ids = [enrollment.catalog_course_id for enrollment in owned_enrollments]
 
         CatalogCourseEnrollment.objects.filter(
             user_id=user_id,
@@ -226,5 +375,17 @@ class CatalogCourseEnrollmentService:
             catalog_course__catalog_id=catalog_id,
         ).update(active=False)
 
-        for cc_id in owned_catalog_course_ids:
+        for enrollment, cc_id in zip(owned_enrollments, owned_catalog_course_ids):
+            catalog_id_value, partner_id = self._catalog_dimensions(
+                catalog_course=getattr(enrollment, "catalog_course", None),
+            )
+            emit_catalog_course_enrollment_tracking_event(
+                event_name=EVENT_NAME_COURSE_ENROLLMENT_DEACTIVATED,
+                user_id=user_id,
+                catalog_id=catalog_id_value or catalog_id,
+                partner_id=partner_id,
+                course_id=str(enrollment.course_overview_id),
+                catalog_course_id=cc_id,
+                enrollment_mode="audit",
+            )
             downgrade_to_audit(user_id=user_id, catalog_course_id=cc_id)

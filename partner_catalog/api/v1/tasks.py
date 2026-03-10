@@ -12,6 +12,7 @@ from rest_framework.exceptions import ValidationError
 
 from partner_catalog.models import CatalogLearner
 from partner_catalog.services.invitations import CatalogLearnerInvitationService
+from partner_catalog.xapi.constants import INVITATION_CHANNEL_BULK_CSV
 
 User = get_user_model()
 
@@ -49,7 +50,8 @@ def bulk_upload_invitations(
             invitation = invitation_service.create_new_invitation(
                 invite_email=email,
                 catalog_id=catalog_id,
-                invited_by=invited_by
+                invited_by=invited_by,
+                invitation_channel=INVITATION_CHANNEL_BULK_CSV,
             )
             success.append({
                 "row": row_num,
