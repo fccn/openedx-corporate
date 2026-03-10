@@ -23,7 +23,13 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
-from django.core.exceptions import ValidationError
+
+from partner_catalog.exceptions import (
+    CourseLimitReached,
+    HonorSelfEnrollment,
+    NotAllowedToEnroll,
+    UserNotEnrolled,
+)
 
 # pytest fixtures intentionally reuse and shadow names; avoid noisy pylint warnings.
 # pylint: disable=redefined-outer-name
@@ -119,10 +125,8 @@ def test_create_or_activate_access_denied_raises_and_no_lms_calls(
     # Safety: chain exists but should not matter
     cce_select_for_update.return_value.filter.return_value.first.return_value = None
 
-    with pytest.raises(ValidationError) as exc:
+    with pytest.raises(NotAllowedToEnroll):
         svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=999)
-
-    assert exc.value.messages[0] == svc.ERROR_USER_NOT_ALLOWED_TO_ENROLL
 
     can_enroll.assert_called_once()
     platform_mode.assert_not_called()
@@ -154,10 +158,8 @@ def test_create_or_activate_honor_mode_raises_and_no_lms_calls(
     # Safety chain (shouldn't be used beyond "first")
     cce_select_for_update.return_value.filter.return_value.first.return_value = None
 
-    with pytest.raises(ValidationError) as exc:
+    with pytest.raises(HonorSelfEnrollment):
         svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=999)
-
-    assert exc.value.messages[0] == "User already has honor enrollment; no catalog license is consumed."
 
     can_enroll.assert_called_once()
     platform_mode.assert_called_once()
@@ -221,8 +223,8 @@ def test_create_or_activate_new_enrollment_mode_none_creates_and_ensures(
     ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
     upgrade = mocker.patch("partner_catalog.services.enrollments.upgrade_to_verified")
 
-    user_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_user_limit")
     course_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_course_limit")
+    is_paid = mocker.patch("partner_catalog.services.enrollments.is_paid_course")
 
     user_get.return_value = SimpleNamespace(id=1)
     fake_course = _fake_catalog_course(course_overview_id=101)
@@ -230,8 +232,8 @@ def test_create_or_activate_new_enrollment_mode_none_creates_and_ensures(
 
     can_enroll.return_value = True
     platform_mode.return_value = "none"
-    user_limit.return_value = True
     course_limit.return_value = True
+    is_paid.return_value = True
 
     # No existing enrollment
     cce_select_for_update.return_value.filter.return_value.first.return_value = None
@@ -275,8 +277,8 @@ def test_create_or_activate_new_enrollment_mode_audit_creates_and_upgrades(
     ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
     upgrade = mocker.patch("partner_catalog.services.enrollments.upgrade_to_verified")
 
-    user_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_user_limit")
     course_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_course_limit")
+    is_paid = mocker.patch("partner_catalog.services.enrollments.is_paid_course")
 
     user_get.return_value = SimpleNamespace(id=1)
     fake_course = _fake_catalog_course(course_overview_id=101)
@@ -284,8 +286,8 @@ def test_create_or_activate_new_enrollment_mode_audit_creates_and_upgrades(
 
     can_enroll.return_value = True
     platform_mode.return_value = "audit"
-    user_limit.return_value = True
     course_limit.return_value = True
+    is_paid.return_value = True
 
     cce_select_for_update.return_value.filter.return_value.first.return_value = None
 
@@ -394,7 +396,7 @@ def test_existing_enrollment_mode_audit_calls_upgrade_not_create(
     cce_create.assert_not_called()
 
 
-def test_new_enrollment_user_limit_reached_raises_and_no_lms_no_create(
+def test_new_enrollment_open_course_does_not_consume_bag_and_no_create(
     mocker,
     svc,
 ):
@@ -410,8 +412,8 @@ def test_new_enrollment_user_limit_reached_raises_and_no_lms_no_create(
     ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
     upgrade = mocker.patch("partner_catalog.services.enrollments.upgrade_to_verified")
 
-    user_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_user_limit")
     course_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_course_limit")
+    is_paid = mocker.patch("partner_catalog.services.enrollments.is_paid_course")
 
     user_get.return_value = SimpleNamespace(id=1)
     fake_course = _fake_catalog_course(course_overview_id=101, catalog_course_id=999)
@@ -422,15 +424,15 @@ def test_new_enrollment_user_limit_reached_raises_and_no_lms_no_create(
 
     cce_select_for_update.return_value.filter.return_value.first.return_value = None
 
-    user_limit.return_value = False
-    course_limit.return_value = True
+    is_paid.return_value = False
+    course_limit.return_value = True  # should not be used for open courses
 
-    with pytest.raises(ValidationError) as exc:
-        svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=fake_course.id)
+    result = svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=fake_course.id)
 
-    assert exc.value.messages[0] == "User limit reached for this catalog."
-    ensure.assert_not_called()
+    assert result is None
+    ensure.assert_called_once_with(user_id=1, catalog_course_id=fake_course.id, target_mode="audit")
     upgrade.assert_not_called()
+    course_limit.assert_not_called()
     cce_create.assert_not_called()
 
 
@@ -450,8 +452,8 @@ def test_new_enrollment_course_limit_reached_raises_and_no_lms_no_create(
     ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
     upgrade = mocker.patch("partner_catalog.services.enrollments.upgrade_to_verified")
 
-    user_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_user_limit")
     course_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_course_limit")
+    is_paid = mocker.patch("partner_catalog.services.enrollments.is_paid_course")
 
     user_get.return_value = SimpleNamespace(id=1)
     fake_course = _fake_catalog_course(course_overview_id=101, catalog_course_id=999)
@@ -462,13 +464,11 @@ def test_new_enrollment_course_limit_reached_raises_and_no_lms_no_create(
 
     cce_select_for_update.return_value.filter.return_value.first.return_value = None
 
-    user_limit.return_value = True
     course_limit.return_value = False
+    is_paid.return_value = True
 
-    with pytest.raises(ValidationError) as exc:
+    with pytest.raises(CourseLimitReached):
         svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=fake_course.id)
-
-    assert exc.value.messages[0] == "Course enrollment limit reached for this catalog."
     ensure.assert_not_called()
     upgrade.assert_not_called()
     cce_create.assert_not_called()
@@ -518,10 +518,8 @@ def test_deactivate_course_enrollment_not_found_raises_validation_error(
     DoesNotExist = enrollments_module_no_atomic.CatalogCourseEnrollment.DoesNotExist
     cce_select_related.return_value.get.side_effect = DoesNotExist()
 
-    with pytest.raises(ValidationError) as exc:
+    with pytest.raises(UserNotEnrolled):
         svc.deactivate_course_enrollment(catalog_course_enrollment_id=9999)
-
-    assert exc.value.messages[0] == svc.ERROR_USER_NOT_ENROLLED
 
 
 # --------------------------------------------------------------------

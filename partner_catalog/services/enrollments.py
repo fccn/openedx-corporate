@@ -12,12 +12,11 @@ from partner_catalog.exceptions import (
     HonorSelfEnrollment,
     NotAllowedToEnroll,
     UnsupportedEnrollmentMode,
-    UserLimitReached,
     UserNotEnrolled,
 )
 from partner_catalog.models import CatalogCourse, CatalogCourseEnrollment
 from partner_catalog.policies.enrollments import can_user_enroll_in_catalog_course
-from partner_catalog.policies.limits import can_consume_course_limit, can_consume_user_limit
+from partner_catalog.policies.limits import can_consume_course_limit, is_paid_course
 from partner_catalog.policies.platform_enrollment import get_platform_enrollment_mode
 from partner_catalog.services.platform_enrollment import (
     downgrade_to_audit,
@@ -35,7 +34,7 @@ class CatalogCourseEnrollmentService:
         """
         Wrapper to fetch LMS enrollment mode for a user/course.
 
-        Returns: 'none' | 'honor' | 'audit' | 'verified' | 'unknown'
+        Returns: 'none' | open modes ('honor'/'audit') | paid modes | 'unknown'
         """
         return get_platform_enrollment_mode(
             user_id=user_id,
@@ -48,9 +47,10 @@ class CatalogCourseEnrollmentService:
         user_id: int,
         catalog_course_id: int,
         course_overview_id,
+        target_mode: str = "verified",
     ) -> str:
         """
-        Ensure LMS enrollment matches catalog entitlement (verified),
+        Ensure LMS enrollment matches catalog entitlement,
         based on current LMS mode.
 
         Returns the mode observed (after refresh).
@@ -64,6 +64,15 @@ class CatalogCourseEnrollmentService:
         if mode == "unknown":
             raise UnsupportedEnrollmentMode()
 
+        if target_mode == "audit":
+            if mode == "none":
+                ensure_edx_platform_enrollment(
+                    user_id=user_id,
+                    catalog_course_id=catalog_course_id,
+                    target_mode="audit",
+                )
+            return mode
+
         if mode == "none":
             ensure_edx_platform_enrollment(
                 user_id=user_id,
@@ -72,23 +81,27 @@ class CatalogCourseEnrollmentService:
             )
         elif mode == "audit":
             upgrade_to_verified(user_id=user_id, catalog_course_id=catalog_course_id)
-        # verified => no-op
+        # paid modes (e.g., verified/professional/...) => no-op
 
         return mode
 
     @transaction.atomic
-    def create_or_activate_course_enrollment(self, *, user_id, catalog_course_id) -> CatalogCourseEnrollment:
+    def create_or_activate_course_enrollment(
+        self, *, user_id, catalog_course_id
+    ) -> CatalogCourseEnrollment | None:
         """
         Create or activate a catalog course enrollment for a user.
 
         - Uses (user, course_overview) uniqueness (one license per course).
         - First catalog to grant license prevails (does not reassign catalog_course).
-        - Enforces catalog limits only when a new license would be created.
+        - Enforces course-enrollment bag limits only for paid courses and only
+          when a new license would be created.
         - Syncs LMS enrollment:
             * none -> verified (create)
             * audit -> verified (upgrade)
-            * verified -> no-op
+            * paid modes -> no-op
             * honor -> do not consume license (no-op for catalog; caller can redirect)
+        - Open courses are handled in audit mode and do not create a catalog license.
         """
         user = User.objects.get(id=user_id)
         catalog_course = (
@@ -128,13 +141,21 @@ class CatalogCourseEnrollmentService:
             )
             return enrollment
 
-        # New license creation path: enforce limits
+        is_paid = is_paid_course(course_overview_id=course_overview_id)
+        if not is_paid:
+            # Open courses are not license-managed, and do not consume bag budget.
+            self._sync_lms_for_catalog_access(
+                user_id=user_id,
+                catalog_course_id=catalog_course_id,
+                course_overview_id=course_overview_id,
+                target_mode="audit",
+            )
+            return None
+
+        # New paid-license creation path: enforce bag limits
         catalog = catalog_course.catalog
 
-        if not can_consume_user_limit(catalog=catalog):
-            raise UserLimitReached()
-
-        if not can_consume_course_limit(catalog=catalog, course_overview_id=course_overview_id):
+        if not can_consume_course_limit(catalog=catalog):
             raise CourseLimitReached()
 
         # Re-check mode close to LMS sync to reduce race issues
