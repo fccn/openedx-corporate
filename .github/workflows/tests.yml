@@ -1,0 +1,28 @@
+name: Integration Tests in Tutor
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches:
+      - "**"
+
+jobs:
+  run-tests:
+    name: "Tests (Tutor ${{ matrix.tutor_version }})"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        tutor_version:
+          - "==19.0.0"  # Open edX Sumac — update as new releases are supported
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run unit tests in Tutor
+        uses: eduNEXT/integration-test-in-tutor@main
+        with:
+          app_name: openedx-corporate
+          tutor_version: ${{ matrix.tutor_version }}
+          shell_file_to_run: scripts/run_tests.sh
