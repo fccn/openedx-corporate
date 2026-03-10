@@ -9,6 +9,13 @@ class CatalogEnrollmentError(APIException):
     default_code = "catalog_enrollment_error"
     default_detail = "Catalog enrollment error."
 
+class InactiveCatalogEnrollment(CatalogEnrollmentError):
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_code = "catalog_unavailable"
+    default_detail = (
+		"The catalog is not currently available. "
+		"It can only be accessed within its configured availability period."
+	)
 
 class NotAllowedToEnroll(CatalogEnrollmentError):
     status_code = status.HTTP_403_FORBIDDEN
