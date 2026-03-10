@@ -24,12 +24,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from partner_catalog.exceptions import (
-    CourseLimitReached,
-    HonorSelfEnrollment,
-    NotAllowedToEnroll,
-    UserNotEnrolled,
-)
+from partner_catalog.exceptions import CourseLimitReached, HonorSelfEnrollment, NotAllowedToEnroll, UserNotEnrolled
 
 # pytest fixtures intentionally reuse and shadow names; avoid noisy pylint warnings.
 # pylint: disable=redefined-outer-name

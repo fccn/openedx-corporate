@@ -62,14 +62,16 @@ def emit_tracking_event(
                 event_name,
             )
             return
+        emit_fn = tracker.emit
         try:
             if cleaned_context:
-                tracker.emit(event_name, cleaned_data, cleaned_context)
+                emit_args = (event_name, cleaned_data, cleaned_context)
             else:
-                tracker.emit(event_name, cleaned_data)
+                emit_args = (event_name, cleaned_data)
+            emit_fn(*emit_args)
         except TypeError:
             # Older event-tracking versions only support emit(name, data).
-            tracker.emit(event_name, cleaned_data)
+            emit_fn(event_name, cleaned_data)
         except Exception:  # pylint: disable=broad-except
             logger.exception("Failed to emit tracking event '%s'.", event_name)
 

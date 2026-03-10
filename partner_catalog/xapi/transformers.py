@@ -66,7 +66,6 @@ if EVENT_ROUTING_BACKENDS_AVAILABLE:
             }))
             return Extensions(base)
 
-
     class BaseInvitationTransformer(BasePartnerCatalogTransformer):
         """
         Base transformer for invitation lifecycle events.
@@ -92,7 +91,6 @@ if EVENT_ROUTING_BACKENDS_AVAILABLE:
                     extensions=Extensions(extensions),
                 ),
             )
-
 
     class BaseEnrollmentTransformer(BasePartnerCatalogTransformer):
         """
@@ -124,7 +122,6 @@ if EVENT_ROUTING_BACKENDS_AVAILABLE:
                 ),
             )
 
-
     @XApiTransformersRegistry.register(partner_constants.EVENT_NAME_INVITATION_SENT)
     class CatalogInvitationSentTransformer(BaseInvitationTransformer):
         """
@@ -135,7 +132,6 @@ if EVENT_ROUTING_BACKENDS_AVAILABLE:
             id=partner_constants.XAPI_VERB_SENT,
             display=LanguageMap({partner_constants.EN: partner_constants.SENT}),
         )
-
 
     @XApiTransformersRegistry.register(partner_constants.EVENT_NAME_INVITATION_ACCEPTED)
     class CatalogInvitationAcceptedTransformer(BaseInvitationTransformer):
@@ -148,7 +144,6 @@ if EVENT_ROUTING_BACKENDS_AVAILABLE:
             display=LanguageMap({partner_constants.EN: partner_constants.ACCEPTED}),
         )
 
-
     @XApiTransformersRegistry.register(partner_constants.EVENT_NAME_INVITATION_DECLINED)
     class CatalogInvitationDeclinedTransformer(BaseInvitationTransformer):
         """
@@ -159,7 +154,6 @@ if EVENT_ROUTING_BACKENDS_AVAILABLE:
             id=partner_constants.XAPI_VERB_DECLINED,
             display=LanguageMap({partner_constants.EN: partner_constants.DECLINED}),
         )
-
 
     @XApiTransformersRegistry.register(partner_constants.EVENT_NAME_INVITATION_REMOVED)
     class CatalogInvitationRemovedTransformer(BaseInvitationTransformer):
@@ -172,7 +166,6 @@ if EVENT_ROUTING_BACKENDS_AVAILABLE:
             display=LanguageMap({partner_constants.EN: partner_constants.REMOVED}),
         )
 
-
     @XApiTransformersRegistry.register(partner_constants.EVENT_NAME_COURSE_ENROLLMENT_ACTIVATED)
     class CatalogCourseEnrollmentActivatedTransformer(BaseEnrollmentTransformer):
         """
@@ -184,7 +177,6 @@ if EVENT_ROUTING_BACKENDS_AVAILABLE:
             display=LanguageMap({xapi_constants.EN: xapi_constants.REGISTERED}),
         )
 
-
     @XApiTransformersRegistry.register(partner_constants.EVENT_NAME_COURSE_ENROLLMENT_DEACTIVATED)
     class CatalogCourseEnrollmentDeactivatedTransformer(BaseEnrollmentTransformer):
         """
@@ -195,7 +187,6 @@ if EVENT_ROUTING_BACKENDS_AVAILABLE:
             id=xapi_constants.XAPI_VERB_UNREGISTERED,
             display=LanguageMap({xapi_constants.EN: xapi_constants.UNREGISTERED}),
         )
-
 
     @XApiTransformersRegistry.register(partner_constants.EVENT_NAME_COURSE_ENROLLMENT_BLOCKED)
     class CatalogCourseEnrollmentBlockedTransformer(BaseEnrollmentTransformer):

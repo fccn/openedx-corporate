@@ -76,6 +76,7 @@ class CatalogLearnerInvitationService:
         self,
         invite_email: str,
         catalog_id: int,
+        *,
         invited_by=None,
         emit_event=True,
         invitation_channel: str = INVITATION_CHANNEL_MANUAL,

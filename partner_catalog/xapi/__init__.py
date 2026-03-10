@@ -1,4 +1,1 @@
-"""
-xAPI support for partner_catalog.
-"""
-
+"""xAPI support for partner_catalog."""

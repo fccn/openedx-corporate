@@ -9,6 +9,9 @@ from types import SimpleNamespace
 
 import pytest
 
+# Fixtures are intentionally injected by name in tests.
+# pylint: disable=redefined-outer-name
+
 
 @contextmanager
 def _noop_atomic(*args, **kwargs):
@@ -105,7 +108,7 @@ def test_emit_invitation_event_passes_channel_to_tracking_emitter(
 
     invitation = SimpleNamespace(status=Status.SENT)
 
-    service._emit_invitation_event(
+    service._emit_invitation_event(  # pylint: disable=protected-access
         invitation,
         actor_user_id=9,
         invitation_channel=invitations_module_no_atomic.INVITATION_CHANNEL_SELF_ENROLL,
