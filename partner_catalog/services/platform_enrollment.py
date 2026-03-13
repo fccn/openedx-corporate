@@ -18,9 +18,8 @@ def ensure_edx_platform_enrollment(*, user_id: int, catalog_course_id: int, targ
     """
     Ensure LMS enrollment exists and (if applicable) is in target_mode.
 
-    - If honor: do nothing
     - If none: add_enrollment(mode=target_mode)
-    - If audit and target_mode=verified: update_enrollment(mode=verified)
+    - If audit/honor and target_mode=verified: update_enrollment(mode=verified)
     - If verified already: no-op
     """
     User = get_user_model()
@@ -41,14 +40,6 @@ def ensure_edx_platform_enrollment(*, user_id: int, catalog_course_id: int, targ
 
         if existing:
             mode = (existing.get("mode") or "").lower()
-
-            # honor self-enroll: do not touch
-            if mode == HONOR:
-                logger.info(
-                    "Honor enrollment detected; skipping LMS changes (user_id=%s, course_id=%s, catalog_id=%s)",
-                    user_id, course_id, catalog_id
-                )
-                return
 
             # already in target mode
             if mode == target_mode:

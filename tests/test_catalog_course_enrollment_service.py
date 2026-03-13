@@ -24,7 +24,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from partner_catalog.exceptions import CourseLimitReached, HonorSelfEnrollment, NotAllowedToEnroll, UserNotEnrolled
+from partner_catalog.exceptions import CourseLimitReached, NotAllowedToEnroll, UserNotEnrolled
 
 # pytest fixtures intentionally reuse and shadow names; avoid noisy pylint warnings.
 # pylint: disable=redefined-outer-name
@@ -111,7 +111,7 @@ def test_create_or_activate_access_denied_raises_and_no_lms_calls(
     can_enroll = mocker.patch("partner_catalog.services.enrollments.can_user_enroll_in_catalog_course")
     platform_mode = mocker.patch("partner_catalog.services.enrollments.get_platform_enrollment_mode")
     ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
-    upgrade = mocker.patch("partner_catalog.services.enrollments.upgrade_to_verified")
+    tracking_emit = mocker.patch("partner_catalog.services.enrollments.emit_catalog_course_enrollment_tracking_event")
 
     user_get.return_value = SimpleNamespace(id=1)
     cc_select_related.return_value.get.return_value = _fake_catalog_course(course_overview_id=101)
@@ -126,10 +126,20 @@ def test_create_or_activate_access_denied_raises_and_no_lms_calls(
     can_enroll.assert_called_once()
     platform_mode.assert_not_called()
     ensure.assert_not_called()
-    upgrade.assert_not_called()
+    tracking_emit.assert_called_once_with(
+        event_name=enrollments_module_no_atomic.EVENT_NAME_COURSE_ENROLLMENT_BLOCKED,
+        user_id=1,
+        catalog_id=500,
+        partner_id=None,
+        course_id="101",
+        catalog_course_id=999,
+        enrollment_mode=None,
+        blocked_reason=NotAllowedToEnroll.default_code,
+        on_commit=False,
+    )
 
 
-def test_create_or_activate_honor_mode_raises_and_no_lms_calls(
+def test_create_or_activate_existing_paid_lms_enrollment_allows_access_without_license_changes(
     mocker,
     svc,
 ):
@@ -140,26 +150,30 @@ def test_create_or_activate_honor_mode_raises_and_no_lms_calls(
     )
 
     can_enroll = mocker.patch("partner_catalog.services.enrollments.can_user_enroll_in_catalog_course")
+    is_paid = mocker.patch("partner_catalog.services.enrollments.is_paid_course")
     platform_mode = mocker.patch("partner_catalog.services.enrollments.get_platform_enrollment_mode")
     ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
-    upgrade = mocker.patch("partner_catalog.services.enrollments.upgrade_to_verified")
+    cce_create = mocker.patch("partner_catalog.services.enrollments.CatalogCourseEnrollment.objects.create")
 
     user_get.return_value = SimpleNamespace(id=1)
     cc_select_related.return_value.get.return_value = _fake_catalog_course(course_overview_id=101)
 
     can_enroll.return_value = True
-    platform_mode.return_value = "honor"
+    is_paid.return_value = True
+    platform_mode.return_value = "verified"
 
-    # Safety chain (shouldn't be used beyond "first")
     cce_select_for_update.return_value.filter.return_value.first.return_value = None
 
-    with pytest.raises(HonorSelfEnrollment):
-        svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=999)
+    result = svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=999)
 
     can_enroll.assert_called_once()
-    platform_mode.assert_called_once()
+    assert platform_mode.call_count >= 1
     ensure.assert_not_called()
-    upgrade.assert_not_called()
+    cce_create.assert_not_called()
+    assert result.access_granted is True
+    assert result.warning_code is None
+    assert result.lms_enrollment_mode == "verified"
+    assert result.catalog_course_enrollment_id is None
 
 
 def test_create_or_activate_existing_inactive_enrollment_reactivates(
@@ -173,16 +187,20 @@ def test_create_or_activate_existing_inactive_enrollment_reactivates(
     )
 
     can_enroll = mocker.patch("partner_catalog.services.enrollments.can_user_enroll_in_catalog_course")
+    is_paid = mocker.patch("partner_catalog.services.enrollments.is_paid_course")
     platform_mode = mocker.patch("partner_catalog.services.enrollments.get_platform_enrollment_mode")
     ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
-    upgrade = mocker.patch("partner_catalog.services.enrollments.upgrade_to_verified")
+    course_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_course_limit")
+    tracking_emit = mocker.patch("partner_catalog.services.enrollments.emit_catalog_course_enrollment_tracking_event")
 
     user_get.return_value = SimpleNamespace(id=1)
     fake_course = _fake_catalog_course(course_overview_id=101)
     cc_select_related.return_value.get.return_value = fake_course
 
     can_enroll.return_value = True
-    platform_mode.return_value = "verified"
+    is_paid.return_value = True
+    platform_mode.return_value = "none"
+    course_limit.return_value = True
 
     fake_enrollment = SimpleNamespace(
         id=55,
@@ -194,12 +212,15 @@ def test_create_or_activate_existing_inactive_enrollment_reactivates(
 
     result = svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=fake_course.id)
 
-    assert result is fake_enrollment
+    assert result.catalog_course_enrollment_id == fake_enrollment.id
     assert fake_enrollment.active is True
     fake_enrollment.save.assert_called_once_with(update_fields=["active"])
-
-    ensure.assert_not_called()
-    upgrade.assert_not_called()
+    ensure.assert_called_once_with(
+        user_id=1,
+        catalog_course_id=fake_course.id,
+        target_mode="verified",
+    )
+    tracking_emit.assert_called_once()
 
 
 def test_create_or_activate_new_enrollment_mode_none_creates_and_ensures(
@@ -216,7 +237,6 @@ def test_create_or_activate_new_enrollment_mode_none_creates_and_ensures(
     can_enroll = mocker.patch("partner_catalog.services.enrollments.can_user_enroll_in_catalog_course")
     platform_mode = mocker.patch("partner_catalog.services.enrollments.get_platform_enrollment_mode")
     ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
-    upgrade = mocker.patch("partner_catalog.services.enrollments.upgrade_to_verified")
 
     course_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_course_limit")
     is_paid = mocker.patch("partner_catalog.services.enrollments.is_paid_course")
@@ -245,7 +265,6 @@ def test_create_or_activate_new_enrollment_mode_none_creates_and_ensures(
     result = svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=fake_course.id)
 
     ensure.assert_called_once_with(user_id=1, catalog_course_id=fake_course.id, target_mode="verified")
-    upgrade.assert_not_called()
 
     cce_create.assert_called_once_with(
         user_id=1,
@@ -253,7 +272,9 @@ def test_create_or_activate_new_enrollment_mode_none_creates_and_ensures(
         course_overview_id=fake_course.course_overview_id,
         active=True,
     )
-    assert result is fake_created_enrollment
+    assert result.catalog_course_enrollment_id == fake_created_enrollment.id
+    assert result.catalog_course_enrollment_created is True
+    assert result.lms_enrollment_mode == "verified"
 
 
 def test_create_or_activate_new_enrollment_mode_audit_creates_and_upgrades(
@@ -270,7 +291,6 @@ def test_create_or_activate_new_enrollment_mode_audit_creates_and_upgrades(
     can_enroll = mocker.patch("partner_catalog.services.enrollments.can_user_enroll_in_catalog_course")
     platform_mode = mocker.patch("partner_catalog.services.enrollments.get_platform_enrollment_mode")
     ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
-    upgrade = mocker.patch("partner_catalog.services.enrollments.upgrade_to_verified")
 
     course_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_course_limit")
     is_paid = mocker.patch("partner_catalog.services.enrollments.is_paid_course")
@@ -297,8 +317,7 @@ def test_create_or_activate_new_enrollment_mode_audit_creates_and_upgrades(
 
     result = svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=fake_course.id)
 
-    upgrade.assert_called_once_with(user_id=1, catalog_course_id=fake_course.id)
-    ensure.assert_not_called()
+    ensure.assert_called_once_with(user_id=1, catalog_course_id=fake_course.id, target_mode="verified")
 
     cce_create.assert_called_once_with(
         user_id=1,
@@ -306,7 +325,9 @@ def test_create_or_activate_new_enrollment_mode_audit_creates_and_upgrades(
         course_overview_id=fake_course.course_overview_id,
         active=True,
     )
-    assert result is fake_created_enrollment
+    assert result.catalog_course_enrollment_id == fake_created_enrollment.id
+    assert result.catalog_course_enrollment_created is True
+    assert result.lms_enrollment_mode == "verified"
 
 
 def test_existing_enrollment_mode_none_calls_ensure_not_create(
@@ -321,15 +342,16 @@ def test_existing_enrollment_mode_none_calls_ensure_not_create(
     cce_create = mocker.patch("partner_catalog.services.enrollments.CatalogCourseEnrollment.objects.create")
 
     can_enroll = mocker.patch("partner_catalog.services.enrollments.can_user_enroll_in_catalog_course")
+    is_paid = mocker.patch("partner_catalog.services.enrollments.is_paid_course")
     platform_mode = mocker.patch("partner_catalog.services.enrollments.get_platform_enrollment_mode")
     ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
-    upgrade = mocker.patch("partner_catalog.services.enrollments.upgrade_to_verified")
 
     user_get.return_value = SimpleNamespace(id=1)
     fake_course = _fake_catalog_course(course_overview_id=101, catalog_course_id=999)
     cc_select_related.return_value.get.return_value = fake_course
 
     can_enroll.return_value = True
+    is_paid.return_value = True
     platform_mode.return_value = "none"
 
     fake_enrollment = SimpleNamespace(
@@ -342,14 +364,14 @@ def test_existing_enrollment_mode_none_calls_ensure_not_create(
 
     result = svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=fake_course.id)
 
-    assert result is fake_enrollment
+    assert result.catalog_course_enrollment_id == fake_enrollment.id
     ensure.assert_called_once_with(
         user_id=1,
         catalog_course_id=fake_enrollment.catalog_course_id,
         target_mode="verified",
     )
-    upgrade.assert_not_called()
     cce_create.assert_not_called()
+    assert result.lms_enrollment_mode == "verified"
 
 
 def test_existing_enrollment_mode_audit_calls_upgrade_not_create(
@@ -364,15 +386,16 @@ def test_existing_enrollment_mode_audit_calls_upgrade_not_create(
     cce_create = mocker.patch("partner_catalog.services.enrollments.CatalogCourseEnrollment.objects.create")
 
     can_enroll = mocker.patch("partner_catalog.services.enrollments.can_user_enroll_in_catalog_course")
+    is_paid = mocker.patch("partner_catalog.services.enrollments.is_paid_course")
     platform_mode = mocker.patch("partner_catalog.services.enrollments.get_platform_enrollment_mode")
     ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
-    upgrade = mocker.patch("partner_catalog.services.enrollments.upgrade_to_verified")
 
     user_get.return_value = SimpleNamespace(id=1)
     fake_course = _fake_catalog_course(course_overview_id=101, catalog_course_id=999)
     cc_select_related.return_value.get.return_value = fake_course
 
     can_enroll.return_value = True
+    is_paid.return_value = True
     platform_mode.return_value = "audit"
 
     fake_enrollment = SimpleNamespace(
@@ -385,10 +408,14 @@ def test_existing_enrollment_mode_audit_calls_upgrade_not_create(
 
     result = svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=fake_course.id)
 
-    assert result is fake_enrollment
-    upgrade.assert_called_once_with(user_id=1, catalog_course_id=fake_enrollment.catalog_course_id)
-    ensure.assert_not_called()
+    assert result.catalog_course_enrollment_id == fake_enrollment.id
+    ensure.assert_called_once_with(
+        user_id=1,
+        catalog_course_id=fake_enrollment.catalog_course_id,
+        target_mode="verified",
+    )
     cce_create.assert_not_called()
+    assert result.lms_enrollment_mode == "verified"
 
 
 def test_new_enrollment_open_course_does_not_consume_bag_and_no_create(
@@ -405,7 +432,6 @@ def test_new_enrollment_open_course_does_not_consume_bag_and_no_create(
     can_enroll = mocker.patch("partner_catalog.services.enrollments.can_user_enroll_in_catalog_course")
     platform_mode = mocker.patch("partner_catalog.services.enrollments.get_platform_enrollment_mode")
     ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
-    upgrade = mocker.patch("partner_catalog.services.enrollments.upgrade_to_verified")
 
     course_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_course_limit")
     is_paid = mocker.patch("partner_catalog.services.enrollments.is_paid_course")
@@ -424,11 +450,11 @@ def test_new_enrollment_open_course_does_not_consume_bag_and_no_create(
 
     result = svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=fake_course.id)
 
-    assert result is None
+    assert result.catalog_course_enrollment_id is None
     ensure.assert_called_once_with(user_id=1, catalog_course_id=fake_course.id, target_mode="audit")
-    upgrade.assert_not_called()
     course_limit.assert_not_called()
     cce_create.assert_not_called()
+    assert result.lms_enrollment_mode == "audit"
 
 
 def test_new_enrollment_course_limit_reached_raises_and_no_lms_no_create(
@@ -445,7 +471,7 @@ def test_new_enrollment_course_limit_reached_raises_and_no_lms_no_create(
     can_enroll = mocker.patch("partner_catalog.services.enrollments.can_user_enroll_in_catalog_course")
     platform_mode = mocker.patch("partner_catalog.services.enrollments.get_platform_enrollment_mode")
     ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
-    upgrade = mocker.patch("partner_catalog.services.enrollments.upgrade_to_verified")
+    tracking_emit = mocker.patch("partner_catalog.services.enrollments.emit_catalog_course_enrollment_tracking_event")
 
     course_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_course_limit")
     is_paid = mocker.patch("partner_catalog.services.enrollments.is_paid_course")
@@ -465,8 +491,113 @@ def test_new_enrollment_course_limit_reached_raises_and_no_lms_no_create(
     with pytest.raises(CourseLimitReached):
         svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=fake_course.id)
     ensure.assert_not_called()
-    upgrade.assert_not_called()
     cce_create.assert_not_called()
+
+
+def test_existing_open_mode_without_bag_capacity_returns_warning_and_keeps_access(
+    mocker,
+    enrollments_module_no_atomic,
+    svc,
+):
+    user_get = mocker.patch("partner_catalog.services.enrollments.User.objects.get")
+    cc_select_related = mocker.patch("partner_catalog.services.enrollments.CatalogCourse.objects.select_related")
+    cce_select_for_update = mocker.patch(
+        "partner_catalog.services.enrollments.CatalogCourseEnrollment.objects.select_for_update"
+    )
+    cce_create = mocker.patch("partner_catalog.services.enrollments.CatalogCourseEnrollment.objects.create")
+
+    can_enroll = mocker.patch("partner_catalog.services.enrollments.can_user_enroll_in_catalog_course")
+    platform_mode = mocker.patch("partner_catalog.services.enrollments.get_platform_enrollment_mode")
+    ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
+    tracking_emit = mocker.patch("partner_catalog.services.enrollments.emit_catalog_course_enrollment_tracking_event")
+
+    course_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_course_limit")
+    is_paid = mocker.patch("partner_catalog.services.enrollments.is_paid_course")
+
+    user_get.return_value = SimpleNamespace(id=1)
+    fake_course = _fake_catalog_course(course_overview_id=101, catalog_course_id=999)
+    cc_select_related.return_value.get.return_value = fake_course
+
+    can_enroll.return_value = True
+    platform_mode.return_value = "audit"
+    cce_select_for_update.return_value.filter.return_value.first.return_value = None
+    course_limit.return_value = False
+    is_paid.return_value = True
+
+    result = svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=fake_course.id)
+
+    assert result.access_granted is True
+    assert result.warning_code == "course_limit_reached"
+    assert result.lms_enrollment_mode == "audit"
+    ensure.assert_not_called()
+    cce_create.assert_not_called()
+    tracking_emit.assert_called_once_with(
+        event_name=enrollments_module_no_atomic.EVENT_NAME_COURSE_ENROLLMENT_BLOCKED,
+        user_id=1,
+        catalog_id=500,
+        partner_id=None,
+        course_id="101",
+        catalog_course_id=999,
+        enrollment_mode="audit",
+        blocked_reason=CourseLimitReached.default_code,
+        on_commit=False,
+    )
+
+
+def test_inactive_enrollment_without_bag_capacity_returns_warning_without_reactivation(
+    mocker,
+    enrollments_module_no_atomic,
+    svc,
+):
+    user_get = mocker.patch("partner_catalog.services.enrollments.User.objects.get")
+    cc_select_related = mocker.patch("partner_catalog.services.enrollments.CatalogCourse.objects.select_related")
+    cce_select_for_update = mocker.patch(
+        "partner_catalog.services.enrollments.CatalogCourseEnrollment.objects.select_for_update"
+    )
+
+    can_enroll = mocker.patch("partner_catalog.services.enrollments.can_user_enroll_in_catalog_course")
+    platform_mode = mocker.patch("partner_catalog.services.enrollments.get_platform_enrollment_mode")
+    ensure = mocker.patch("partner_catalog.services.enrollments.ensure_edx_platform_enrollment")
+    tracking_emit = mocker.patch("partner_catalog.services.enrollments.emit_catalog_course_enrollment_tracking_event")
+
+    course_limit = mocker.patch("partner_catalog.services.enrollments.can_consume_course_limit")
+    is_paid = mocker.patch("partner_catalog.services.enrollments.is_paid_course")
+
+    user_get.return_value = SimpleNamespace(id=1)
+    fake_course = _fake_catalog_course(course_overview_id=101, catalog_course_id=999)
+    cc_select_related.return_value.get.return_value = fake_course
+
+    can_enroll.return_value = True
+    platform_mode.return_value = "honor"
+    course_limit.return_value = False
+    is_paid.return_value = True
+
+    fake_enrollment = SimpleNamespace(
+        id=55,
+        active=False,
+        catalog_course_id=fake_course.id,
+        save=MagicMock(),
+    )
+    cce_select_for_update.return_value.filter.return_value.first.return_value = fake_enrollment
+
+    result = svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=fake_course.id)
+
+    assert result.warning_code == "course_limit_reached"
+    assert result.catalog_course_enrollment_id == fake_enrollment.id
+    assert fake_enrollment.active is False
+    fake_enrollment.save.assert_not_called()
+    ensure.assert_not_called()
+    tracking_emit.assert_called_once_with(
+        event_name=enrollments_module_no_atomic.EVENT_NAME_COURSE_ENROLLMENT_BLOCKED,
+        user_id=1,
+        catalog_id=500,
+        partner_id=None,
+        course_id="101",
+        catalog_course_id=999,
+        enrollment_mode="honor",
+        blocked_reason=CourseLimitReached.default_code,
+        on_commit=False,
+    )
 
 
 # --------------------------------------------------------------------
