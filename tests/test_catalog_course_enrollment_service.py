@@ -151,7 +151,6 @@ def test_create_or_activate_access_denied_raises_and_no_lms_calls(
 
 def test_create_or_activate_existing_paid_lms_enrollment_allows_access_without_license_changes(
     mocker,
-    enrollments_module_no_atomic,
     svc,
 ):
     user_get = mocker.patch("partner_catalog.services.enrollments.User.objects.get")

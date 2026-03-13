@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 
 
 def test_can_consume_course_limit_counts_only_active_licenses(monkeypatch):
-    import partner_catalog.policies.limits as limits  # pylint: disable=import-outside-toplevel
+    from partner_catalog.policies import limits  # pylint: disable=import-outside-toplevel
 
     first_qs = MagicMock()
     first_qs.values_list.return_value.distinct.return_value = [101]
