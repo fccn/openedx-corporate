@@ -23,6 +23,14 @@ from partner_catalog.events.signals import (
 )
 from partner_catalog.helpers.email import normalize_email
 from partner_catalog.models import CatalogLearnerInvitation
+from partner_catalog.xapi.constants import (
+    EVENT_NAME_INVITATION_ACCEPTED,
+    EVENT_NAME_INVITATION_DECLINED,
+    EVENT_NAME_INVITATION_REMOVED,
+    EVENT_NAME_INVITATION_SENT,
+    INVITATION_CHANNEL_MANUAL,
+)
+from partner_catalog.xapi.emitter import emit_catalog_invitation_tracking_event
 
 User = get_user_model()
 Status = CatalogLearnerInvitation.Status
@@ -48,6 +56,12 @@ class CatalogLearnerInvitationService:
         Status.DECLINED: CATALOG_LEARNER_INVITATION_DECLINED_V1,
         Status.REMOVED: CATALOG_LEARNER_INVITATION_REMOVED_V1,
     }
+    _TRACKING_EVENT_MAP = {
+        Status.SENT: EVENT_NAME_INVITATION_SENT,
+        Status.ACCEPTED: EVENT_NAME_INVITATION_ACCEPTED,
+        Status.DECLINED: EVENT_NAME_INVITATION_DECLINED,
+        Status.REMOVED: EVENT_NAME_INVITATION_REMOVED,
+    }
 
     ALLOWED_TRANSITIONS = {
         Status.SENT: [Status.ACCEPTED, Status.DECLINED],
@@ -58,7 +72,15 @@ class CatalogLearnerInvitationService:
     }
 
     @transaction.atomic
-    def create_new_invitation(self, invite_email: str, catalog_id: int, invited_by=None, emit_event=True):
+    def create_new_invitation(
+        self,
+        invite_email: str,
+        catalog_id: int,
+        *,
+        invited_by=None,
+        emit_event=True,
+        invitation_channel: str = INVITATION_CHANNEL_MANUAL,
+    ):
         """
         Create a new CatalogLearnerInvitation.
         """
@@ -77,7 +99,11 @@ class CatalogLearnerInvitationService:
             raise ValidationError(self.ERROR_ACTIVE_INVITATION_EXISTS) from exc
 
         if emit_event:
-            self._emit_invitation_event(invitation)
+            self._emit_invitation_event(
+                invitation,
+                actor_user_id=getattr(invited_by, "id", None),
+                invitation_channel=invitation_channel,
+            )
         return invitation
 
     def _transition_status(
@@ -109,7 +135,7 @@ class CatalogLearnerInvitationService:
                 setattr(invitation, field, value)
 
         invitation.save()
-        self._emit_invitation_event(invitation)
+        self._emit_invitation_event(invitation, actor_user_id=getattr(user, "id", None))
 
         return invitation
 
@@ -189,21 +215,36 @@ class CatalogLearnerInvitationService:
 
         return invitation
 
-    def _emit_invitation_event(self, invitation: CatalogLearnerInvitation):
+    def _emit_invitation_event(
+        self,
+        invitation: CatalogLearnerInvitation,
+        actor_user_id: int = None,
+        invitation_channel: str | None = None,
+    ):
         """
-        Emit the appropriate event signal based on the invitation's status.
+        Emit invitation lifecycle events for both Open edX signals and tracking.
 
         Uses the status computed from the timestamps updated during the save()
         operation.
         """
         status = invitation.status
         signal = self._EVENT_MAP.get(status)
+        tracking_event_name = self._TRACKING_EVENT_MAP.get(status)
 
-        if not signal:
+        if not signal and not tracking_event_name:
             return
 
-        event_data = self._to_event_data(invitation)
-        signal.send_event(invitation=event_data)
+        if signal:
+            event_data = self._to_event_data(invitation)
+            signal.send_event(invitation=event_data)
+
+        if tracking_event_name:
+            emit_catalog_invitation_tracking_event(
+                event_name=tracking_event_name,
+                invitation=invitation,
+                actor_user_id=actor_user_id,
+                invitation_channel=invitation_channel,
+            )
 
     def _is_status_transition_allowed(self, invitation, new_status: Status):
         """Return True if invitation can transition from its current status to new_status."""

@@ -48,6 +48,7 @@ from partner_catalog.services.certificates import (
     annotate_partner_certified_count,
 )
 from partner_catalog.services.invitations import CatalogLearnerInvitationService
+from partner_catalog.xapi.constants import INVITATION_CHANNEL_MANUAL
 
 
 class PartnerViewset(viewsets.ReadOnlyModelViewSet):
@@ -408,6 +409,7 @@ class CatalogLearnerInvitationViewSet(
                     invite_email=email,
                     catalog_id=catalog_id,
                     invited_by=request.user,
+                    invitation_channel=INVITATION_CHANNEL_MANUAL,
                 )
                 created_invitations.append(invitation)
             except ValidationError as e:

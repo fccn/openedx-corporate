@@ -19,10 +19,7 @@ from partner_catalog.models import CatalogCourse, CatalogCourseEnrollment
 from partner_catalog.policies.enrollments import can_user_enroll_in_catalog_course
 from partner_catalog.policies.limits import can_consume_course_limit, is_paid_course
 from partner_catalog.policies.platform_enrollment import get_platform_enrollment_mode
-from partner_catalog.services.platform_enrollment import (
-    downgrade_to_audit,
-    ensure_edx_platform_enrollment,
-)
+from partner_catalog.services.platform_enrollment import downgrade_to_audit, ensure_edx_platform_enrollment
 from partner_catalog.xapi.constants import (
     EVENT_NAME_COURSE_ENROLLMENT_ACTIVATED,
     EVENT_NAME_COURSE_ENROLLMENT_BLOCKED,
