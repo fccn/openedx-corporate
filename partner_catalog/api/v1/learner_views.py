@@ -175,9 +175,19 @@ class LearnerCatalogCourseViewSet(InjectNestedFKMixin, viewsets.ReadOnlyModelVie
         catalog_course = self.get_object()
         user = request.user
 
-        self.enrollment_service.create_or_activate_course_enrollment(
+        result = self.enrollment_service.create_or_activate_course_enrollment(
             user_id=user.id,
             catalog_course_id=catalog_course.id,
         )
 
-        return Response({"detail": "Successfully enrolled in the course."}, status=status.HTTP_200_OK)
+        response_data = {
+            "detail": result.detail,
+            "access_granted": result.access_granted,
+            "lms_enrollment_mode": result.lms_enrollment_mode,
+            "warning_code": result.warning_code,
+            "warning_detail": result.warning_detail,
+            "catalog_course_enrollment_id": result.catalog_course_enrollment_id,
+            "catalog_course_enrollment_active": result.catalog_course_enrollment_active,
+            "catalog_course_enrollment_created": result.catalog_course_enrollment_created,
+        }
+        return Response(response_data, status=status.HTTP_200_OK)

@@ -43,6 +43,7 @@ def can_consume_course_limit(*, catalog) -> bool:
     enrolled_course_ids = list(
         CatalogCourseEnrollment.objects.filter(
             catalog_course__catalog_id=catalog.id,
+            active=True,
         ).values_list("course_overview_id", flat=True).distinct()
     )
     paid_course_ids = [
@@ -55,5 +56,6 @@ def can_consume_course_limit(*, catalog) -> bool:
     used = CatalogCourseEnrollment.objects.filter(
         catalog_course__catalog_id=catalog.id,
         course_overview_id__in=paid_course_ids,
+        active=True,
     ).count()
     return used < catalog.course_enrollments_limit
