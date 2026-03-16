@@ -11,7 +11,7 @@ from __future__ import annotations
 from django.apps import apps
 from django.core.exceptions import ValidationError
 
-from partner_catalog.exceptions import UserLimitReached, InactiveCatalogEnrollment
+from partner_catalog.exceptions import InactiveCatalogEnrollment, UserLimitReached
 from partner_catalog.helpers.regex_cache import compiled_email_regexes_for_catalog
 from partner_catalog.models import BaseCatalog, CatalogLearnerInvitation
 
