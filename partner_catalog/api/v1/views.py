@@ -594,7 +594,7 @@ class CatalogCourseEnrollmentViewSet(
         filters.SearchFilter,
         filters.OrderingFilter,
     ]
-    filterset_fields = ["catalog_course", "user"]
+    filterset_fields = ["catalog_course", "user", "active"]
     search_fields = ["user__username", "user__email"]
     ordering_fields = ["id", "user_id"]
     ordering = ["id"]
