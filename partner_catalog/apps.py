@@ -3,9 +3,12 @@ partner_catalog Django application initialization.
 """
 
 import importlib
+import logging
 
 from django.apps import AppConfig
 from edx_django_utils.plugins import PluginSettings, PluginURLs
+
+logger = logging.getLogger(__name__)
 
 
 class PartnerCatalogConfig(AppConfig):
@@ -42,3 +45,12 @@ class PartnerCatalogConfig(AppConfig):
         """Initialize the application by importing signals module."""
         importlib.import_module("partner_catalog.signals")
         importlib.import_module("partner_catalog.consumers")
+        try:
+            importlib.import_module("partner_catalog.xapi.transformers")
+        except ModuleNotFoundError as exc:
+            if exc.name not in {"event_routing_backends", "tincan"}:
+                raise
+            logger.debug(
+                "Skipping partner_catalog xAPI transformer registration (missing %s).",
+                exc.name,
+            )
