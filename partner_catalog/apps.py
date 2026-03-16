@@ -45,6 +45,7 @@ class PartnerCatalogConfig(AppConfig):
         """Initialize the application by importing signals module."""
         importlib.import_module("partner_catalog.signals")
         importlib.import_module("partner_catalog.consumers")
+        importlib.import_module("partner_catalog.tasks.emails")
         try:
             importlib.import_module("partner_catalog.xapi.transformers")
         except ModuleNotFoundError as exc:
