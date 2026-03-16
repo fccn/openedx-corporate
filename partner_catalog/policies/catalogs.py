@@ -11,6 +11,7 @@ from __future__ import annotations
 from django.apps import apps
 from django.core.exceptions import ValidationError
 
+from partner_catalog.exceptions import InactiveCatalogEnrollment, UserLimitReached
 from partner_catalog.helpers.regex_cache import compiled_email_regexes_for_catalog
 from partner_catalog.models import BaseCatalog, CatalogLearnerInvitation
 
@@ -162,8 +163,17 @@ def validate_catalog_enrollment_request(*, invitation) -> None:
         ValidationError: If the user cannot enroll in the catalog.
     """
 
-    if not is_catalog_available(catalog=invitation.catalog):
-        raise ValidationError("Catalog is not available for enrollment.")
-
     if invitation.status != Status.ACCEPTED:
         raise ValidationError("Invitation must be accepted to enroll in the catalog.")
+
+    if not invitation.catalog.active:
+        raise InactiveCatalogEnrollment()
+
+    CatalogLearner = apps.get_model("partner_catalog", "CatalogLearner")
+    already_active = CatalogLearner.objects.filter(
+        catalog_id=invitation.catalog_id,
+        user_id=invitation.user_id,
+        active=True,
+    ).exists()
+    if not already_active and not has_catalog_capacity(catalog=invitation.catalog):
+        raise UserLimitReached()

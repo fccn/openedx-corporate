@@ -15,6 +15,8 @@ from partner_catalog.models import (
 )
 from partner_catalog.policies.catalogs import is_user_an_active_catalog_learner, validate_catalog_enrollment_request
 from partner_catalog.services.invitations import CatalogLearnerInvitationService
+from partner_catalog.xapi.constants import EVENT_NAME_INVITATION_SENT, INVITATION_CHANNEL_SELF_ENROLL
+from partner_catalog.xapi.emitter import emit_catalog_invitation_tracking_event
 
 User = get_user_model()
 
@@ -68,7 +70,14 @@ class PartnerCatalogService():
             invite_email=user.email,
             catalog_id=catalog.id,
             invited_by=None,
-            emit_event=False
+            emit_event=False,
+            invitation_channel=INVITATION_CHANNEL_SELF_ENROLL,
+        )
+        emit_catalog_invitation_tracking_event(
+            event_name=EVENT_NAME_INVITATION_SENT,
+            invitation=invitation,
+            actor_user_id=getattr(user, "id", None),
+            invitation_channel=INVITATION_CHANNEL_SELF_ENROLL,
         )
         invitation_service.accept_invitation(
             invitation_id=invitation.id,
