@@ -594,7 +594,7 @@ class CatalogCourseEnrollmentViewSet(
         filters.SearchFilter,
         filters.OrderingFilter,
     ]
-    filterset_fields = ["catalog_course", "user"]
+    filterset_fields = ["catalog_course", "user", "active"]
     search_fields = ["user__username", "user__email"]
     ordering_fields = ["id", "user_id"]
     ordering = ["id"]
@@ -606,8 +606,18 @@ class CatalogCourseEnrollmentViewSet(
     def get_queryset(self):
         """Get the queryset for catalog course enrollments."""
         qs = self.queryset
-        course_pk = self.kwargs.get("course_pk")
-        return qs.filter(catalog_course_id=course_pk) if course_pk else qs
+        catalog_pk = self.kwargs.get("catalog_pk")
+        # NestedDefaultRouter builds this kwarg from:
+        # lookup="course" + CatalogCourseViewSet.lookup_url_kwarg ("course_id")
+        course_id = self.kwargs.get("course_course_id") or self.kwargs.get("course_id")
+
+        if catalog_pk:
+            qs = qs.filter(catalog_course__catalog_id=catalog_pk)
+
+        if course_id:
+            qs = qs.filter(catalog_course__course_overview_id=course_id)
+
+        return qs
 
 
 class CatalogEnrollmentsViewSet(CSVExportMixin, viewsets.ReadOnlyModelViewSet):
