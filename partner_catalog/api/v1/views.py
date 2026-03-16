@@ -125,7 +125,11 @@ class PartnerCatalogViewSet(viewsets.ModelViewSet):
 
         qs = qs.annotate(
             courses_count=Count("catalog_courses", distinct=True),
-            enrollments=Count("catalog_courses__enrollments", distinct=True),
+            enrollments=Count(
+                "catalog_courses__enrollments",
+                filter=Q(catalog_courses__enrollments__active=True),
+                distinct=True
+            ),
             total_learners=Count("catalog_learners", distinct=True),
             active_learners=Count("catalog_learners", filter=Q(catalog_learners__active=True), distinct=True),
         )
