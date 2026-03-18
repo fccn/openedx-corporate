@@ -16,6 +16,7 @@ import pytest
 from django.core.exceptions import ValidationError
 from django.utils import timezone
 
+from partner_catalog.exceptions import InactiveCatalogEnrollment, UserLimitReached
 from partner_catalog.policies.catalogs import (
     has_catalog_capacity,
     is_catalog_available,
@@ -141,7 +142,7 @@ def test_enrollment_blocked_when_catalog_not_active():
     user = make_user()
     invitation = make_invitation(catalog, user=user, invite_email=user.email, accepted_at=timezone.now())
 
-    with pytest.raises(ValidationError, match="not available"):
+    with pytest.raises(InactiveCatalogEnrollment):
         validate_catalog_enrollment_request(invitation=invitation)
 
 
@@ -167,7 +168,7 @@ def test_enrollment_blocked_when_catalog_at_user_limit():
         catalog, user=new_user, invite_email=new_user.email, accepted_at=timezone.now()
     )
 
-    with pytest.raises(ValidationError, match="not available"):
+    with pytest.raises(UserLimitReached):
         validate_catalog_enrollment_request(invitation=new_invitation)
 
 
