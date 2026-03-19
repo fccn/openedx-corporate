@@ -93,10 +93,16 @@ class PartnerSerializer(serializers.ModelSerializer):
         }
 
     def get_logo(self, obj):
-        """Return the URL of the corporate partner organization's logo."""
+        """Return the URL of the corporate partner organization's logo.
+
+        In development environments, prepends LMS_ROOT_URL to produce an absolute URL.
+        In other environments, returns the relative logo path.
+        """
         try:
             if obj.organization and obj.organization.logo:
-                return f"{settings.LMS_ROOT_URL}{obj.organization.logo.url}"
+                if settings.DEBUG:
+                    return f"{settings.LMS_ROOT_URL}{obj.organization.logo.url}"
+                return obj.organization.logo.url
         except (ValueError, AttributeError):
             pass
         return None
