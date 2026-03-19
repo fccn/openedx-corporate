@@ -56,6 +56,13 @@ def handle_catalog_learner_invitation_accepted(
 ) -> None:
     """Handle acceptance of a CatalogLearnerInvitation."""
     try:
+        if invitation.learner_id:
+            logger.info(
+                "CATALOG_LEARNER_INVITATION_ACCEPTED: Learner already linked for invitation id=%s learner_id=%s",
+                invitation.id,
+                invitation.learner_id,
+            )
+            return
 
         catalog_service = PartnerCatalogService()
         _, created = catalog_service.create_or_update_learner_from_invitation(invitation.id)

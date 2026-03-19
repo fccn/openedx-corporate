@@ -21,8 +21,10 @@ from partner_catalog.events.signals import (
     CATALOG_LEARNER_INVITATION_DECLINED_V1,
     CATALOG_LEARNER_INVITATION_REMOVED_V1,
 )
+from partner_catalog.exceptions import InactiveCatalogEnrollment, UserLimitReached
 from partner_catalog.helpers.email import normalize_email
-from partner_catalog.models import CatalogLearnerInvitation
+from partner_catalog.models import CatalogLearner, CatalogLearnerInvitation
+from partner_catalog.policies.catalogs import has_catalog_capacity
 from partner_catalog.xapi.constants import (
     EVENT_NAME_INVITATION_ACCEPTED,
     EVENT_NAME_INVITATION_DECLINED,
@@ -158,17 +160,27 @@ class CatalogLearnerInvitationService:
     def accept_invitation(self, invitation_id: int, user):
         """
         Accept an existing CatalogLearnerInvitation.
-        Update status and timestamps accordingly.
+        Validate capacity/availability, update status, and create/update learner atomically.
         """
         invitation = self.get_invitation_or_raise(invitation_id)
-        return self._transition_status(
-            invitation=invitation,
-            new_status=Status.ACCEPTED,
-            user=user,
-            timestamp_field='accepted_at',
-            extra_updates={'user': user},
-            error_msg=self.ERROR_ACCEPT_NOT_ALLOWED,
-        )
+
+        if not self._is_status_transition_allowed(invitation, Status.ACCEPTED):
+            raise ValidationError(self.ERROR_ACCEPT_NOT_ALLOWED)
+
+        if not self._validate_invitation_status_access(user, invitation, Status.ACCEPTED):
+            raise ValidationError(self.ERROR_ACCEPT_NOT_ALLOWED)
+
+        self._validate_acceptance_preconditions(invitation=invitation, user=user)
+
+        invitation.accepted_at = timezone.now()
+        invitation.user = user
+        invitation.save()
+
+        self._create_or_update_learner_from_invitation(invitation)
+
+        invitation.refresh_from_db()
+        self._emit_invitation_event(invitation, actor_user_id=getattr(user, "id", None))
+        return invitation
 
     @transaction.atomic
     def remove_invitation(self, invitation_id: int, user):
@@ -191,9 +203,44 @@ class CatalogLearnerInvitationService:
         Get an invitation by ID or raise ValidationError if not found.
         """
         try:
-            return CatalogLearnerInvitation.objects.get(id=invitation_id)
+            return CatalogLearnerInvitation.objects.select_related("catalog").get(id=invitation_id)
         except CatalogLearnerInvitation.DoesNotExist as exc:
             raise ValidationError(self.ERROR_INVITATION_NOT_FOUND) from exc
+
+    def _validate_acceptance_preconditions(self, invitation: CatalogLearnerInvitation, user):
+        """
+        Validate catalog availability and learner capacity before accepting an invitation.
+        """
+        if not invitation.catalog.active:
+            raise InactiveCatalogEnrollment()
+
+        already_active = CatalogLearner.objects.filter(
+            catalog_id=invitation.catalog_id,
+            user_id=getattr(user, "id", None),
+            active=True,
+        ).exists()
+        if not already_active and not has_catalog_capacity(catalog=invitation.catalog):
+            raise UserLimitReached()
+
+    def _create_or_update_learner_from_invitation(self, invitation: CatalogLearnerInvitation):
+        """
+        Create or update the learner linked to an accepted invitation.
+
+        This mirrors the learner-linking semantics used by catalog services while
+        keeping acceptance flow self-contained to avoid circular imports.
+        """
+        learner, created = CatalogLearner.objects.get_or_create(
+            user_id=invitation.user_id,
+            catalog_id=invitation.catalog_id,
+            defaults={"current_invitation_id": invitation.id},
+        )
+
+        if not created and learner.current_invitation_id != invitation.id:
+            learner.current_invitation_id = invitation.id
+            learner.save()
+
+        invitation.learner = learner
+        invitation.save(update_fields=["learner"])
 
     def get_latest_sent_invitation(self, user, catalog):
         """
