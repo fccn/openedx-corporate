@@ -11,7 +11,7 @@ echo "Running unit tests for openedx-corporate (partner_catalog)..."
 
 tutor local exec lms bash -c "
   set -euo pipefail
-  pip install pytest pytest-django pytest-cov --quiet
+  pip install pytest pytest-django pytest-cov pytest-mock --quiet
   cd /openedx/openedx-corporate
   pytest --ds=test_settings tests/ -v
 "

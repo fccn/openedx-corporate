@@ -46,3 +46,26 @@ def get_enrollment(
         username=username,
         course_id=course_id,
     )
+
+
+def update_enrollment(
+    *,
+    username,
+    course_id,
+    mode: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    enrollment_attributes: Optional[List[Dict[str, Any]]] = None,
+):
+    """
+    Update an existing enrollment for a user in a course.
+
+    This delegates to the configured backend so that caller code does not
+    depend on the concrete LMS implementation or API version.
+    """
+    return _backend().update_enrollment(
+        username=username,
+        course_id=course_id,
+        mode=mode,
+        is_active=is_active,
+        enrollment_attributes=enrollment_attributes,
+    )

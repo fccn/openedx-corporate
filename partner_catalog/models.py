@@ -560,44 +560,69 @@ class CatalogLearnerInvitation(models.Model):
 
 class CatalogCourseEnrollment(models.Model):
     """
-    Represents a user's enrollment in a specific catalog course.
+    Represents a user's *license* for a course (one per user+course across catalogs).
 
-    Tracks active/inactive status, invitation and acceptance timestamps, and
-    links to the user and catalog course.
-
-    Used to manage and enforce enrollment limits and statuses within a corporate
-    partner catalog.
+    catalog_course points to the winning CatalogCourse (first catalog that granted the license).
+    course_overview is denormalized from catalog_course.course_overview to enforce uniqueness.
     """
 
     id = models.AutoField(primary_key=True)
+
     user = models.ForeignKey(
         get_user_model(),
         on_delete=models.CASCADE,
         related_name="catalog_course_enrollments",
     )
+
+    # Winning / prevailing catalog-course (first one)
     catalog_course = models.ForeignKey(
         "CatalogCourse",
         on_delete=models.CASCADE,
         related_name="enrollments",
     )
+
+    # Denormalized course reference to enforce "one license per user per course"
+    course_overview = models.ForeignKey(
+        course_overview(),
+        on_delete=models.CASCADE,
+        related_name="partner_catalog_enrollments",
+        db_index=True,
+    )
+
     active = models.BooleanField(default=True)
 
     class Meta:
-        """Meta options for CatalogCourseEnrollment model."""
+        """Metadata options for CatalogCourseEnrollment."""
 
         constraints = [
+            # One license per user per course, across all catalogs
             models.UniqueConstraint(
-                fields=["user", "catalog_course"],
-                name="pcce_unique_user_catalog_course_enrollment",
-            )
+                fields=["user", "course_overview"],
+                name="pcce_unique_user_course_license",
+            ),
         ]
         indexes = [
             models.Index(fields=["user"]),
             models.Index(fields=["catalog_course"]),
+            models.Index(fields=["course_overview"]),
             models.Index(fields=["user", "active"]),
+            models.Index(fields=["catalog_course", "course_overview", "active"]),
         ]
 
+    def save(self, *args, **kwargs):
+        """
+        Persist the enrollment, keeping course_overview aligned with catalog_course.
+        """
+        # Safety net: keep course_overview in sync with the catalog_course
+        if self.catalog_course_id and (not self.course_overview_id):
+            self.course_overview = self.catalog_course.course_overview
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        """Return a readable string representation of the CatalogCourseEnrollment instance."""
+        """Return a readable representation of the enrollment."""
         state = "active" if self.active else "inactive"
-        return f"Enrollment(user_id={self.user_id}, catalog_course_id={self.catalog_course_id}, {state})"
+        return (
+            f"Enrollment(user_id={self.user_id}, "
+            f"course_overview_id={self.course_overview_id}, "
+            f"catalog_course_id={self.catalog_course_id}, {state})"
+        )

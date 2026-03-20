@@ -49,6 +49,7 @@ from partner_catalog.services.certificates import (
     annotate_partner_certified_count,
 )
 from partner_catalog.services.invitations import CatalogLearnerInvitationService
+from partner_catalog.xapi.constants import INVITATION_CHANNEL_MANUAL
 
 
 class PartnerViewset(viewsets.ReadOnlyModelViewSet):
@@ -145,7 +146,11 @@ class PartnerCatalogViewSet(CSVExportMixin, viewsets.ModelViewSet):
 
         qs = qs.annotate(
             courses_count=Count("catalog_courses", distinct=True),
-            enrollments=Count("catalog_courses__enrollments", distinct=True),
+            enrollments=Count(
+                "catalog_courses__enrollments",
+                filter=Q(catalog_courses__enrollments__active=True),
+                distinct=True
+            ),
             total_learners=Count("catalog_learners", distinct=True),
             active_learners=Count("catalog_learners", filter=Q(catalog_learners__active=True), distinct=True),
         )
@@ -465,6 +470,7 @@ class CatalogLearnerInvitationViewSet(
                     invite_email=email,
                     catalog_id=catalog_id,
                     invited_by=request.user,
+                    invitation_channel=INVITATION_CHANNEL_MANUAL,
                 )
                 created_invitations.append(invitation)
             except ValidationError as e:
@@ -588,7 +594,7 @@ class CatalogCourseEnrollmentViewSet(
         filters.SearchFilter,
         filters.OrderingFilter,
     ]
-    filterset_fields = ["catalog_course", "user"]
+    filterset_fields = ["catalog_course", "user", "active"]
     search_fields = ["user__username", "user__email"]
     ordering_fields = ["id", "user_id"]
     ordering = ["id"]
@@ -600,8 +606,18 @@ class CatalogCourseEnrollmentViewSet(
     def get_queryset(self):
         """Get the queryset for catalog course enrollments."""
         qs = self.queryset
-        course_pk = self.kwargs.get("course_pk")
-        return qs.filter(catalog_course_id=course_pk) if course_pk else qs
+        catalog_pk = self.kwargs.get("catalog_pk")
+        # NestedDefaultRouter builds this kwarg from:
+        # lookup="course" + CatalogCourseViewSet.lookup_url_kwarg ("course_id")
+        course_id = self.kwargs.get("course_course_id") or self.kwargs.get("course_id")
+
+        if catalog_pk:
+            qs = qs.filter(catalog_course__catalog_id=catalog_pk)
+
+        if course_id:
+            qs = qs.filter(catalog_course__course_overview_id=course_id)
+
+        return qs
 
 
 class CatalogEnrollmentsViewSet(CSVExportMixin, viewsets.ReadOnlyModelViewSet):

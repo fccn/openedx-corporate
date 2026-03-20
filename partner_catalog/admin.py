@@ -172,11 +172,13 @@ class PartnerAdmin(admin.ModelAdmin):
 
     def organization_logo_thumb(self, obj):
         """Display a small organization logo if available."""
+        logo = getattr(obj.organization, "logo", "")
+
         try:
             return format_html(
                 '<img src="{}" width="32" height="32" '
                 'style="object-fit:cover;border-radius:4px;" />',
-                obj.logo.url,
+                logo.url,
             )
         except (ValueError, AttributeError):
             return format_html(
@@ -254,7 +256,7 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
         (
             "Additional Information",
             {
-                "fields": ("authorization_message",),
+                "fields": ("authorization_message", "support_email", "alternative_link"),
             },
         ),
         (
