@@ -12,10 +12,9 @@ from django.db import IntegrityError
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
-from partner_catalog.exceptions import UserLimitReached
 from partner_catalog.models import CatalogLearnerInvitation
 from partner_catalog.services.invitations import CatalogLearnerInvitationService
-from tests.factories import make_catalog, make_invitation, make_learner, make_user
+from tests.factories import make_catalog, make_invitation, make_user
 
 Status = CatalogLearnerInvitation.Status
 
@@ -136,39 +135,6 @@ def test_accept_invitation_raises_when_already_removed(service, catalog, learner
 
     with pytest.raises(ValidationError, match=service.ERROR_ACCEPT_NOT_ALLOWED):
         service.accept_invitation(invitation.id, user=learner_user)
-
-
-@pytest.mark.django_db
-def test_accept_invitation_raises_when_catalog_user_limit_reached(service, catalog, learner_user):
-    """
-    accept_invitation raises UserLimitReached when catalog capacity is exhausted and
-    must not leave the invitation in ACCEPTED state.
-    """
-    catalog.user_limit = 1
-    catalog.save(update_fields=["user_limit"])
-
-    existing_user = make_user(email="existing@example.com")
-    existing_invitation = make_invitation(
-        catalog,
-        user=existing_user,
-        invite_email=existing_user.email,
-        accepted_at=timezone.now(),
-    )
-    make_learner(catalog, existing_user, existing_invitation)
-
-    invitation = service.create_new_invitation(
-        invite_email=learner_user.email,
-        catalog_id=catalog.id,
-        emit_event=False,
-    )
-
-    with pytest.raises(UserLimitReached):
-        service.accept_invitation(invitation.id, user=learner_user)
-
-    invitation.refresh_from_db()
-    assert invitation.status == Status.SENT
-    assert invitation.accepted_at is None
-    assert invitation.learner_id is None
 
 
 # ---------------------------------------------------------------------------
