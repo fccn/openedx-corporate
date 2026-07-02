@@ -14,4 +14,4 @@ Change Log
 Unreleased
 **********
 
-*
+* fix(admin): keep base_catalog pre-filled after "Save and add another" in BaseCatalogCourseAdmin
