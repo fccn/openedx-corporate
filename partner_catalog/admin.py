@@ -262,8 +262,6 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
         "name",
         "partner_name",
         "is_self_enrollment",
-        "course_count",
-        "learner_count",
         "add_learner",
         "add_course",
         "add_manager",
@@ -325,18 +323,6 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
     partner_name.short_description = "Partner"
     partner_name.admin_order_field = "partner__organization__short_name"
 
-    def course_count(self, obj):
-        """Display the number of courses in this catalog."""
-        return obj.catalog_courses.count()
-
-    course_count.short_description = "Courses"
-
-    def learner_count(self, obj):
-        """Display the number of learners in this catalog."""
-        return obj.catalog_learners.count()
-
-    learner_count.short_description = "Learners"
-
     def image_thumb(self, obj):
         """Display a thumbnail preview of the catalog image if available."""
         if obj.image:
@@ -351,55 +337,71 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
     image_thumb.short_description = "Image"
 
     def add_learner(self, obj):
-        """Generate a link to add a new invitation for this catalog."""
+        """Display learner count and a link to add a new invitation for this catalog."""
         invitation_model = CatalogLearnerInvitation
         add_invitation_url = reverse(
             f"admin:{invitation_model._meta.app_label}_{invitation_model._meta.model_name}_add"
         )
         full_url = f"{add_invitation_url}?catalog={obj.pk}"
+        count = obj.catalog_learners.count()
 
         return format_html(
-            '<a href="{}" style="font-weight: bold;"> Add Learner </a>',
+            '<span style="display:block;font-size:1.1em;font-weight:bold;">{}</span>'
+            '<a href="{}" style="font-weight:bold;">Add Learner</a>',
+            count,
             full_url,
         )
 
-    add_learner.short_description = "Add Learner"
+    add_learner.short_description = "Learners"
 
     def add_course(self, obj):
-        """Generate a link to add a new course to this catalog."""
+        """Display course count and a link to add a new course to this catalog."""
         course_model = CatalogCourse
         add_course_url = reverse(
             f"admin:{course_model._meta.app_label}_{course_model._meta.model_name}_add"
         )
         full_url = f"{add_course_url}?catalog={obj.pk}"
+        count = obj.catalog_courses.count()
 
         return format_html(
-            '<a href="{}" style="font-weight: bold;"> Add Course </a>',
+            '<span style="display:block;font-size:1.1em;font-weight:bold;">{}</span>'
+            '<a href="{}" style="font-weight:bold;">Add Course</a>',
+            count,
             full_url,
         )
 
-    add_course.short_description = "Add Course"
+    add_course.short_description = "Courses"
 
     def add_manager(self, obj):
-        """Generate a link to add a new manager (catalog-level)."""
+        """Display manager usernames and a link to add a new manager (catalog-level)."""
         manager_model = CatalogManager
         add_manager_url = reverse(
             f"admin:{manager_model._meta.app_label}_{manager_model._meta.model_name}_add"
         )
         full_url = f"{add_manager_url}?catalog={obj.pk}"
 
+        active_managers = [m for m in obj.catalog_managers.all() if m.active]
+        if active_managers:
+            usernames = "<br>".join(m.user.username for m in active_managers)
+            return format_html(
+                '<span style="display:block;">{}</span>'
+                '<a href="{}" style="font-weight:bold;">Add Manager</a>',
+                format_html(usernames),
+                full_url,
+            )
+
         return format_html(
-            '<a href="{}" style="font-weight: bold;"> Add Manager </a>',
+            '<a href="{}" style="font-weight:bold;">Add Manager</a>',
             full_url,
         )
 
-    add_manager.short_description = "Add Manager"
+    add_manager.short_description = "Manager"
 
     def get_queryset(self, request):
         """Optimize queryset with select_related and prefetch_related."""
         queryset = super().get_queryset(request)
         return queryset.select_related("partner__organization").prefetch_related(
-            "catalog_courses", "catalog_learners", "catalog_email_regexes"
+            "catalog_courses", "catalog_learners", "catalog_email_regexes", "catalog_managers__user"
         )
 
 
