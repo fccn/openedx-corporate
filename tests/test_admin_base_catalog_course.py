@@ -14,7 +14,6 @@ from django.test import RequestFactory, override_settings
 from partner_catalog.admin import BaseCatalogCourseAdmin
 from partner_catalog.edxapp_wrapper.course_module import course_overview
 from partner_catalog.models import BaseCatalog, BaseCatalogCourse
-
 from tests.factories import make_user
 
 _ADMIN_URL_CONF = "tests.admin_test_urls"
