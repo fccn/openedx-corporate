@@ -27,29 +27,33 @@ CourseOverview = course_overview()
 # ---------------------------------------------------------------------------
 
 def _make_course():
+    """Create and return a CourseOverview instance."""
     return CourseOverview.objects.create()
 
 
 def _make_base_catalog(name="Test Base Catalog"):
+    """Create and return a BaseCatalog with the given name."""
     return BaseCatalog.objects.create(name=name, slug=name.lower().replace(" ", "-"))
 
 
 def _post_request(user, data=None):
+    """Build a POST request with messages middleware attached."""
     factory = RequestFactory()
     request = factory.post("/fake-admin/", data=data or {})
     request.user = user
     request.session = {}
-    request._messages = FallbackStorage(request)
+    request._messages = FallbackStorage(request)  # pylint: disable=protected-access
     return request
 
 
 def _get_request(user, params=None):
+    """Build a GET request with messages middleware attached."""
     factory = RequestFactory()
     query = f"?{params}" if params else ""
     request = factory.get(f"/fake-admin/{query}")
     request.user = user
     request.session = {}
-    request._messages = FallbackStorage(request)
+    request._messages = FallbackStorage(request)  # pylint: disable=protected-access
     return request
 
 
