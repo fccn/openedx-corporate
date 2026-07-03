@@ -337,7 +337,7 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
     image_thumb.short_description = "Image"
 
     def add_learner(self, obj):
-        """Display learner count and a link to add a new invitation for this catalog."""
+        """Display learner count as a link to add a new invitation for this catalog."""
         invitation_model = CatalogLearnerInvitation
         add_invitation_url = reverse(
             f"admin:{invitation_model._meta.app_label}_{invitation_model._meta.model_name}_add"
@@ -346,16 +346,15 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
         count = obj.catalog_learners.count()
 
         return format_html(
-            '<span style="display:block;font-size:1.1em;font-weight:bold;">{}</span>'
-            '<a href="{}" style="font-weight:bold;">Add Learner</a>',
-            count,
+            '<a href="{}" style="font-weight:bold;font-size:1.1em;">{}</a>',
             full_url,
+            count,
         )
 
-    add_learner.short_description = "Learners"
+    add_learner.short_description = "Add Learner"
 
     def add_course(self, obj):
-        """Display course count and a link to add a new course to this catalog."""
+        """Display course count as a link to add a new course to this catalog."""
         course_model = CatalogCourse
         add_course_url = reverse(
             f"admin:{course_model._meta.app_label}_{course_model._meta.model_name}_add"
@@ -364,16 +363,15 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
         count = obj.catalog_courses.count()
 
         return format_html(
-            '<span style="display:block;font-size:1.1em;font-weight:bold;">{}</span>'
-            '<a href="{}" style="font-weight:bold;">Add Course</a>',
-            count,
+            '<a href="{}" style="font-weight:bold;font-size:1.1em;">{}</a>',
             full_url,
+            count,
         )
 
-    add_course.short_description = "Courses"
+    add_course.short_description = "Add Course"
 
     def add_manager(self, obj):
-        """Display manager usernames and a link to add a new manager (catalog-level)."""
+        """Display manager usernames as links to add a new manager (catalog-level)."""
         manager_model = CatalogManager
         add_manager_url = reverse(
             f"admin:{manager_model._meta.app_label}_{manager_model._meta.model_name}_add"
@@ -382,20 +380,18 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
 
         active_managers = [m for m in obj.catalog_managers.all() if m.active]
         if active_managers:
-            usernames = "<br>".join(m.user.username for m in active_managers)
-            return format_html(
-                '<span style="display:block;">{}</span>'
-                '<a href="{}" style="font-weight:bold;">Add Manager</a>',
-                format_html(usernames),
-                full_url,
+            usernames = "<br>".join(
+                f'<a href="{full_url}" style="font-weight:bold;">{m.user.username}</a>'
+                for m in active_managers
             )
+            return format_html(usernames)
 
         return format_html(
-            '<a href="{}" style="font-weight:bold;">Add Manager</a>',
+            '<a href="{}" style="font-weight:bold;">—</a>',
             full_url,
         )
 
-    add_manager.short_description = "Manager"
+    add_manager.short_description = "Add Manager"
 
     def get_queryset(self, request):
         """Optimize queryset with select_related and prefetch_related."""
