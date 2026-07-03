@@ -343,7 +343,7 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
             f"admin:{CatalogLearnerInvitation._meta.app_label}_{CatalogLearnerInvitation._meta.model_name}_add"
         )
         return format_html(
-            '<a href="{}?catalog={}" style="font-weight:bold;display:block;text-align:center;">{}</a>',
+            '<a href="{}?catalog={}" style="font-weight:bold;">{}</a>',
             add_url,
             obj.pk,
             obj.catalog_learners.count(),
@@ -359,7 +359,7 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
             f"admin:{CatalogCourse._meta.app_label}_{CatalogCourse._meta.model_name}_add"
         )
         return format_html(
-            '<a href="{}?catalog={}" style="font-weight:bold;display:block;text-align:center;">{}</a>',
+            '<a href="{}?catalog={}" style="font-weight:bold;">{}</a>',
             add_url,
             obj.pk,
             obj.catalog_courses.count(),
@@ -379,11 +379,14 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
         if active_managers:
             return format_html(
                 "<br>".join(
-                    f'<a href="{full_url}" style="font-weight:bold;display:block;text-align:center;">{m.user.username}</a>'
+                    f'<a href="{full_url}" style="font-weight:bold;">{m.user.username}</a>'
                     for m in active_managers
                 )
             )
-        return format_html('<a href="{}" style="font-weight:bold;display:block;text-align:center;">—</a>', full_url)
+        return format_html(
+            '<a href="{}" style="font-weight:bold;">—</a>',
+            full_url,
+        )
 
     add_manager.short_description = mark_safe(
         '<a href="/admin/partner_catalog/catalogmanager/add/" style="font-weight:bold;">Add Manager</a>'
