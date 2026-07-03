@@ -338,27 +338,52 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
     image_thumb.short_description = "Image"
 
     def add_learner(self, obj):
-        """Display the learner count for this catalog."""
-        return obj.catalog_learners.count()
+        """Display the learner count as a pre-filled link to add a new invitation."""
+        add_url = reverse(
+            f"admin:{CatalogLearnerInvitation._meta.app_label}_{CatalogLearnerInvitation._meta.model_name}_add"
+        )
+        return format_html(
+            '<a href="{}?catalog={}" style="font-weight:bold;">{}</a>',
+            add_url,
+            obj.pk,
+            obj.catalog_learners.count(),
+        )
 
     add_learner.short_description = mark_safe(
         '<a href="/admin/partner_catalog/cataloglearnerinvitation/add/" style="font-weight:bold;">Add Learner</a>'
     )
 
     def add_course(self, obj):
-        """Display the course count for this catalog."""
-        return obj.catalog_courses.count()
+        """Display the course count as a pre-filled link to add a new course."""
+        add_url = reverse(
+            f"admin:{CatalogCourse._meta.app_label}_{CatalogCourse._meta.model_name}_add"
+        )
+        return format_html(
+            '<a href="{}?catalog={}" style="font-weight:bold;">{}</a>',
+            add_url,
+            obj.pk,
+            obj.catalog_courses.count(),
+        )
 
     add_course.short_description = mark_safe(
         '<a href="/admin/partner_catalog/catalogcourse/add/" style="font-weight:bold;">Add Course</a>'
     )
 
     def add_manager(self, obj):
-        """Display the active manager usernames for this catalog."""
+        """Display active manager usernames as pre-filled links to add a new manager."""
+        add_url = reverse(
+            f"admin:{CatalogManager._meta.app_label}_{CatalogManager._meta.model_name}_add"
+        )
+        full_url = f"{add_url}?catalog={obj.pk}"
         active_managers = [m for m in obj.catalog_managers.all() if m.active]
         if active_managers:
-            return ", ".join(m.user.username for m in active_managers)
-        return "—"
+            return format_html(
+                "<br>".join(
+                    f'<a href="{full_url}" style="font-weight:bold;">{m.user.username}</a>'
+                    for m in active_managers
+                )
+            )
+        return format_html('<a href="{}" style="font-weight:bold;">—</a>', full_url)
 
     add_manager.short_description = mark_safe(
         '<a href="/admin/partner_catalog/catalogmanager/add/" style="font-weight:bold;">Add Manager</a>'
