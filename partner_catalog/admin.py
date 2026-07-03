@@ -10,6 +10,7 @@ from django.db.models import Count
 from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.html import format_html
+from django.utils.safestring import mark_safe
 
 from flex_catalog.admin import CourseKeysMixin
 from partner_catalog.edxapp_wrapper.course_module import course_overview
@@ -337,61 +338,31 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
     image_thumb.short_description = "Image"
 
     def add_learner(self, obj):
-        """Display learner count as a link to add a new invitation for this catalog."""
-        invitation_model = CatalogLearnerInvitation
-        add_invitation_url = reverse(
-            f"admin:{invitation_model._meta.app_label}_{invitation_model._meta.model_name}_add"
-        )
-        full_url = f"{add_invitation_url}?catalog={obj.pk}"
-        count = obj.catalog_learners.count()
+        """Display the learner count for this catalog."""
+        return obj.catalog_learners.count()
 
-        return format_html(
-            '<a href="{}" style="font-weight:bold;font-size:1.1em;">{}</a>',
-            full_url,
-            count,
-        )
-
-    add_learner.short_description = "Add Learner"
+    add_learner.short_description = mark_safe(
+        '<a href="/admin/partner_catalog/cataloglearnerinvitation/add/" style="font-weight:bold;">Add Learner</a>'
+    )
 
     def add_course(self, obj):
-        """Display course count as a link to add a new course to this catalog."""
-        course_model = CatalogCourse
-        add_course_url = reverse(
-            f"admin:{course_model._meta.app_label}_{course_model._meta.model_name}_add"
-        )
-        full_url = f"{add_course_url}?catalog={obj.pk}"
-        count = obj.catalog_courses.count()
+        """Display the course count for this catalog."""
+        return obj.catalog_courses.count()
 
-        return format_html(
-            '<a href="{}" style="font-weight:bold;font-size:1.1em;">{}</a>',
-            full_url,
-            count,
-        )
-
-    add_course.short_description = "Add Course"
+    add_course.short_description = mark_safe(
+        '<a href="/admin/partner_catalog/catalogcourse/add/" style="font-weight:bold;">Add Course</a>'
+    )
 
     def add_manager(self, obj):
-        """Display manager usernames as links to add a new manager (catalog-level)."""
-        manager_model = CatalogManager
-        add_manager_url = reverse(
-            f"admin:{manager_model._meta.app_label}_{manager_model._meta.model_name}_add"
-        )
-        full_url = f"{add_manager_url}?catalog={obj.pk}"
-
+        """Display the active manager usernames for this catalog."""
         active_managers = [m for m in obj.catalog_managers.all() if m.active]
         if active_managers:
-            usernames = "<br>".join(
-                f'<a href="{full_url}" style="font-weight:bold;">{m.user.username}</a>'
-                for m in active_managers
-            )
-            return format_html(usernames)
+            return ", ".join(m.user.username for m in active_managers)
+        return "—"
 
-        return format_html(
-            '<a href="{}" style="font-weight:bold;">—</a>',
-            full_url,
-        )
-
-    add_manager.short_description = "Add Manager"
+    add_manager.short_description = mark_safe(
+        '<a href="/admin/partner_catalog/catalogmanager/add/" style="font-weight:bold;">Add Manager</a>'
+    )
 
     def get_queryset(self, request):
         """Optimize queryset with select_related and prefetch_related."""
