@@ -1,0 +1,15 @@
+{% extends "admin/change_list.html" %}
+
+{% block extrahead %}
+{{ block.super }}
+<style>
+  #result_list .column-add_learner,
+  #result_list .column-add_course,
+  #result_list .column-add_manager,
+  #result_list .field-add_learner,
+  #result_list .field-add_course,
+  #result_list .field-add_manager {
+    text-align: center;
+  }
+</style>
+{% endblock %}
