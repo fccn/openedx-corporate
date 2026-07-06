@@ -8,7 +8,7 @@ when relevant events occur.
 import logging
 from typing import Any
 
-from django.db import DatabaseError
+from django.db import DatabaseError, transaction
 from django.dispatch import receiver
 from rest_framework.exceptions import ValidationError
 
@@ -33,19 +33,25 @@ def handle_catalog_learner_invitation_created(
     **_kwargs: Any
 ) -> None:
     """Handle creation of a CatalogLearnerInvitation."""
-    # Enqueue email sending to Celery worker (do not send inline).
-    try:
-        logger.info(
-            "Enqueueing invitation created email: id=%s catalog_id=%s",
-            invitation.id,
-            invitation.catalog_id,
-        )
-        send_catalog_invitation_created_email.delay(invitation.id)
-    except Exception:  # pragma: no cover - defensive logging  # pylint: disable=broad-exception-caught
-        logger.exception(
-            "Failed to enqueue invitation created email for id=%s",
-            getattr(invitation, "id", None),
-        )
+    # Defer email task until after the current DB transaction commits so the
+    # Celery worker is guaranteed to find the invitation record in the database.
+    invitation_id = invitation.id
+    logger.info(
+        "Scheduling invitation created email after commit: id=%s catalog_id=%s",
+        invitation_id,
+        invitation.catalog_id,
+    )
+
+    def _send_email():
+        try:
+            send_catalog_invitation_created_email.delay(invitation_id)
+        except Exception:  # pylint: disable=broad-exception-caught
+            logger.exception(
+                "Failed to enqueue invitation created email for id=%s",
+                invitation_id,
+            )
+
+    transaction.on_commit(_send_email)
 
 
 @receiver(CATALOG_LEARNER_INVITATION_ACCEPTED_V1)
