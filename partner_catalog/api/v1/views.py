@@ -1,6 +1,7 @@
 """Partner Catalog API v1 Views."""
 
 from django.db.models import Count, F, OuterRef, Q, Subquery
+from django.db.models.functions import Coalesce
 from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsAuthenticated, IsStaff, IsSuperuser
 from rest_framework import filters, mixins, status, viewsets
@@ -9,7 +10,12 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 
-from partner_catalog.api.v1.filters import CatalogCourseOrderingFilter, PartnerCatalogFilter, PartnerFilter
+from partner_catalog.api.v1.filters import (
+    CatalogCourseOrderingFilter,
+    CatalogLearnerInvitationFilter,
+    PartnerCatalogFilter,
+    PartnerFilter,
+)
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
 from partner_catalog.api.v1.schemas import (
     add_courses_schema,
@@ -23,6 +29,7 @@ from partner_catalog.api.v1.serializers import (
     BulkRemoveInvitationSerializer,
     CatalogCourseEnrollmentSerializer,
     CatalogCourseSerializer,
+    CatalogLearnerInvitationListSerializer,
     CatalogLearnerInvitationSerializer,
     CatalogLearnerSerializer,
     InvitationActionSerializer,
@@ -45,6 +52,7 @@ from partner_catalog.services.catalogs import PartnerCatalogService
 from partner_catalog.services.certificates import (
     annotate_catalog_certified_count,
     annotate_course_certified_count,
+    annotate_invitation_certified_count,
     annotate_learner_certified_count,
     annotate_partner_certified_count,
 )
@@ -394,20 +402,61 @@ class CatalogCourseViewSet(
 
 
 class CatalogLearnerInvitationViewSet(
+    CSVExportMixin,
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
     viewsets.GenericViewSet,
     InjectNestedFKMixin,
 ):
-    """ViewSet for managing Catalog Learner Invitations."""
+    """
+    ViewSet for managing Catalog Learner Invitations.
+
+    The list action is the manager-facing catalog roster: it returns each
+    member's current invitation (accepted or removed) plus pending (sent)
+    invitations, so learners appear in the table before accepting.
+    """
 
     queryset = CatalogLearnerInvitation.objects.select_related("catalog", "user")
     service = CatalogLearnerInvitationService()
+
+    csv_filename = "learners_report.csv"
+    csv_fields = [
+        "user.full_name", "invite_email", "status", "invited_at",
+        "accepted_at", "user.last_login", "enrollments", "certified", "removed_at",
+    ]
+    csv_labels = {
+        "user.full_name": "Full Name",
+        "invite_email": "Email",
+        "status": "Status",
+        "invited_at": "Invite Sent At",
+        "accepted_at": "Accepted At",
+        "user.last_login": "Last Login",
+        "enrollments": "Enrollments",
+        "certified": "Certified",
+        "removed_at": "Removed At",
+    }
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
         filters.OrderingFilter,
     ]
+    filterset_class = CatalogLearnerInvitationFilter
+    search_fields = [
+        "invite_email",
+        "user__username",
+        "user__first_name",
+        "user__last_name",
+        "user__email",
+    ]
+    ordering_fields = [
+        "id",
+        "status",
+        "invited_at",
+        "accepted_at",
+        "removed_at",
+        "user__last_login",
+    ]
+    ordering = ["id"]
 
     # Mixin config
     nested_lookup_kwarg = "catalog_pk"
@@ -421,17 +470,48 @@ class CatalogLearnerInvitationViewSet(
         if catalog_pk:
             qs = qs.filter(catalog_id=catalog_pk)
 
+        if self.action == "list":
+            qs = self._annotate_roster(qs)
+
         return qs
+
+    def _annotate_roster(self, qs):
+        """Scope the queryset to roster rows and annotate aggregate counts.
+
+        Roster rows are invitations that are the current invitation of a
+        learner, or still pending (sent). Superseded history rows (declined,
+        failed, re-invited) are excluded.
+        """
+        qs = qs.filter(
+            Q(current_for_learner__isnull=False)
+            | Q(status=CatalogLearnerInvitation.Status.SENT)
+        )
+
+        enrollments_subquery = CatalogCourseEnrollment.objects.filter(
+            user_id=OuterRef("user_id"),
+            catalog_course__catalog_id=OuterRef("catalog_id"),
+            active=True,
+        ).values("user_id").annotate(count=Count("id")).values("count")
+
+        qs = qs.annotate(enrollments_count=Coalesce(Subquery(enrollments_subquery), 0))
+        qs = annotate_invitation_certified_count(qs)
+        return qs
+
+    def get_permissions(self):
+        """Instantiate permissions from the action-dependent permission classes."""
+        return [permission() for permission in self.get_permission_classes()]
 
     def get_permission_classes(self):
         """Get permission classes based on action."""
 
         base_permissions = [IsAuthenticated]
         manager_actions = [
+            "list",
             "create",
             "remove_invite",
-            "bulk_invite_upload",
-            "bulk_remove_upload"
+            "bulk_invite",
+            "bulk_remove",
+            "bulk_invite_status",
         ]
         if self.action in manager_actions:
             return base_permissions + [IsPartnerCatalogManager]
@@ -440,6 +520,8 @@ class CatalogLearnerInvitationViewSet(
     def get_serializer_class(self):
         """Get the serializer class based on action."""
 
+        if self.action == "list":
+            return CatalogLearnerInvitationListSerializer
         if self.action in [
             "accept_invite",
             "decline_invite",
@@ -448,7 +530,7 @@ class CatalogLearnerInvitationViewSet(
             "bulk_invite_status",
         ]:
             return InvitationActionSerializer
-        elif self.action == "bulk_remove":
+        if self.action == "bulk_remove":
             return BulkRemoveInvitationSerializer
 
         return CatalogLearnerInvitationSerializer

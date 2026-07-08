@@ -3,7 +3,7 @@
 import django_filters
 from rest_framework.filters import OrderingFilter
 
-from partner_catalog.models import Partner, PartnerCatalog
+from partner_catalog.models import CatalogLearnerInvitation, Partner, PartnerCatalog
 
 
 class PartnerFilter(django_filters.FilterSet):
@@ -53,6 +53,45 @@ class PartnerCatalogFilter(django_filters.FilterSet):
         fields = [
             "partner",
         ]
+
+
+class CatalogLearnerInvitationFilter(django_filters.FilterSet):
+    """
+    Custom filters for CatalogLearnerInvitation model.
+
+    Allows filtering by:
+    - status: one or more comma-separated status display names
+      (e.g. "sent" or "sent,accepted"), case-insensitive.
+    - user: user ID
+    """
+
+    status = django_filters.CharFilter(
+        method="filter_status",
+        help_text="Filter by invitation status name(s), comma-separated (e.g. 'sent,accepted').",
+    )
+
+    class Meta:
+        model = CatalogLearnerInvitation
+        fields = [
+            "status",
+            "user",
+        ]
+
+    def filter_status(self, queryset, name, value):  # pylint: disable=unused-argument
+        """Filter by one or more case-insensitive status display names."""
+        status_by_label = {
+            label.lower(): status_value
+            for status_value, label in CatalogLearnerInvitation.Status.choices
+        }
+        statuses = [
+            status_by_label[part]
+            for part in (item.strip().lower() for item in value.split(","))
+            if part in status_by_label
+        ]
+
+        if not statuses:
+            return queryset.none()
+        return queryset.filter(status__in=statuses)
 
 
 class CatalogCourseOrderingFilter(OrderingFilter):

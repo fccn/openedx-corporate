@@ -416,6 +416,40 @@ class CatalogLearnerInvitationSerializer(serializers.ModelSerializer):
         return obj.get_status_display()
 
 
+class CatalogLearnerInvitationListSerializer(serializers.ModelSerializer):
+    """
+    Read-only serializer for the manager-facing learners view.
+
+    Lists each catalog member through their current invitation status.
+    ``user`` is null for pending invitations sent to emails without a registered account.
+    """
+
+    catalog_id = serializers.IntegerField(read_only=True)
+    learner_id = serializers.IntegerField(read_only=True)
+    user = UserSimpleSerializer(read_only=True)
+    status = serializers.CharField(source="get_status_display", read_only=True)
+    enrollments = serializers.IntegerField(source="enrollments_count", read_only=True)
+    certified = serializers.IntegerField(source="certified_count", read_only=True)
+
+    class Meta:
+        model = CatalogLearnerInvitation
+        fields = [
+            "id",
+            "catalog_id",
+            "learner_id",
+            "user",
+            "invite_email",
+            "status",
+            "invited_at",
+            "accepted_at",
+            "declined_at",
+            "removed_at",
+            "enrollments",
+            "certified",
+        ]
+        read_only_fields = fields
+
+
 class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):
     """Serializer for enrollments in a catalog course."""
 

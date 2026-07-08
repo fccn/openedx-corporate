@@ -4,7 +4,7 @@ from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Subque
 from django.db.models.functions import Coalesce
 
 from partner_catalog.edxapp_wrapper.certificates_module import certificate_statuses_model, generated_certificate_model
-from partner_catalog.models import CatalogCourse, CatalogCourseEnrollment, CatalogLearner
+from partner_catalog.models import CatalogCourse, CatalogCourseEnrollment, CatalogLearner, CatalogLearnerInvitation
 
 CertificateStatuses = certificate_statuses_model()
 GeneratedCertificate = generated_certificate_model()
@@ -89,6 +89,28 @@ def annotate_learner_certified_count(qs):
 
     annotated = annotate_certified_count(qs, users_qs, courses_qs)
     return annotated
+
+
+def annotate_invitation_certified_count(qs):
+    """Annotate a CatalogLearnerInvitation queryset with certified_count.
+
+    It gets the count of certificates for the invited user in courses that
+    belong to the invitation's catalog. Pending invitations without a linked
+    user resolve to 0 since no certificates can match a null user.
+    """
+    users_qs = CatalogLearnerInvitation.objects.filter(
+        pk=OuterRef("pk"),
+    ).values("user_id")
+
+    catalog_id_sq = CatalogLearnerInvitation.objects.filter(
+        pk=OuterRef("pk"),
+    ).values("catalog_id")
+
+    courses_qs = CatalogCourse.objects.filter(
+        catalog_id__in=Subquery(catalog_id_sq),
+    ).values("course_overview__id")
+
+    return annotate_certified_count(qs, users_qs, courses_qs)
 
 
 def annotate_certified_count(qs, users_qs, courses_qs):
