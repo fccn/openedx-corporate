@@ -37,6 +37,7 @@ class BulkAddCoursesForm(forms.Form):
     )
 
     def __init__(self, *args, available_courses=None, **kwargs):
+        """Initialize the form with the given available courses queryset."""
         super().__init__(*args, **kwargs)
         self.fields['courses'].queryset = available_courses if available_courses is not None else \
             course_overview().objects.none()
@@ -64,7 +65,7 @@ class BaseCatalogAdmin(admin.ModelAdmin):
         return custom_urls + urls
 
     def bulk_add_courses_view(self, request, pk):
-        """Custom admin view: visual dual-list picker to bulk-add courses to a BaseCatalog."""
+        """Render a visual dual-list picker to bulk-add courses to a BaseCatalog."""
         base_catalog = get_object_or_404(BaseCatalog, pk=pk)
         CourseOverview = course_overview()
 
