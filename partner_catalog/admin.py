@@ -1,14 +1,17 @@
 """Admin configuration for Partner Catalog models."""
 
-from urllib.parse import urlencode
-
-from django.contrib import admin
+from django import forms
+from django.contrib import admin, messages
+from django.contrib.admin.widgets import FilteredSelectMultiple
 from django.db.models import Count
 from django.http import HttpResponseRedirect
-from django.urls import reverse
+from django.shortcuts import get_object_or_404
+from django.template.response import TemplateResponse
+from django.urls import path, reverse
 from django.utils.html import format_html
 
 from flex_catalog.admin import CourseKeysMixin
+from partner_catalog.edxapp_wrapper.course_module import course_overview
 from partner_catalog.models import (
     BaseCatalog,
     BaseCatalogCourse,
@@ -23,6 +26,22 @@ from partner_catalog.models import (
 )
 
 
+class BulkAddCoursesForm(forms.Form):
+    """Form for bulk-adding courses to a BaseCatalog using a visual dual-list picker."""
+
+    courses = forms.ModelMultipleChoiceField(
+        queryset=None,
+        widget=FilteredSelectMultiple("Courses", is_stacked=False),
+        required=False,
+        help_text="Select one or more courses to add. Use the search box to filter results.",
+    )
+
+    def __init__(self, *args, available_courses=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['courses'].queryset = available_courses if available_courses is not None else \
+            course_overview().objects.none()
+
+
 @admin.register(BaseCatalog)
 class BaseCatalogAdmin(admin.ModelAdmin):
     """Admin interface for BaseCatalog model."""
@@ -31,6 +50,72 @@ class BaseCatalogAdmin(admin.ModelAdmin):
     readonly_fields = ('created', 'modified', 'course_count', 'course_ids_display', 'add_course_button')
     fields = ('name', 'slug', 'created', 'modified', 'course_count', 'course_ids_display', 'add_course_button')
     search_fields = ('name', 'slug')
+
+    def get_urls(self):
+        """Register custom admin URLs including the bulk-add-courses view."""
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                '<uuid:pk>/bulk-add-courses/',
+                self.admin_site.admin_view(self.bulk_add_courses_view),
+                name='partner_catalog_basecatalog_bulk_add_courses',
+            ),
+        ]
+        return custom_urls + urls
+
+    def bulk_add_courses_view(self, request, pk):
+        """Custom admin view: visual dual-list picker to bulk-add courses to a BaseCatalog."""
+        base_catalog = get_object_or_404(BaseCatalog, pk=pk)
+        CourseOverview = course_overview()
+
+        existing_course_ids = base_catalog.base_catalog_courses.values_list(
+            'course_overview_id', flat=True
+        )
+        available_courses = (
+            CourseOverview.objects
+            .exclude(id__in=existing_course_ids)
+            .order_by('display_name')
+        )
+
+        if request.method == 'POST':
+            form = BulkAddCoursesForm(request.POST, available_courses=available_courses)
+            if form.is_valid():
+                selected_courses = form.cleaned_data['courses']
+                added = 0
+                for course in selected_courses:
+                    _, created = BaseCatalogCourse.objects.get_or_create(
+                        base_catalog=base_catalog,
+                        course_overview=course,
+                        defaults={'added_by': request.user},
+                    )
+                    if created:
+                        added += 1
+
+                self.message_user(
+                    request,
+                    f"Successfully added {added} course(s) to \"{base_catalog.name}\".",
+                    messages.SUCCESS,
+                )
+                return HttpResponseRedirect(
+                    reverse('admin:partner_catalog_basecatalog_change', args=[pk])
+                )
+        else:
+            form = BulkAddCoursesForm(available_courses=available_courses)
+
+        context = {
+            **self.admin_site.each_context(request),
+            'title': f'Bulk Add Courses to "{base_catalog.name}"',
+            'base_catalog': base_catalog,
+            'form': form,
+            'media': self.media + form.media,
+            'opts': self.model._meta,
+            'has_change_permission': self.has_change_permission(request),
+        }
+        return TemplateResponse(
+            request,
+            'admin/partner_catalog/basecatalog/bulk_add_courses.html',
+            context,
+        )
 
     def get_queryset(self, request):
         """Optimize queryset with prefetch."""
@@ -67,37 +152,37 @@ class BaseCatalogAdmin(admin.ModelAdmin):
     course_ids_display.short_description = 'Course IDs'
 
     def add_course_button(self, obj):
-        """Genera un botón para agregar un nuevo curso a este BaseCatalog."""
+        """Render action buttons for adding courses to this BaseCatalog."""
         if not obj.pk:
-            return format_html('<em style="color: #999;">Guarda el catálogo primero</em>')
+            return format_html('<em style="color: #999;">Save the catalog first</em>')
 
-        course_model = BaseCatalogCourse
-        add_course_url = reverse(
-            f"admin:{course_model._meta.app_label}_{course_model._meta.model_name}_add"
-        )
-        full_url = f"{add_course_url}?base_catalog={obj.pk}"
+        single_url = reverse(
+            f"admin:{BaseCatalogCourse._meta.app_label}_{BaseCatalogCourse._meta.model_name}_add"
+        ) + f"?base_catalog={obj.pk}"
+
+        bulk_url = reverse('admin:partner_catalog_basecatalog_bulk_add_courses', args=[obj.pk])
 
         return format_html(
-            '<a href="{}" class="button" style="background-color: #417690;">+ Add Course</a>',
-            full_url,
+            '<a href="{}" class="button" style="background-color:#417690;margin-right:8px;">+ Add Single Course</a>'
+            '<a href="{}" class="button" style="background-color:#28a745;">+ Bulk Add Courses</a>',
+            single_url,
+            bulk_url,
         )
 
     add_course_button.short_description = "Add Courses"
 
     def add_course(self, obj):
-        """Genera un link para agregar un nuevo curso a este BaseCatalog."""
-        course_model = BaseCatalogCourse
-        add_course_url = reverse(
-            f"admin:{course_model._meta.app_label}_{course_model._meta.model_name}_add"
-        )
-        full_url = f"{add_course_url}?base_catalog={obj.pk}"
+        """Render bulk-add link in the list view."""
+        if not obj.pk:
+            return format_html('')
 
+        bulk_url = reverse('admin:partner_catalog_basecatalog_bulk_add_courses', args=[obj.pk])
         return format_html(
-            '<a href="{}" style="font-weight: bold;">+ Add Course</a>',
-            full_url,
+            '<a href="{}" style="font-weight:bold;">+ Bulk Add Courses</a>',
+            bulk_url,
         )
 
-    add_course.short_description = "+ Add Course"
+    add_course.short_description = "Add Courses"
 
 
 @admin.register(BaseCatalogCourse)
@@ -121,24 +206,6 @@ class BaseCatalogCourseAdmin(admin.ModelAdmin):
         if not change and not obj.added_by:
             obj.added_by = request.user
         super().save_model(request, obj, form, change)
-
-    def response_add(self, request, obj, post_url_continue=None):
-        """After saving a new entry, keep base_catalog pre-filled when adding another."""
-        response = super().response_add(request, obj, post_url_continue)
-        if "_addanother" in request.POST and obj.base_catalog_id:
-            add_url = reverse(
-                f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_add"
-            )
-            query = urlencode({"base_catalog": obj.base_catalog_id})
-            return HttpResponseRedirect(f"{add_url}?{query}")
-        return response
-
-    def get_changeform_initial_data(self, request):
-        """Pre-populate base_catalog from query-string when coming from response_add."""
-        initial = super().get_changeform_initial_data(request)
-        if "base_catalog" in request.GET and "base_catalog" not in initial:
-            initial["base_catalog"] = request.GET["base_catalog"]
-        return initial
 
     def get_queryset(self, request):
         """Optimize queryset with select_related."""
