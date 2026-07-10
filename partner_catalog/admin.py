@@ -30,6 +30,7 @@ class BaseCatalogAdminForm(forms.ModelForm):
         queryset=None,
         widget=FilteredSelectMultiple("Courses", is_stacked=False),
         required=False,
+        label="",
         help_text=(
             "Manage courses in this catalog. "
             "Use the search box to filter, Ctrl+click to select multiple, "
@@ -60,8 +61,11 @@ class BaseCatalogAdmin(admin.ModelAdmin):
 
     list_display = ('name', 'slug', 'course_count', 'course_ids', 'manage_courses')
     readonly_fields = ('created', 'modified', 'course_count')
-    fields = ('name', 'slug', 'created', 'modified', 'course_count', 'courses')
     search_fields = ('name', 'slug')
+
+    def get_fields(self, request, obj=None):
+        """Return fields for the change form, including the custom courses widget."""
+        return ('name', 'slug', 'created', 'modified', 'course_count', 'courses')
 
     def get_queryset(self, request):
         """Optimize queryset with prefetch."""
