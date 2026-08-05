@@ -42,7 +42,13 @@ class BaseCatalogAdminForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         """Pre-populate the courses field with the catalog's current courses."""
         super().__init__(*args, **kwargs)
-        self.fields['courses'].queryset = course_overview().objects.order_by('display_name')
+        CourseOverview = course_overview()
+        try:
+            CourseOverview._meta.get_field('display_name')
+            qs = CourseOverview.objects.order_by('display_name')
+        except Exception:  # pylint: disable=broad-except
+            qs = CourseOverview.objects.all()
+        self.fields['courses'].queryset = qs
         if self.instance.pk:
             self.fields['courses'].initial = self.instance.courses.all()
 
