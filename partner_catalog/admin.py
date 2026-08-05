@@ -6,10 +6,10 @@ from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import FilteredSelectMultiple
 from django.core.exceptions import FieldDoesNotExist
-from django.db.models import Count
+from django.db.models import Count, Prefetch
 from django.http import HttpResponseRedirect
 from django.urls import reverse
-from django.utils.html import format_html
+from django.utils.html import format_html, format_html_join
 from django.utils.safestring import mark_safe
 
 from flex_catalog.admin import CourseKeysMixin
@@ -338,65 +338,63 @@ class PartnerCatalogAdmin(admin.ModelAdmin, CourseKeysMixin):
     image_thumb.short_description = "Image"
 
     def add_learner(self, obj):
-        """Display the learner count as a pre-filled link to add a new invitation."""
-        add_url = reverse(
-            f"admin:{CatalogLearnerInvitation._meta.app_label}_{CatalogLearnerInvitation._meta.model_name}_add"
-        )
-        return format_html(
-            '<a href="{}?catalog={}" style="font-weight:bold;">{}</a>',
-            add_url,
-            obj.pk,
-            obj.catalog_learners.count(),
-        )
+        """Display the number of learners in this catalog."""
+        return obj.catalog_learners.count()
 
-    add_learner.short_description = mark_safe(
-        '<a href="/admin/partner_catalog/cataloglearnerinvitation/add/" style="font-weight:bold;">Add Learner</a>'
-    )
+    add_learner.short_description = "Add Learner"
 
     def add_course(self, obj):
-        """Display the course count as a pre-filled link to add a new course."""
-        add_url = reverse(
-            f"admin:{CatalogCourse._meta.app_label}_{CatalogCourse._meta.model_name}_add"
-        )
-        return format_html(
-            '<a href="{}?catalog={}" style="font-weight:bold;">{}</a>',
-            add_url,
-            obj.pk,
-            obj.catalog_courses.count(),
-        )
+        """Display the number of courses in this catalog."""
+        return obj.catalog_courses.count()
 
-    add_course.short_description = mark_safe(
-        '<a href="/admin/partner_catalog/catalogcourse/add/" style="font-weight:bold;">Add Course</a>'
-    )
+    add_course.short_description = "Add Course"
 
     def add_manager(self, obj):
-        """Display active manager usernames as pre-filled links to add a new manager."""
-        add_url = reverse(
+        """Display active manager usernames linked to their individual change pages."""
+        active_managers = getattr(obj, "active_managers_list", None) or list(
+            obj.catalog_managers.filter(active=True).select_related("user")
+        )
+        if active_managers:
+            change_url_name = (
+                f"admin:{CatalogManager._meta.app_label}"
+                f"_{CatalogManager._meta.model_name}_change"
+            )
+            return format_html_join(
+                mark_safe("<br>"),
+                '<a href="{}">{}</a>',
+                ((reverse(change_url_name, args=[m.pk]), m.user.username) for m in active_managers),
+            )
+        return "—"
+
+    add_manager.short_description = "Add Manager"
+
+    def changelist_view(self, request, extra_context=None):
+        """Inject add-URLs for the three action columns into the template context."""
+        extra_context = extra_context or {}
+        extra_context["learner_add_url"] = reverse(
+            f"admin:{CatalogLearnerInvitation._meta.app_label}"
+            f"_{CatalogLearnerInvitation._meta.model_name}_add"
+        )
+        extra_context["course_add_url"] = reverse(
+            f"admin:{CatalogCourse._meta.app_label}_{CatalogCourse._meta.model_name}_add"
+        )
+        extra_context["manager_add_url"] = reverse(
             f"admin:{CatalogManager._meta.app_label}_{CatalogManager._meta.model_name}_add"
         )
-        full_url = f"{add_url}?catalog={obj.pk}"
-        active_managers = [m for m in obj.catalog_managers.all() if m.active]
-        if active_managers:
-            return format_html(
-                "<br>".join(
-                    f'<a href="{full_url}" style="font-weight:bold;">{m.user.username}</a>'
-                    for m in active_managers
-                )
-            )
-        return format_html(
-            '<a href="{}" style="font-weight:bold;">—</a>',
-            full_url,
-        )
-
-    add_manager.short_description = mark_safe(
-        '<a href="/admin/partner_catalog/catalogmanager/add/" style="font-weight:bold;">Add Manager</a>'
-    )
+        return super().changelist_view(request, extra_context=extra_context)
 
     def get_queryset(self, request):
         """Optimize queryset with select_related and prefetch_related."""
         queryset = super().get_queryset(request)
         return queryset.select_related("partner__organization").prefetch_related(
-            "catalog_courses", "catalog_learners", "catalog_email_regexes", "catalog_managers__user"
+            "catalog_courses",
+            "catalog_learners",
+            "catalog_email_regexes",
+            Prefetch(
+                "catalog_managers",
+                queryset=CatalogManager.objects.filter(active=True).select_related("user"),
+                to_attr="active_managers_list",
+            ),
         )
 
 
