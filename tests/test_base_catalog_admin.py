@@ -22,6 +22,7 @@ from partner_catalog.models import BaseCatalog, BaseCatalogCourse
 from partner_catalog.services.catalog_courses import CourseOverview
 from tests.factories import make_user
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
