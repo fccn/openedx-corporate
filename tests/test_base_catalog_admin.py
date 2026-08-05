@@ -102,7 +102,7 @@ class TestBaseCatalogAdminFormInit:
 
         form = BaseCatalogAdminForm(instance=catalog)
 
-        assert list(form.fields['courses'].initial) == []
+        assert not list(form.fields['courses'].initial)
 
 
 # ---------------------------------------------------------------------------
