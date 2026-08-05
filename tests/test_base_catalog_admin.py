@@ -22,10 +22,10 @@ from partner_catalog.models import BaseCatalog, BaseCatalogCourse
 from partner_catalog.services.catalog_courses import CourseOverview
 from tests.factories import make_user
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def make_base_catalog(slug_suffix="1"):
     """Create and return a BaseCatalog for testing."""
@@ -175,4 +175,4 @@ class TestBaseCatalogAdminSaveRelated:
 
         _admin().save_related(_request(), _form(catalog, []), [], change=True)
 
-        assert catalog.courses.count() == 0
+        assert not catalog.courses.count()
