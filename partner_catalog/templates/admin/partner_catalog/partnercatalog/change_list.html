@@ -12,4 +12,22 @@
     text-align: center;
   }
 </style>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  var columnLinks = [
+    ['column-add_learner', '{{ learner_add_url|escapejs }}'],
+    ['column-add_course', '{{ course_add_url|escapejs }}'],
+    ['column-add_manager', '{{ manager_add_url|escapejs }}'],
+  ];
+  columnLinks.forEach(function (item) {
+    var cls = item[0], url = item[1];
+    var th = document.querySelector('#result_list th.' + cls);
+    if (!th) { return; }
+    var textDiv = th.querySelector('.text');
+    var target = textDiv || th;
+    var text = target.innerText.trim();
+    target.innerHTML = '<a href="' + url + '" style="font-weight:bold;">' + text + '</a>';
+  });
+});
+</script>
 {% endblock %}
