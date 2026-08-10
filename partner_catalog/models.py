@@ -95,6 +95,12 @@ class BaseCatalogCourse(models.Model):
         verbose_name = "Base Catalog Course"
         verbose_name_plural = "Base Catalog Courses"
         ordering = ["-added_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["base_catalog", "course_overview"],
+                name="unique_base_catalog_course",
+            )
+        ]
 
     def __str__(self):
         """Return string representation."""

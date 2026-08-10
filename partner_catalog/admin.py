@@ -3,6 +3,7 @@
 from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import FilteredSelectMultiple
+from django.core.exceptions import FieldDoesNotExist
 from django.db.models import Count
 from django.urls import reverse
 from django.utils.html import format_html
@@ -46,7 +47,7 @@ class BaseCatalogAdminForm(forms.ModelForm):
         try:
             CourseOverview._meta.get_field('display_name')
             qs = CourseOverview.objects.order_by('display_name')
-        except Exception:  # pylint: disable=broad-except
+        except FieldDoesNotExist:
             qs = CourseOverview.objects.all()
         self.fields['courses'].queryset = qs
         if self.instance.pk:
