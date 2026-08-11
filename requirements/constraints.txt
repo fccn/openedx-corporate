@@ -11,6 +11,20 @@
 # Common constraints for edx repos
 -c https://raw.githubusercontent.com/edx/edx-lint/master/edx_lint/files/common_constraints.txt
 
+
+# --- Pinned to try to match openedx Sunac ---
+# Currently corporates testing CI runs with openedx version 19, Sunac. 
+# In the future it should be changed to run with fccn/openedx-platform current version, (Teak).
+# After the change to the image source of openedx-platform, the pins should be changed accordingly.
+Django==4.2.20
+# drf-nested-routers==0.94.2 requires djangorestframework>=3.15.0
+djangorestframework>=3.15.0,<3.17.0
+celery==5.4.0
+edx-organizations==6.13.0
+openedx-events==9.15.0
+openedx-filters==1.11.0
+edx-opaque-keys==2.11.0
+
 # Fix click version conflict between pip-tools (8.1.8) and edx-lint/quality requirements (8.2.1)
 # Using the newer version to ensure compatibility with edx-lint
 click==8.2.1
