@@ -30,8 +30,9 @@ cachetools==6.2.1
     #   -r requirements/base.txt
 camel-converter[pydantic]==4.0.1
     # via meilisearch
-celery==5.5.3
+celery==5.4.0
     # via
+    #   -c requirements/constraints.txt
     #   -r requirements/base.txt
     #   event-tracking
 certifi==2025.8.3
@@ -78,9 +79,9 @@ cryptography==45.0.6
     # via
     #   -r requirements/base.txt
     #   pyjwt
-django==4.2.23
     # via
     #   -c https://raw.githubusercontent.com/edx/edx-lint/master/edx_lint/files/common_constraints.txt
+    #   -c requirements/constraints.txt
     #   -r requirements/base.txt
     #   django-crum
     #   django-filter
@@ -122,6 +123,7 @@ django-waffle==5.0.0
     #   edx-toggles
 djangorestframework==3.16.1
     # via
+    #   -c requirements/constraints.txt
     #   -r requirements/base.txt
     #   drf-jwt
     #   drf-nested-routers
@@ -155,16 +157,18 @@ edx-drf-extensions==10.6.0
     # via
     #   -r requirements/base.txt
     #   edx-organizations
-edx-opaque-keys[django]==3.0.0
+edx-opaque-keys[django]==2.11.0
     # via
+    #   -c requirements/constraints.txt
     #   -r requirements/base.txt
     #   edx-ccx-keys
     #   edx-drf-extensions
     #   edx-organizations
     #   openedx-events
-    #   openedx-filters
-edx-organizations==7.3.0
-    # via -r requirements/base.txt
+edx-organizations==6.13.0
+    # via
+    #   -c requirements/constraints.txt
+    #   -r requirements/base.txt
 edx-search==4.1.3
     # via -r requirements/test.in
 edx-toggles==5.4.1
@@ -211,12 +215,15 @@ meilisearch==0.37.0
     # via edx-search
 openedx-atlas==0.7.0
     # via -r requirements/base.txt
-openedx-events==10.5.0
+openedx-events==9.15.0
     # via
+    #   -c requirements/constraints.txt
     #   -r requirements/base.txt
     #   event-tracking
-openedx-filters==2.1.0
-    # via -r requirements/base.txt
+openedx-filters==1.11.0
+    # via
+    #   -c requirements/constraints.txt
+    #   -r requirements/base.txt
 packaging==25.0
     # via
     #   -c requirements/constraints.txt
@@ -343,6 +350,7 @@ typing-inspection==0.4.1
 tzdata==2025.2
     # via
     #   -r requirements/base.txt
+    #   celery
     #   kombu
 uritemplate==4.2.0
     # via
