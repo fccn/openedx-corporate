@@ -1,10 +1,13 @@
 """Admin configuration for Partner Catalog models."""
 
+from urllib.parse import urlencode
+
 from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import FilteredSelectMultiple
 from django.core.exceptions import FieldDoesNotExist
 from django.db.models import Count
+from django.http import HttpResponseRedirect
 from django.urls import reverse
 from django.utils.html import format_html
 
@@ -144,6 +147,24 @@ class BaseCatalogCourseAdmin(admin.ModelAdmin):
         if not change and not obj.added_by:
             obj.added_by = request.user
         super().save_model(request, obj, form, change)
+
+    def response_add(self, request, obj, post_url_continue=None):
+        """After saving a new entry, keep base_catalog pre-filled when adding another."""
+        response = super().response_add(request, obj, post_url_continue)
+        if "_addanother" in request.POST and obj.base_catalog_id:
+            add_url = reverse(
+                f"admin:{self.model._meta.app_label}_{self.model._meta.model_name}_add"
+            )
+            query = urlencode({"base_catalog": obj.base_catalog_id})
+            return HttpResponseRedirect(f"{add_url}?{query}")
+        return response
+
+    def get_changeform_initial_data(self, request):
+        """Pre-populate base_catalog from query-string when coming from response_add."""
+        initial = super().get_changeform_initial_data(request)
+        if "base_catalog" in request.GET and "base_catalog" not in initial:
+            initial["base_catalog"] = request.GET["base_catalog"]
+        return initial
 
     def get_queryset(self, request):
         """Optimize queryset with select_related."""
