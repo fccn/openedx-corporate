@@ -38,7 +38,7 @@ camel-converter[pydantic]==4.0.1
     # via
     #   -r requirements/test.txt
     #   meilisearch
-celery==5.4.0
+celery==5.5.1
     # via
     #   -c requirements/constraints.txt
     #   -r requirements/test.txt
@@ -179,7 +179,7 @@ edx-drf-extensions==10.6.0
     #   edx-organizations
 edx-lint==5.6.0
     # via -r requirements/quality.in
-edx-opaque-keys[django]==2.11.0
+edx-opaque-keys[django]==3.0.0
     # via
     #   -c requirements/constraints.txt
     #   -r requirements/test.txt
@@ -187,6 +187,7 @@ edx-opaque-keys[django]==2.11.0
     #   edx-drf-extensions
     #   edx-organizations
     #   openedx-events
+    #   openedx-filters
 edx-organizations==6.13.0
     # via
     #   -c requirements/constraints.txt
@@ -255,12 +256,12 @@ meilisearch==0.37.0
     #   edx-search
 openedx-atlas==0.7.0
     # via -r requirements/test.txt
-openedx-events==9.15.0
+openedx-events==10.2.0
     # via
     #   -c requirements/constraints.txt
     #   -r requirements/test.txt
     #   event-tracking
-openedx-filters==1.11.0
+openedx-filters==2.0.1
     # via
     #   -c requirements/constraints.txt
     #   -r requirements/test.txt
@@ -431,7 +432,6 @@ typing-inspection==0.4.1
 tzdata==2025.2
     # via
     #   -r requirements/test.txt
-    #   celery
     #   kombu
 uritemplate==4.2.0
     # via
