@@ -15,7 +15,7 @@ jobs:
       fail-fast: false
       matrix:
         tutor_version:
-          - "==19.0.0"  # Open edX Sumac — update as new releases are supported
+          - "==20.0.0"  # Open edX Teak — update as new releases are supported
 
     steps:
       - uses: actions/checkout@v4
