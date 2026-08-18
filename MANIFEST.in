@@ -3,3 +3,4 @@ include LICENSE.txt
 include README.rst
 include requirements/base.in
 include requirements/constraints.txt
+recursive-include partner_catalog/templates *
