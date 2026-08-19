@@ -241,6 +241,7 @@ def rf_manager(manager_user):
 def test_invitation_list_returns_all_invitations(catalog, manager_user):
     """The list viewset should return invitations scoped to the catalog."""
     from rest_framework.test import APIRequestFactory  # pylint: disable=import-outside-toplevel
+
     from partner_catalog.api.v1.views import CatalogLearnerInvitationViewSet  # pylint: disable=import-outside-toplevel
 
     make_invitation(catalog, invite_email="a@example.com")
@@ -262,6 +263,7 @@ def test_invitation_list_returns_all_invitations(catalog, manager_user):
 def test_invitation_list_status_filter(catalog, manager_user):
     """status filter should narrow results to matching status value."""
     from rest_framework.test import APIRequestFactory  # pylint: disable=import-outside-toplevel
+
     from partner_catalog.api.v1.views import CatalogLearnerInvitationViewSet  # pylint: disable=import-outside-toplevel
 
     make_invitation(catalog, invite_email="pending@example.com")
@@ -284,6 +286,7 @@ def test_invitation_list_status_filter(catalog, manager_user):
 def test_invitation_list_search(catalog, manager_user):
     """search should filter invitations by email substring."""
     from rest_framework.test import APIRequestFactory  # pylint: disable=import-outside-toplevel
+
     from partner_catalog.api.v1.views import CatalogLearnerInvitationViewSet  # pylint: disable=import-outside-toplevel
 
     make_invitation(catalog, invite_email="searchme@example.com")
@@ -307,6 +310,7 @@ def test_invitation_list_search(catalog, manager_user):
 def test_cancel_action_endpoint(catalog, manager_user):
     """POST .../invitations/{pk}/cancel/ must cancel a pending invitation."""
     from rest_framework.test import APIRequestFactory  # pylint: disable=import-outside-toplevel
+
     from partner_catalog.api.v1.views import CatalogLearnerInvitationViewSet  # pylint: disable=import-outside-toplevel
 
     invitation = make_invitation(catalog, invite_email="to_cancel@example.com")
@@ -328,6 +332,7 @@ def test_cancel_action_endpoint(catalog, manager_user):
 def test_resend_action_endpoint(catalog, manager_user, mocker):
     """POST .../invitations/{pk}/resend/ must enqueue the email task."""
     from rest_framework.test import APIRequestFactory  # pylint: disable=import-outside-toplevel
+
     from partner_catalog.api.v1.views import CatalogLearnerInvitationViewSet  # pylint: disable=import-outside-toplevel
 
     mocker.patch("partner_catalog.tasks.emails.send_catalog_invitation_created_email.delay")

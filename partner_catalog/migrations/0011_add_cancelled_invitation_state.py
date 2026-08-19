@@ -6,7 +6,7 @@ from django.db import migrations, models
 class Migration(migrations.Migration):
 
     dependencies = [
-        ('partner_catalog', '0009_alter_catalogcourseenrollment_course_overview'),
+        ('partner_catalog', '0010_basecatalogcourse_unique_base_catalog_course'),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
