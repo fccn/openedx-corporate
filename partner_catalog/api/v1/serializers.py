@@ -139,6 +139,7 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
     enrollments = serializers.IntegerField(read_only=True)
     total_learners = serializers.IntegerField(read_only=True)
     active_learners = serializers.IntegerField(read_only=True)
+    pending_invitations = serializers.IntegerField(read_only=True)
     certified = serializers.IntegerField(source="certified_count", read_only=True)
     completion_rate = serializers.SerializerMethodField()
     status = serializers.SerializerMethodField(read_only=True)
@@ -168,6 +169,7 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
             "enrollments",
             "total_learners",
             "active_learners",
+            "pending_invitations",
             "certified",
             "completion_rate",
             "org",
@@ -414,6 +416,85 @@ class CatalogLearnerInvitationSerializer(serializers.ModelSerializer):
     def get_status(self, obj):
         """Return the display string for the invitation status."""
         return obj.get_status_display()
+
+
+class CatalogInvitationListSerializer(serializers.ModelSerializer):
+    """Read-shaped serializer for the invitations list endpoint."""
+
+    STATUS_KEY_MAP = {
+        CatalogLearnerInvitation.Status.SENT: "pending",
+        CatalogLearnerInvitation.Status.ACCEPTED: "accepted",
+        CatalogLearnerInvitation.Status.DECLINED: "declined",
+        CatalogLearnerInvitation.Status.REMOVED: "removed",
+        CatalogLearnerInvitation.Status.CANCELLED: "cancelled",
+    }
+
+    status = serializers.SerializerMethodField()
+    status_display = serializers.SerializerMethodField()
+    is_registered = serializers.SerializerMethodField()
+    username = serializers.SerializerMethodField()
+    full_name = serializers.SerializerMethodField()
+    invited_by = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CatalogLearnerInvitation
+        fields = [
+            "id",
+            "invite_email",
+            "status",
+            "status_display",
+            "is_registered",
+            "username",
+            "full_name",
+            "invited_at",
+            "accepted_at",
+            "declined_at",
+            "cancelled_at",
+            "removed_at",
+            "invited_by",
+        ]
+        read_only_fields = fields
+
+    def _resolved_user(self, obj):
+        """
+        Return the platform account for invite_email, resolving via DB lookup
+        when invitation.user is NULL (registration-after-invite case).
+        """
+        if obj.user_id:
+            return obj.user
+        cache = self.context.setdefault("_email_user_cache", {})
+        email = obj.invite_email or ""
+        if email not in cache:
+            cache[email] = User.objects.filter(email__iexact=email).first()
+        return cache[email]
+
+    def get_status(self, obj):
+        return self.STATUS_KEY_MAP.get(obj.status, "pending")
+
+    def get_status_display(self, obj):
+        return obj.get_status_display()
+
+    def get_is_registered(self, obj):
+        return self._resolved_user(obj) is not None
+
+    def get_username(self, obj):
+        resolved = self._resolved_user(obj)
+        return resolved.username if resolved else None
+
+    def get_full_name(self, obj):
+        """Return the full name of the resolved user, falling back to username."""
+        resolved = self._resolved_user(obj)
+        if not resolved:
+            return None
+        first = getattr(resolved, "first_name", "") or ""
+        last = getattr(resolved, "last_name", "") or ""
+        return (first + " " + last).strip() or resolved.username or None
+
+    def get_invited_by(self, obj):
+        if not obj.invited_by_id:
+            return None
+        invited_by = obj.invited_by
+        return getattr(invited_by, "username", None) or getattr(invited_by, "email", None)
 
 
 class CatalogCourseEnrollmentSerializer(serializers.ModelSerializer):

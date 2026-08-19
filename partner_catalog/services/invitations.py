@@ -17,16 +17,18 @@ from rest_framework.exceptions import ValidationError
 from partner_catalog.events.data import CatalogLearnerInvitationData
 from partner_catalog.events.signals import (
     CATALOG_LEARNER_INVITATION_ACCEPTED_V1,
+    CATALOG_LEARNER_INVITATION_CANCELLED_V1,
     CATALOG_LEARNER_INVITATION_CREATED_V1,
     CATALOG_LEARNER_INVITATION_DECLINED_V1,
     CATALOG_LEARNER_INVITATION_REMOVED_V1,
 )
 from partner_catalog.exceptions import InactiveCatalogEnrollment, UserLimitReached
 from partner_catalog.helpers.email import normalize_email
-from partner_catalog.models import CatalogLearner, CatalogLearnerInvitation
+from partner_catalog.models import CatalogLearner, CatalogLearnerInvitation, CatalogManager
 from partner_catalog.policies.catalogs import has_catalog_capacity
 from partner_catalog.xapi.constants import (
     EVENT_NAME_INVITATION_ACCEPTED,
+    EVENT_NAME_INVITATION_CANCELLED,
     EVENT_NAME_INVITATION_DECLINED,
     EVENT_NAME_INVITATION_REMOVED,
     EVENT_NAME_INVITATION_SENT,
@@ -50,6 +52,8 @@ class CatalogLearnerInvitationService:
     ERROR_DECLINE_NOT_ALLOWED = "This invitation can not be declined."
     ERROR_ACCEPT_NOT_ALLOWED = "This invitation can not be accepted."
     ERROR_REMOVE_NOT_ALLOWED = "This invitation can not be removed."
+    ERROR_CANCEL_NOT_ALLOWED = "This invitation can not be cancelled."
+    ERROR_RESEND_NOT_ALLOWED = "Only pending (sent) invitations can be resent."
     ERROR_INVITATION_NOT_FOUND = "Invitation not found."
 
     _EVENT_MAP = {
@@ -57,19 +61,22 @@ class CatalogLearnerInvitationService:
         Status.ACCEPTED: CATALOG_LEARNER_INVITATION_ACCEPTED_V1,
         Status.DECLINED: CATALOG_LEARNER_INVITATION_DECLINED_V1,
         Status.REMOVED: CATALOG_LEARNER_INVITATION_REMOVED_V1,
+        Status.CANCELLED: CATALOG_LEARNER_INVITATION_CANCELLED_V1,
     }
     _TRACKING_EVENT_MAP = {
         Status.SENT: EVENT_NAME_INVITATION_SENT,
         Status.ACCEPTED: EVENT_NAME_INVITATION_ACCEPTED,
         Status.DECLINED: EVENT_NAME_INVITATION_DECLINED,
         Status.REMOVED: EVENT_NAME_INVITATION_REMOVED,
+        Status.CANCELLED: EVENT_NAME_INVITATION_CANCELLED,
     }
 
     ALLOWED_TRANSITIONS = {
-        Status.SENT: [Status.ACCEPTED, Status.DECLINED],
+        Status.SENT: [Status.ACCEPTED, Status.DECLINED, Status.CANCELLED],
         Status.ACCEPTED: [Status.REMOVED],
         Status.DECLINED: [],
         Status.REMOVED: [],
+        Status.CANCELLED: [],
         Status.FAILED: [],
     }
 
@@ -198,6 +205,38 @@ class CatalogLearnerInvitationService:
             error_msg=self.ERROR_REMOVE_NOT_ALLOWED,
         )
 
+    @transaction.atomic
+    def cancel_invitation(self, invitation_id: int, user):
+        """
+        Cancel a pending (SENT) CatalogLearnerInvitation.
+        Update status and timestamps accordingly.
+        """
+        invitation = self.get_invitation_or_raise(invitation_id)
+        return self._transition_status(
+            invitation=invitation,
+            new_status=Status.CANCELLED,
+            user=user,
+            timestamp_field='cancelled_at',
+            extra_updates={'cancelled_by': user},
+            error_msg=self.ERROR_CANCEL_NOT_ALLOWED,
+        )
+
+    def resend_invitation(self, invitation_id: int, user):
+        """
+        Re-send the invitation email for a pending (SENT) invitation.
+        Does not update invited_at so the original invite date is preserved.
+        """
+        from partner_catalog.tasks.emails import (  # pylint: disable=import-outside-toplevel
+            send_catalog_invitation_created_email,
+        )
+        invitation = self.get_invitation_or_raise(invitation_id)
+        if invitation.status != Status.SENT:
+            raise ValidationError(self.ERROR_RESEND_NOT_ALLOWED)
+        if not self._validate_invitation_status_access(user, invitation, Status.CANCELLED):
+            raise ValidationError(self.ERROR_RESEND_NOT_ALLOWED)
+        send_catalog_invitation_created_email.delay(invitation.id)
+        return invitation
+
     def get_invitation_or_raise(self, invitation_id: int) -> CatalogLearnerInvitation:
         """
         Get an invitation by ID or raise ValidationError if not found.
@@ -306,8 +345,14 @@ class CatalogLearnerInvitationService:
         is_invitation_user = (user == invitation.user or user.email == invitation.invite_email)
         if new_status in [Status.ACCEPTED, Status.DECLINED]:
             return getattr(user, "is_authenticated", False) and is_invitation_user
-        elif new_status == Status.REMOVED:
-            return is_invitation_user or user.is_staff or user.is_superuser
+        elif new_status in [Status.REMOVED, Status.CANCELLED]:
+            if is_invitation_user or user.is_staff or user.is_superuser:
+                return True
+            return CatalogManager.objects.filter(
+                user=user,
+                catalog_id=invitation.catalog_id,
+                active=True,
+            ).exists()
         return False
 
     def _get_user_by_email(self, invite_email: str):
