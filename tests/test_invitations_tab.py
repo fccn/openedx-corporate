@@ -13,7 +13,6 @@ Tests for the new Invitations tab backend work:
 import pytest
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
-from rest_framework.test import APIRequestFactory
 
 from partner_catalog.models import CatalogLearnerInvitation, CatalogManager
 from partner_catalog.services.invitations import CatalogLearnerInvitationService
@@ -209,7 +208,6 @@ def test_is_registered_true_for_user_who_registered_after_invite(catalog):
 
 def test_exception_handler_adds_code_to_response():
     """catalog_exception_handler must add 'code' to the response body."""
-    from rest_framework.request import Request  # pylint: disable=import-outside-toplevel
     from partner_catalog.api.exception_handlers import catalog_exception_handler  # pylint: disable=import-outside-toplevel
     from partner_catalog.exceptions import UserLimitReached  # pylint: disable=import-outside-toplevel
 

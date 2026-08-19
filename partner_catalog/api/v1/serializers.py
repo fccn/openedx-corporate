@@ -482,6 +482,7 @@ class CatalogInvitationListSerializer(serializers.ModelSerializer):
         return resolved.username if resolved else None
 
     def get_full_name(self, obj):
+        """Return the full name of the resolved user, falling back to username."""
         resolved = self._resolved_user(obj)
         if not resolved:
             return None

@@ -230,6 +230,8 @@ class CatalogLearnerInvitationService:
         invitation = self.get_invitation_or_raise(invitation_id)
         if invitation.status != Status.SENT:
             raise ValidationError(self.ERROR_RESEND_NOT_ALLOWED)
+        if not self._validate_invitation_status_access(user, invitation, Status.CANCELLED):
+            raise ValidationError(self.ERROR_RESEND_NOT_ALLOWED)
         send_catalog_invitation_created_email.delay(invitation.id)
         return invitation
 
