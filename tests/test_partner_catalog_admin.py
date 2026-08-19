@@ -16,8 +16,11 @@ from django.test import RequestFactory, override_settings
 from django.urls import reverse
 
 from partner_catalog.admin import PartnerCatalogAdmin
+from partner_catalog.edxapp_wrapper.course_module import course_overview
 from partner_catalog.models import CatalogCourse, CatalogManager, PartnerCatalog
 from tests.factories import make_catalog, make_user
+
+CourseOverview = course_overview()
 
 _ADMIN_URL_CONF = "tests.admin_test_urls"
 
@@ -72,7 +75,8 @@ def test_learner_count_is_plain_integer():
 def test_course_count_is_plain_integer():
     """add_course returns the plain integer count, not HTML."""
     catalog = make_catalog()
-    CatalogCourse.objects.create(catalog=catalog)
+    course = CourseOverview.objects.create()
+    CatalogCourse.objects.create(catalog=catalog, course_overview=course)
     admin_view = _admin()
     result = admin_view.add_course(catalog)
     assert result == 1
