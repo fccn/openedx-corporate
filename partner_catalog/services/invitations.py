@@ -226,7 +226,9 @@ class CatalogLearnerInvitationService:
         Re-send the invitation email for a pending (SENT) invitation.
         Does not update invited_at so the original invite date is preserved.
         """
-        from partner_catalog.tasks.emails import send_catalog_invitation_created_email  # pylint: disable=import-outside-toplevel
+        from partner_catalog.tasks.emails import (  # pylint: disable=import-outside-toplevel
+            send_catalog_invitation_created_email,
+        )
         invitation = self.get_invitation_or_raise(invitation_id)
         if invitation.status != Status.SENT:
             raise ValidationError(self.ERROR_RESEND_NOT_ALLOWED)

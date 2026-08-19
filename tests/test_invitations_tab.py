@@ -188,7 +188,9 @@ def test_is_registered_true_for_user_who_registered_after_invite(catalog):
     is_registered must return True even when invitation.user is NULL because
     the invitee registered after receiving the invite.
     """
-    from partner_catalog.api.v1.serializers import CatalogInvitationListSerializer  # pylint: disable=import-outside-toplevel
+    from partner_catalog.api.v1.serializers import (  # pylint: disable=import-outside-toplevel
+        CatalogInvitationListSerializer,
+    )
 
     late_registrant = make_user(email="late@example.com")
     invitation = make_invitation(catalog, invite_email=late_registrant.email, user=None)
@@ -208,7 +210,9 @@ def test_is_registered_true_for_user_who_registered_after_invite(catalog):
 
 def test_exception_handler_adds_code_to_response():
     """catalog_exception_handler must add 'code' to the response body."""
-    from partner_catalog.api.exception_handlers import catalog_exception_handler  # pylint: disable=import-outside-toplevel
+    from partner_catalog.api.exception_handlers import (  # pylint: disable=import-outside-toplevel
+        catalog_exception_handler,
+    )
     from partner_catalog.exceptions import UserLimitReached  # pylint: disable=import-outside-toplevel
 
     exc = UserLimitReached()
