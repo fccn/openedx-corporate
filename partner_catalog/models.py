@@ -449,6 +449,7 @@ class CatalogLearnerInvitation(models.Model):
         ACCEPTED = 20, "Accepted"
         DECLINED = 30, "Declined"
         REMOVED = 40, "Removed"
+        CANCELLED = 50, "Cancelled"
 
     id = models.AutoField(primary_key=True)
     catalog = models.ForeignKey("PartnerCatalog", on_delete=models.CASCADE)
@@ -488,6 +489,16 @@ class CatalogLearnerInvitation(models.Model):
     accepted_at = models.DateTimeField(null=True, blank=True)
     declined_at = models.DateTimeField(null=True, blank=True)
 
+    # Cancellation
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        get_user_model(),
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="cancelled_learner_invitations",
+    )
+
     status = models.PositiveSmallIntegerField(
         choices=Status.choices,
         default=Status.SENT,
@@ -514,6 +525,7 @@ class CatalogLearnerInvitation(models.Model):
             models.Index(fields=["accepted_at"]),
             models.Index(fields=["declined_at"]),
             models.Index(fields=["removed_at"]),
+            models.Index(fields=["cancelled_at"]),
         ]
         constraints = [
             # Can't be accepted and declined simultaneously
@@ -530,6 +542,12 @@ class CatalogLearnerInvitation(models.Model):
                 check=models.Q(removed_at__isnull=True)
                 | models.Q(accepted_at__isnull=False),
             ),
+            # Can't be cancelled and accepted simultaneously
+            models.CheckConstraint(
+                name="cla_cancelled_not_accepted",
+                check=models.Q(cancelled_at__isnull=True)
+                | models.Q(accepted_at__isnull=True),
+            ),
             # Prevent duplicate active invitations (SENT or ACCEPTED)
             models.UniqueConstraint(
                 fields=["catalog", "invite_email"],
@@ -542,6 +560,8 @@ class CatalogLearnerInvitation(models.Model):
         """Compute the current status based on timestamps."""
         if self.removed_at:
             return self.Status.REMOVED
+        if self.cancelled_at:
+            return self.Status.CANCELLED
         if self.declined_at:
             return self.Status.DECLINED
         if self.accepted_at:

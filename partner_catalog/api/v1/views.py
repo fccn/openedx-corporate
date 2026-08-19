@@ -2,7 +2,7 @@
 
 from django.db.models import Count, F, OuterRef, Q, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
-from edx_rest_framework_extensions.permissions import IsAuthenticated, IsStaff, IsSuperuser
+from edx_rest_framework_extensions.permissions import IsStaff, IsSuperuser
 from rest_framework import filters, mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -23,6 +23,7 @@ from partner_catalog.api.v1.serializers import (
     BulkRemoveInvitationSerializer,
     CatalogCourseEnrollmentSerializer,
     CatalogCourseSerializer,
+    CatalogInvitationListSerializer,
     CatalogLearnerInvitationSerializer,
     CatalogLearnerSerializer,
     InvitationActionSerializer,
@@ -153,6 +154,11 @@ class PartnerCatalogViewSet(CSVExportMixin, viewsets.ModelViewSet):
             ),
             total_learners=Count("catalog_learners", distinct=True),
             active_learners=Count("catalog_learners", filter=Q(catalog_learners__active=True), distinct=True),
+            pending_invitations=Count(
+                "cataloglearnerinvitation",
+                filter=Q(cataloglearnerinvitation__status=CatalogLearnerInvitation.Status.SENT),
+                distinct=True,
+            ),
         )
         qs = annotate_catalog_certified_count(qs)
         return qs
@@ -394,6 +400,7 @@ class CatalogCourseViewSet(
 
 
 class CatalogLearnerInvitationViewSet(
+    CSVExportMixin,
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
     viewsets.GenericViewSet,
@@ -401,13 +408,39 @@ class CatalogLearnerInvitationViewSet(
 ):
     """ViewSet for managing Catalog Learner Invitations."""
 
-    queryset = CatalogLearnerInvitation.objects.select_related("catalog", "user")
+    queryset = CatalogLearnerInvitation.objects.select_related(
+        "catalog", "user", "invited_by", "cancelled_by", "removed_by"
+    )
     service = CatalogLearnerInvitationService()
+    permission_classes = [IsPartnerCatalogManager]
+
+    csv_filename = "invitations_report.csv"
+    csv_fields = [
+        "invite_email", "username", "full_name", "status", "status_display",
+        "invited_at", "accepted_at", "declined_at", "cancelled_at", "removed_at", "invited_by",
+    ]
+    csv_labels = {
+        "invite_email": "Email",
+        "username": "Username",
+        "full_name": "Full Name",
+        "status": "Status Key",
+        "status_display": "Status",
+        "invited_at": "Invited At",
+        "accepted_at": "Accepted At",
+        "declined_at": "Declined At",
+        "cancelled_at": "Cancelled At",
+        "removed_at": "Removed At",
+        "invited_by": "Invited By",
+    }
     filter_backends = [
         DjangoFilterBackend,
         filters.SearchFilter,
         filters.OrderingFilter,
     ]
+    filterset_fields = ["status"]
+    search_fields = ["invite_email", "user__username", "user__first_name", "user__last_name"]
+    ordering_fields = ["id", "invited_at", "accepted_at", "cancelled_at", "removed_at", "status"]
+    ordering = ["-invited_at"]
 
     # Mixin config
     nested_lookup_kwarg = "catalog_pk"
@@ -423,20 +456,6 @@ class CatalogLearnerInvitationViewSet(
 
         return qs
 
-    def get_permission_classes(self):
-        """Get permission classes based on action."""
-
-        base_permissions = [IsAuthenticated]
-        manager_actions = [
-            "create",
-            "remove_invite",
-            "bulk_invite_upload",
-            "bulk_remove_upload"
-        ]
-        if self.action in manager_actions:
-            return base_permissions + [IsPartnerCatalogManager]
-        return base_permissions
-
     def get_serializer_class(self):
         """Get the serializer class based on action."""
 
@@ -450,12 +469,14 @@ class CatalogLearnerInvitationViewSet(
             return InvitationActionSerializer
         elif self.action == "bulk_remove":
             return BulkRemoveInvitationSerializer
+        elif self.action in ["list", "resend", "cancel"]:
+            return CatalogInvitationListSerializer
 
         return CatalogLearnerInvitationSerializer
 
     def create(self, request, *args, **kwargs):
         """Create one or more invitations."""
-        serializer = self.get_serializer(data=request.data)
+        serializer = CatalogLearnerInvitationSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         catalog_id = self.kwargs.get('catalog_pk')
 
@@ -478,7 +499,7 @@ class CatalogLearnerInvitationViewSet(
                     'email': email,
                     'error': str(e.detail[0]) if hasattr(e, 'detail') else str(e)
                 })
-        output_serializer = self.get_serializer(created_invitations, many=True)
+        output_serializer = CatalogLearnerInvitationSerializer(created_invitations, many=True)
 
         response_data = {
             'invitations': output_serializer.data,
@@ -486,13 +507,10 @@ class CatalogLearnerInvitationViewSet(
             'total_requested': len(invite_emails),
         }
 
-        # Include errors if any occurred
         if errors:
             response_data['errors'] = errors
-            # Return partial success status if some succeeded
             if created_invitations:
                 return Response(response_data, status=status.HTTP_207_MULTI_STATUS)
-            # Return error status if all failed
             return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
 
         return Response(response_data, status=status.HTTP_201_CREATED)
@@ -502,7 +520,21 @@ class CatalogLearnerInvitationViewSet(
         """Remove an invitation."""
         invitation = self.service.remove_invitation(invitation_id=pk, user=request.user)
 
-        serializer = CatalogLearnerInvitationSerializer(invitation)
+        serializer = CatalogInvitationListSerializer(invitation)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="resend")
+    def resend(self, request, pk=None, **kwargs):
+        """Re-send the invitation email for a pending invitation."""
+        invitation = self.service.resend_invitation(invitation_id=pk, user=request.user)
+        serializer = CatalogInvitationListSerializer(invitation)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=["post"], url_path="cancel")
+    def cancel(self, request, pk=None, **kwargs):
+        """Cancel a pending invitation."""
+        invitation = self.service.cancel_invitation(invitation_id=pk, user=request.user)
+        serializer = CatalogInvitationListSerializer(invitation)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     @bulk_upload_invitations_schema
