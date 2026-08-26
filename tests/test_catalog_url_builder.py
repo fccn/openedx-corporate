@@ -6,7 +6,6 @@ and LMS_ROOT_URL so that the URL is always produced correctly regardless
 of how the settings are configured.
 """
 
-import pytest
 from django.test import override_settings
 
 from partner_catalog.utils.urls import build_catalog_url
