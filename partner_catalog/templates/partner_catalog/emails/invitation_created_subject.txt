@@ -1,1 +1,1 @@
-You’ve been invited to view {{ catalog_name }}
+{% load i18n %}{% blocktrans with catalog_name=catalog_name %}You've been invited to view {{ catalog_name }}{% endblocktrans %}

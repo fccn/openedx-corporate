@@ -6,6 +6,7 @@ from typing import Optional
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
+from django.utils.translation import override as translation_override
 
 from partner_catalog.utils.urls import build_catalog_url
 
@@ -83,9 +84,12 @@ class InvitationEmailService:
             "support_email": support_email,
         }
 
-        subject = render_to_string("partner_catalog/emails/invitation_created_subject.txt", context).strip()
-        text_body = render_to_string("partner_catalog/emails/invitation_created_body.txt", context)
-        html_body = render_to_string("partner_catalog/emails/invitation_created_body.html", context)
+        language = getattr(settings, "LANGUAGE_CODE", "en").replace("-", "_")
+
+        with translation_override(language):
+            subject = render_to_string("partner_catalog/emails/invitation_created_subject.txt", context).strip()
+            text_body = render_to_string("partner_catalog/emails/invitation_created_body.txt", context)
+            html_body = render_to_string("partner_catalog/emails/invitation_created_body.html", context)
 
         from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None) or support_email
 
