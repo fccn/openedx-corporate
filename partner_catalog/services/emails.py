@@ -84,9 +84,7 @@ class InvitationEmailService:
             "support_email": support_email,
         }
 
-        language = getattr(settings, "LANGUAGE_CODE", "en").replace("-", "_")
-
-        with translation_override(language):
+        with translation_override(settings.LANGUAGE_CODE):
             subject = render_to_string("partner_catalog/emails/invitation_created_subject.txt", context).strip()
             text_body = render_to_string("partner_catalog/emails/invitation_created_body.txt", context)
             html_body = render_to_string("partner_catalog/emails/invitation_created_body.html", context)
