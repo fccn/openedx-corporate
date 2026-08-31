@@ -16,10 +16,10 @@ _BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 CONF_LOCALE_DIR = os.path.join(_BASE_DIR, "partner_catalog", "conf", "locale")
 TEMPLATES_DIR = os.path.join(_BASE_DIR, "partner_catalog", "templates")
 
-_COMMON_SETTINGS = dict(
-    LOCALE_PATHS=[CONF_LOCALE_DIR],
-    EMAIL_BACKEND="django.core.mail.backends.locmem.EmailBackend",
-    TEMPLATES=[{
+_COMMON_SETTINGS = {
+    "LOCALE_PATHS": [CONF_LOCALE_DIR],
+    "EMAIL_BACKEND": "django.core.mail.backends.locmem.EmailBackend",
+    "TEMPLATES": [{
         "BACKEND": "django.template.backends.django.DjangoTemplates",
         "DIRS": [TEMPLATES_DIR],
         "APP_DIRS": False,
@@ -31,7 +31,7 @@ _COMMON_SETTINGS = dict(
             ],
         },
     }],
-)
+}
 
 
 @pytest.mark.django_db
