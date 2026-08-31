@@ -1,11 +1,12 @@
-Hello,
+{% load i18n %}
+{% trans "Hello," %}
 
-You've been invited to view {{ catalog_name }} on {{ partner_name }}'s corporate catalog.
+{% blocktrans with catalog_name=catalog_name partner_name=partner_name %}You've been invited to view {{ catalog_name }} on {{ partner_name }}'s corporate catalog.{% endblocktrans %}
 
-Visit the catalog to see available courses:
+{% trans "Visit the catalog to see available courses:" %}
 {{ catalog_url }}
 
-Need help? Contact {{ support_email }}
+{% blocktrans with support_email=support_email %}Need help? Contact {{ support_email }}{% endblocktrans %}
 
 ---
-This is a notification email. You do not need to reply to this message.
+{% trans "This is a notification email. You do not need to reply to this message." %}

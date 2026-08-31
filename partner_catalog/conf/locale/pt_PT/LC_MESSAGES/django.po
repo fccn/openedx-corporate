@@ -1,0 +1,47 @@
+# Portuguese (Portugal) translations for partner_catalog invitation emails.
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: pt_PT\n"
+
+msgid "You've been invited to view %(catalog_name)s"
+msgstr "Foi convidado/a para consultar o catálogo %(catalog_name)s"
+
+msgid "Hello,"
+msgstr "Olá,"
+
+msgid ""
+"You've been invited to view %(catalog_name)s on %(partner_name)s's corporate "
+"catalog."
+msgstr ""
+"Foi convidado/a para consultar o catálogo %(catalog_name)s na plataforma "
+"corporativa de aprendizagem da %(partner_name)s."
+
+msgid "Visit the catalog to see available courses:"
+msgstr "Aceda ao catálogo para ver os cursos disponíveis:"
+
+msgid "Need help? Contact %(support_email)s"
+msgstr "Precisa de ajuda? Contacte %(support_email)s"
+
+msgid "This is a notification email. You do not need to reply to this message."
+msgstr "Esta é uma mensagem de notificação. Não é necessário responder a este email."
+
+msgid ""
+"You've been invited to view the <strong>%(catalog_name)s</strong> catalog on "
+"%(partner_name)s's corporate learning platform."
+msgstr ""
+"Foi convidado/a para consultar o catálogo <strong>%(catalog_name)s</strong> "
+"na plataforma corporativa de aprendizagem da %(partner_name)s."
+
+msgid "Click the button below to visit the catalog and view available courses."
+msgstr "Clique no botão abaixo para aceder ao catálogo e visualizar os cursos disponíveis."
+
+msgid "View Catalog"
+msgstr "Ver Catálogo"
+
+msgid "If the button above doesn't work, you can also visit this link:"
+msgstr "Se o botão acima não funcionar, pode também aceder através desta ligação:"
+
+msgid "Need help? <a href=\"mailto:%(support_email)s\">Contact support</a>"
+msgstr "Precisa de ajuda? <a href=\"mailto:%(support_email)s\">Contacte o suporte</a>"
