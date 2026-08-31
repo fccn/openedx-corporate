@@ -126,14 +126,18 @@ def test_manager_no_managers_shows_dash():
 @pytest.mark.django_db
 @override_settings(ROOT_URLCONF=_ADMIN_URL_CONF)
 def test_manager_username_is_html_escaped():
-    """add_manager escapes HTML special characters in usernames (XSS guard)."""
+    """add_manager escapes HTML special characters in usernames (XSS guard).
+
+    create_user bypasses form validators so the malicious string reaches the DB,
+    letting us verify that format_html_join escapes it on output.
+    """
     catalog = make_catalog()
-    user = make_user(username="safe_name")
+    user = make_user(username="<script>alert(1)</script>")
     CatalogManager.objects.create(catalog=catalog, user=user, active=True)
 
     result = str(_admin().add_manager(catalog))
     assert "<script>" not in result
-    assert "safe_name" in result
+    assert "&lt;script&gt;" in result
 
 
 @pytest.mark.django_db
@@ -154,16 +158,60 @@ def test_multiple_managers_all_rendered():
 
 @pytest.mark.django_db
 @override_settings(ROOT_URLCONF=_ADMIN_URL_CONF)
+def test_manager_prefetch_path_matches_fallback_path():
+    """add_manager produces the same output via the prefetch path as via the fallback path.
+
+    When the catalog object is fetched through PartnerCatalogAdmin.get_queryset,
+    obj.active_managers_list is populated by the Prefetch. This test confirms that
+    the prefetch path (production code path) behaves identically to the direct
+    fallback path exercised by the other manager tests.
+    """
+    superuser = make_user(is_staff=True, is_superuser=True)
+    catalog = make_catalog()
+    user = make_user(username="mgr_prefetch")
+    manager = CatalogManager.objects.create(catalog=catalog, user=user, active=True)
+
+    admin_view = _admin()
+    request = _get_request(superuser)
+
+    catalog_from_qs = admin_view.get_queryset(request).get(pk=catalog.pk)
+    result_prefetch = str(admin_view.add_manager(catalog_from_qs))
+
+    result_fallback = str(admin_view.add_manager(catalog))
+
+    change_url = reverse("admin:partner_catalog_catalogmanager_change", args=[manager.pk])
+    assert change_url in result_prefetch
+    assert "mgr_prefetch" in result_prefetch
+    assert result_prefetch == result_fallback
+
+
+@pytest.mark.django_db
+@override_settings(ROOT_URLCONF=_ADMIN_URL_CONF)
+def test_manager_prefetch_excludes_inactive_managers():
+    """get_queryset Prefetch only loads active managers into active_managers_list."""
+    superuser = make_user(is_staff=True, is_superuser=True)
+    catalog = make_catalog()
+    active_user = make_user(username="mgr_active")
+    inactive_user = make_user(username="mgr_inactive")
+    CatalogManager.objects.create(catalog=catalog, user=active_user, active=True)
+    CatalogManager.objects.create(catalog=catalog, user=inactive_user, active=False)
+
+    admin_view = _admin()
+    catalog_from_qs = admin_view.get_queryset(_get_request(superuser)).get(pk=catalog.pk)
+
+    assert len(catalog_from_qs.active_managers_list) == 1
+    assert catalog_from_qs.active_managers_list[0].user.username == "mgr_active"
+
+
+@pytest.mark.django_db
+@override_settings(ROOT_URLCONF=_ADMIN_URL_CONF)
 def test_changelist_view_injects_add_urls_into_context():
-    """changelist_view passes learner/course/manager add URLs to the template context."""
+    """changelist_view passes the exact learner/course/manager add URLs to the template context."""
     superuser = make_user(is_staff=True, is_superuser=True)
     make_catalog()
     response = _admin().changelist_view(_get_request(superuser))
     context = response.context_data
 
-    assert "learner_add_url" in context
-    assert "course_add_url" in context
-    assert "manager_add_url" in context
-    assert "/add/" in context["learner_add_url"]
-    assert "/add/" in context["course_add_url"]
-    assert "/add/" in context["manager_add_url"]
+    assert context["learner_add_url"] == reverse("admin:partner_catalog_cataloglearnerinvitation_add")
+    assert context["course_add_url"] == reverse("admin:partner_catalog_catalogcourse_add")
+    assert context["manager_add_url"] == reverse("admin:partner_catalog_catalogmanager_add")
