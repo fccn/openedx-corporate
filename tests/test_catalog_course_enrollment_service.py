@@ -428,7 +428,7 @@ def test_existing_enrollment_mode_audit_calls_upgrade_not_create(
     assert result.lms_enrollment_mode == "verified"
 
 
-def test_new_enrollment_open_course_does_not_consume_bag_and_no_create(
+def test_new_enrollment_open_course_does_not_consume_bag_and_creates_record(
     mocker,
     svc,
 ):
@@ -460,10 +460,18 @@ def test_new_enrollment_open_course_does_not_consume_bag_and_no_create(
 
     result = svc.create_or_activate_course_enrollment(user_id=1, catalog_course_id=fake_course.id)
 
-    assert result.catalog_course_enrollment_id is None
+    # The catalog enrollment record is persisted so dashboard metrics count it,
+    # but the paid enrollment bag is never consulted for open courses.
+    cce_create.assert_called_once_with(
+        user_id=1,
+        catalog_course_id=fake_course.id,
+        course_overview_id=fake_course.course_overview_id,
+        active=True,
+    )
+    assert result.catalog_course_enrollment_id == cce_create.return_value.id
+    assert result.catalog_course_enrollment_created is True
     ensure.assert_called_once_with(user_id=1, catalog_course_id=fake_course.id, target_mode="audit")
     course_limit.assert_not_called()
-    cce_create.assert_not_called()
     assert result.lms_enrollment_mode == "audit"
 
 
