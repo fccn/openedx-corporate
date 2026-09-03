@@ -131,28 +131,19 @@ class CatalogCourseEnrollmentService:
 
         if target_mode == "audit":
             if mode == "none":
-                ensure_edx_platform_enrollment(
+                return ensure_edx_platform_enrollment(
                     user_id=user_id,
                     catalog_course_id=catalog_course_id,
                     target_mode="audit",
                 )
-                return "audit"
             return mode
 
-        if mode == "none":
-            ensure_edx_platform_enrollment(
+        if mode == "none" or mode in OPEN_ENROLLMENT_MODES:
+            return ensure_edx_platform_enrollment(
                 user_id=user_id,
                 catalog_course_id=catalog_course_id,
                 target_mode=target_mode,
             )
-            return target_mode
-        if mode in OPEN_ENROLLMENT_MODES:
-            ensure_edx_platform_enrollment(
-                user_id=user_id,
-                catalog_course_id=catalog_course_id,
-                target_mode=target_mode,
-            )
-            return target_mode
         # paid modes (e.g., verified/professional/...) => no-op
 
         return mode

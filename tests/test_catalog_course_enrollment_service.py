@@ -259,6 +259,7 @@ def test_create_or_activate_new_enrollment_mode_none_creates_and_ensures(
     platform_mode.return_value = "none"
     course_limit.return_value = True
     is_paid.return_value = True
+    ensure.return_value = "verified"
 
     # No existing enrollment
     cce_select_for_update.return_value.filter.return_value.first.return_value = None
@@ -313,6 +314,7 @@ def test_create_or_activate_new_enrollment_mode_audit_creates_and_upgrades(
     platform_mode.return_value = "audit"
     course_limit.return_value = True
     is_paid.return_value = True
+    ensure.return_value = "verified"
 
     cce_select_for_update.return_value.filter.return_value.first.return_value = None
 
@@ -363,6 +365,7 @@ def test_existing_enrollment_mode_none_calls_ensure_not_create(
     can_enroll.return_value = True
     is_paid.return_value = True
     platform_mode.return_value = "none"
+    ensure.return_value = "verified"
 
     fake_enrollment = SimpleNamespace(
         id=10,
@@ -407,6 +410,7 @@ def test_existing_enrollment_mode_audit_calls_upgrade_not_create(
     can_enroll.return_value = True
     is_paid.return_value = True
     platform_mode.return_value = "audit"
+    ensure.return_value = "verified"
 
     fake_enrollment = SimpleNamespace(
         id=11,
@@ -452,6 +456,7 @@ def test_new_enrollment_open_course_does_not_consume_bag_and_no_create(
 
     can_enroll.return_value = True
     platform_mode.return_value = "none"
+    ensure.return_value = "audit"
 
     cce_select_for_update.return_value.filter.return_value.first.return_value = None
 
