@@ -23,3 +23,8 @@ CATALOG_LEARNER_INVITATION_DECLINED_V1 = OpenEdxPublicSignal(
     event_type="org.partner.catalog.learner.invitation.declined.v1",
     data={"invitation": CatalogLearnerInvitationData},
 )
+
+CATALOG_LEARNER_INVITATION_CANCELLED_V1 = OpenEdxPublicSignal(
+    event_type="org.partner.catalog.learner.invitation.cancelled.v1",
+    data={"invitation": CatalogLearnerInvitationData},
+)
