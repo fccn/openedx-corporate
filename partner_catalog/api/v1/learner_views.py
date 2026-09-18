@@ -11,6 +11,7 @@ from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
+from partner_catalog.api.exception_handlers import catalog_exception_handler
 from partner_catalog.api.v1.filters import PartnerCatalogFilter
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
 from partner_catalog.api.v1.serializers import (
@@ -48,6 +49,9 @@ class LearnerCatalogViewSet(viewsets.ReadOnlyModelViewSet):
     ordering = ["name"]
 
     catalog_service = PartnerCatalogService()
+
+    def get_exception_handler(self):
+        return catalog_exception_handler
 
     def get_queryset(self):
         """
@@ -144,6 +148,9 @@ class LearnerCatalogCourseViewSet(InjectNestedFKMixin, viewsets.ReadOnlyModelVie
     lookup_url_kwarg = "course_id"
 
     enrollment_service = CatalogCourseEnrollmentService()
+
+    def get_exception_handler(self):
+        return catalog_exception_handler
 
     def get_queryset(self):
         """

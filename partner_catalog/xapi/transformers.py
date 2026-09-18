@@ -166,6 +166,28 @@ if EVENT_ROUTING_BACKENDS_AVAILABLE:
             display=LanguageMap({partner_constants.EN: partner_constants.REMOVED}),
         )
 
+    @XApiTransformersRegistry.register(partner_constants.EVENT_NAME_INVITATION_CANCELLED)
+    class CatalogInvitationCancelledTransformer(BaseInvitationTransformer):
+        """
+        Transformer for invitation-cancelled events.
+        """
+
+        _verb = Verb(
+            id=partner_constants.XAPI_VERB_CANCELLED,
+            display=LanguageMap({partner_constants.EN: partner_constants.CANCELLED}),
+        )
+
+    @XApiTransformersRegistry.register(partner_constants.EVENT_NAME_INVITATION_RESENT)
+    class CatalogInvitationResentTransformer(BaseInvitationTransformer):
+        """
+        Transformer for invitation-resent events.
+        """
+
+        _verb = Verb(
+            id=partner_constants.XAPI_VERB_RESENT,
+            display=LanguageMap({partner_constants.EN: partner_constants.RESENT}),
+        )
+
     @XApiTransformersRegistry.register(partner_constants.EVENT_NAME_COURSE_ENROLLMENT_ACTIVATED)
     class CatalogCourseEnrollmentActivatedTransformer(BaseEnrollmentTransformer):
         """
