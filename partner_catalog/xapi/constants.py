@@ -7,6 +7,8 @@ EVENT_NAME_INVITATION_SENT = "openedx.corporate.catalog.invitation.sent"
 EVENT_NAME_INVITATION_ACCEPTED = "openedx.corporate.catalog.invitation.accepted"
 EVENT_NAME_INVITATION_DECLINED = "openedx.corporate.catalog.invitation.declined"
 EVENT_NAME_INVITATION_REMOVED = "openedx.corporate.catalog.invitation.removed"
+EVENT_NAME_INVITATION_CANCELLED = "openedx.corporate.catalog.invitation.cancelled"
+EVENT_NAME_INVITATION_RESENT = "openedx.corporate.catalog.invitation.resent"
 EVENT_NAME_COURSE_ENROLLMENT_ACTIVATED = "openedx.corporate.catalog.course_enrollment.activated"
 EVENT_NAME_COURSE_ENROLLMENT_DEACTIVATED = "openedx.corporate.catalog.course_enrollment.deactivated"
 EVENT_NAME_COURSE_ENROLLMENT_BLOCKED = "openedx.corporate.catalog.course_enrollment.blocked"
@@ -16,6 +18,8 @@ ALL_EVENTS = [
     EVENT_NAME_INVITATION_ACCEPTED,
     EVENT_NAME_INVITATION_DECLINED,
     EVENT_NAME_INVITATION_REMOVED,
+    EVENT_NAME_INVITATION_CANCELLED,
+    EVENT_NAME_INVITATION_RESENT,
     EVENT_NAME_COURSE_ENROLLMENT_ACTIVATED,
     EVENT_NAME_COURSE_ENROLLMENT_DEACTIVATED,
     EVENT_NAME_COURSE_ENROLLMENT_BLOCKED,
@@ -26,6 +30,8 @@ XAPI_VERB_SENT = "https://w3id.org/xapi/openedx/verb/sent"
 XAPI_VERB_ACCEPTED = "https://w3id.org/xapi/openedx/verb/accepted"
 XAPI_VERB_DECLINED = "https://w3id.org/xapi/openedx/verb/declined"
 XAPI_VERB_REMOVED = "https://w3id.org/xapi/openedx/verb/removed"
+XAPI_VERB_CANCELLED = "https://w3id.org/xapi/openedx/verb/cancelled"
+XAPI_VERB_RESENT = "https://w3id.org/xapi/openedx/verb/resent"
 XAPI_VERB_BLOCKED = "https://w3id.org/xapi/openedx/verb/blocked"
 
 # Verb display values
@@ -33,6 +39,8 @@ SENT = "sent"
 ACCEPTED = "accepted"
 DECLINED = "declined"
 REMOVED = "removed"
+CANCELLED = "cancelled"
+RESENT = "resent"
 BLOCKED = "blocked"
 
 # Common language key
