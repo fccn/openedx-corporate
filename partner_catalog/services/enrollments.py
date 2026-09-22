@@ -268,7 +268,10 @@ class CatalogCourseEnrollmentService:
           catalog has bag capacity.
 
         For open courses:
-        - Access is handled in audit mode and does not create a catalog license.
+        - Access is handled in audit mode. The CatalogCourseEnrollment record is
+          still created/activated so dashboard metrics count the enrollment, but
+          it does not consume the catalog's paid enrollment bag (the limit only
+          counts enrollments in paid courses).
         """
         user = User.objects.get(id=user_id)
         catalog_course = (
@@ -315,10 +318,18 @@ class CatalogCourseEnrollmentService:
                 course_overview_id=course_overview_id,
                 target_mode="audit",
             )
-            return self._build_result(
-                detail="Successfully enrolled in the course.",
-                lms_enrollment_mode=effective_mode,
+            # The CatalogCourseEnrollment record must be persisted for open
+            # courses too: it is what the corporate dashboards and course
+            # cards count. Skipping it left the metrics frozen at 0 for
+            # free/audit enrollments.
+            return self._persist_enrollment_record(
+                user_id=user_id,
+                catalog_course_id=catalog_course_id,
+                course_overview_id=course_overview_id,
+                catalog=catalog,
                 enrollment=enrollment,
+                effective_mode=effective_mode,
+                event_mode="audit",
             )
 
         if self._is_paid_platform_mode(mode):
@@ -365,17 +376,38 @@ class CatalogCourseEnrollmentService:
             course_overview_id=course_overview_id,
             target_mode=target_mode,
         )
+        return self._persist_enrollment_record(
+            user_id=user_id,
+            catalog_course_id=catalog_course_id,
+            course_overview_id=course_overview_id,
+            catalog=catalog,
+            enrollment=enrollment,
+            effective_mode=effective_mode,
+            event_mode=target_mode,
+        )
 
+    def _persist_enrollment_record(
+        self, *, user_id, catalog_course_id, course_overview_id,
+        catalog, enrollment, effective_mode, event_mode,
+    ) -> CourseEnrollmentAttemptResult:
+        """
+        Create or (re)activate the CatalogCourseEnrollment record.
+
+        This record is the source of truth for the corporate dashboard
+        metrics (enrollments, completion rate, certified learners), so it is
+        persisted for every successful enrollment, free or paid.
+        """
         if enrollment:
-            enrollment.active = True
-            enrollment.save(update_fields=["active"])
-            self._emit_activation_event(
-                user_id=user_id,
-                course_overview_id=course_overview_id,
-                enrollment=enrollment,
-                fallback_catalog=catalog,
-                enrollment_mode=target_mode,
-            )
+            if not enrollment.active:
+                enrollment.active = True
+                enrollment.save(update_fields=["active"])
+                self._emit_activation_event(
+                    user_id=user_id,
+                    course_overview_id=course_overview_id,
+                    enrollment=enrollment,
+                    fallback_catalog=catalog,
+                    enrollment_mode=event_mode,
+                )
             return self._build_result(
                 detail="Successfully enrolled in the course.",
                 lms_enrollment_mode=effective_mode,
@@ -394,7 +426,7 @@ class CatalogCourseEnrollmentService:
                 course_overview_id=course_overview_id,
                 enrollment=created_enrollment,
                 fallback_catalog=catalog,
-                enrollment_mode=target_mode,
+                enrollment_mode=event_mode,
             )
             return self._build_result(
                 detail="Successfully enrolled in the course.",
@@ -420,7 +452,7 @@ class CatalogCourseEnrollmentService:
                     course_overview_id=course_overview_id,
                     enrollment=enrollment,
                     fallback_catalog=catalog,
-                    enrollment_mode=target_mode,
+                    enrollment_mode=event_mode,
                 )
             return self._build_result(
                 detail="Successfully enrolled in the course.",

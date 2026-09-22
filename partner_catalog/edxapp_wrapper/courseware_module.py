@@ -18,3 +18,8 @@ def _backend():
 def get_course_blocks_completion_summary(course_key, user):
     """Return completion summary for a user in a course (backend proxy)."""
     return _backend().get_course_blocks_completion_summary(course_key, user)
+
+
+def item_not_found_error():
+    """Return the modulestore ItemNotFoundError exception class (backend proxy)."""
+    return _backend().item_not_found_error()

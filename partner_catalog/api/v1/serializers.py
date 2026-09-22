@@ -71,7 +71,7 @@ class PartnerSerializer(serializers.ModelSerializer):
 
     catalogs = serializers.IntegerField(source="catalogs_count", read_only=True)
     courses = serializers.IntegerField(source="courses_count", read_only=True)
-    enrollments = serializers.IntegerField(source="learners_count", read_only=True)
+    enrollments = serializers.IntegerField(source="enrollments_count", read_only=True)
     certified = serializers.IntegerField(source="certified_count", read_only=True)
 
     class Meta:

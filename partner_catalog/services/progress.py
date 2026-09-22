@@ -4,7 +4,7 @@ from django.conf import settings
 from django.core.cache import cache
 from opaque_keys.edx.keys import CourseKey
 
-from partner_catalog.edxapp_wrapper.courseware_module import get_course_blocks_completion_summary
+from partner_catalog.edxapp_wrapper.courseware_module import get_course_blocks_completion_summary, item_not_found_error
 from partner_catalog.models import CatalogCourse, CatalogCourseEnrollment, CatalogLearner
 
 COURSE_COMPLETION_TTL = getattr(settings, "CP_COURSE_COMPLETION_TTL", 120)
@@ -18,7 +18,13 @@ def compute_progress_percent_by_user(course_key_str: str, user) -> float | None:
     Returns a float 0..100 or None if progress cannot be computed.
     """
     course_key = CourseKey.from_string(course_key_str)
-    summary = get_course_blocks_completion_summary(course_key, user)
+    try:
+        summary = get_course_blocks_completion_summary(course_key, user)
+    except item_not_found_error():
+        # The course run has no content in the modulestore (e.g. a
+        # CourseOverview left behind after a course deletion). Treat it as
+        # no measurable progress instead of failing the whole dashboard.
+        return 0.0
     if not summary:
         return 0.0
 
