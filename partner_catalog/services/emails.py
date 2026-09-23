@@ -2,10 +2,12 @@
 
 import logging
 from typing import Optional
+from urllib.parse import urlparse
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
 from django.template.loader import render_to_string
+from django.utils.translation import override as translation_override
 
 from partner_catalog.utils.urls import build_catalog_url
 
@@ -45,6 +47,13 @@ class InvitationEmailService:
         catalog_slug = getattr(catalog, "slug", "") or ""
 
         catalog_url = build_catalog_url(partner_slug=partner_slug, catalog_slug=catalog_slug)
+        if not urlparse(catalog_url).netloc:
+            logger.warning(
+                "Invitation id=%s: catalog URL %r has no host; the email link will be broken. "
+                "Check CORPORATE_CATALOGS_MFE_BASE_URL / LMS_ROOT_URL.",
+                invitation_id,
+                catalog_url,
+            )
 
         partner_name = getattr(org, "short_name", None) or getattr(org, "name", None) or "Partner"
 
@@ -83,9 +92,10 @@ class InvitationEmailService:
             "support_email": support_email,
         }
 
-        subject = render_to_string("partner_catalog/emails/invitation_created_subject.txt", context).strip()
-        text_body = render_to_string("partner_catalog/emails/invitation_created_body.txt", context)
-        html_body = render_to_string("partner_catalog/emails/invitation_created_body.html", context)
+        with translation_override(settings.LANGUAGE_CODE):
+            subject = render_to_string("partner_catalog/emails/invitation_created_subject.txt", context).strip()
+            text_body = render_to_string("partner_catalog/emails/invitation_created_body.txt", context)
+            html_body = render_to_string("partner_catalog/emails/invitation_created_body.html", context)
 
         from_email = getattr(settings, "DEFAULT_FROM_EMAIL", None) or support_email
 
