@@ -460,8 +460,6 @@ class CatalogLearnerInvitationViewSet(
         """Get the serializer class based on action."""
 
         if self.action in [
-            "accept_invite",
-            "decline_invite",
             "remove_invite",
             "bulk_invite",
             "bulk_invite_status",
