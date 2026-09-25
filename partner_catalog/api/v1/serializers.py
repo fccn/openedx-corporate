@@ -463,6 +463,8 @@ class CatalogInvitationListSerializer(serializers.ModelSerializer):
             "username",
             "full_name",
             "invited_at",
+            "resend_count",
+            "last_resent_at",
             "accepted_at",
             "declined_at",
             "cancelled_at",

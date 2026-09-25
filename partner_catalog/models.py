@@ -482,6 +482,18 @@ class CatalogLearnerInvitation(models.Model):
         related_name="sent_learner_invitations",
     )
 
+    # Resend. invited_at keeps the original invite date so the age of a pending
+    # invitation stays visible; these record the re-sends on top of it.
+    resend_count = models.PositiveIntegerField(
+        default=0,
+        help_text="How many times the invitation email was re-sent after the original invite.",
+    )
+    last_resent_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="When the invitation email was last re-sent.",
+    )
+
     # Revocation
     removed_at = models.DateTimeField(null=True, blank=True)
     removed_by = models.ForeignKey(
