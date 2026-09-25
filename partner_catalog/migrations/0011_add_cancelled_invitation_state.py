@@ -11,6 +11,22 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.AlterField(
+            model_name='cataloglearnerinvitation',
+            name='status',
+            field=models.PositiveSmallIntegerField(
+                choices=[
+                    (0, 'Failed'),
+                    (10, 'Sent'),
+                    (20, 'Accepted'),
+                    (30, 'Declined'),
+                    (40, 'Removed'),
+                    (50, 'Cancelled'),
+                ],
+                default=10,
+                help_text='Current status of the learner invitation.',
+            ),
+        ),
         migrations.AddField(
             model_name='cataloglearnerinvitation',
             name='cancelled_at',
@@ -29,7 +45,7 @@ class Migration(migrations.Migration):
         ),
         migrations.AddIndex(
             model_name='cataloglearnerinvitation',
-            index=models.Index(fields=['cancelled_at'], name='partner_cat_cancell_idx'),
+            index=models.Index(fields=['cancelled_at'], name='partner_cat_cancell_e8b143_idx'),
         ),
         migrations.AddConstraint(
             model_name='cataloglearnerinvitation',
