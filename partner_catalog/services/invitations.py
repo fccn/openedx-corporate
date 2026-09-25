@@ -10,7 +10,7 @@ Django model signals, ensuring side effects are handled consistently elsewhere.
 from celery.result import AsyncResult
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
@@ -225,7 +225,9 @@ class CatalogLearnerInvitationService:
     def resend_invitation(self, invitation_id: int, user):
         """
         Re-send the invitation email for a pending (SENT) invitation.
-        Does not update invited_at so the original invite date is preserved.
+
+        Does not update invited_at so the original invite date is preserved;
+        resend_count and last_resent_at record the re-sends instead.
         """
         from partner_catalog.tasks.emails import (  # pylint: disable=import-outside-toplevel
             send_catalog_invitation_created_email,
@@ -236,6 +238,13 @@ class CatalogLearnerInvitationService:
         if not self._can_manage_invitation(user, invitation):
             raise ValidationError(self.ERROR_RESEND_NOT_ALLOWED)
         send_catalog_invitation_created_email.delay(invitation.id)
+        # Counted only once the email is enqueued, and with F() so concurrent
+        # resends are not lost.
+        CatalogLearnerInvitation.objects.filter(pk=invitation.pk).update(
+            resend_count=F("resend_count") + 1,
+            last_resent_at=timezone.now(),
+        )
+        invitation.refresh_from_db(fields=["resend_count", "last_resent_at"])
         # Resend does not change status, so it never reaches _transition_status.
         # Emit a tracking-only event so "who resent when" stays auditable.
         emit_catalog_invitation_tracking_event(

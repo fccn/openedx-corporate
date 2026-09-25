@@ -540,6 +540,104 @@ def test_resend_invitation_emits_tracking_event(service, catalog, manager_user, 
 
 
 # ---------------------------------------------------------------------------
+# Resend tracking: resend_count / last_resent_at
+# ---------------------------------------------------------------------------
+
+@pytest.mark.django_db
+def test_resend_records_count_and_time_without_touching_invited_at(service, catalog, manager_user, mocker):
+    """A resend is recorded on the row, while invited_at keeps the original invite date."""
+    mocker.patch("partner_catalog.tasks.emails.send_catalog_invitation_created_email.delay")
+    invitation = make_invitation(catalog, invite_email="someone@example.com")
+    invited_at = invitation.invited_at
+
+    result = service.resend_invitation(invitation.id, user=manager_user)
+
+    invitation.refresh_from_db()
+    assert invitation.resend_count == 1
+    assert invitation.last_resent_at is not None
+    assert invitation.invited_at == invited_at
+    assert result.resend_count == 1
+
+
+@pytest.mark.django_db
+def test_every_resend_is_counted(service, catalog, manager_user, mocker):
+    """Each resend increments the count and moves last_resent_at forward."""
+    mocker.patch("partner_catalog.tasks.emails.send_catalog_invitation_created_email.delay")
+    invitation = make_invitation(catalog, invite_email="someone@example.com")
+
+    first = service.resend_invitation(invitation.id, user=manager_user).last_resent_at
+    second = service.resend_invitation(invitation.id, user=manager_user)
+
+    assert second.resend_count == 2
+    assert second.last_resent_at >= first
+
+
+@pytest.mark.django_db
+def test_rejected_resend_is_not_counted(service, catalog, learner_user, manager_user):
+    """A resend refused for a non-pending invitation leaves no trace."""
+    invitation = make_invitation(
+        catalog, invite_email=learner_user.email, user=learner_user,
+        declined_at=timezone.now(),
+    )
+
+    with pytest.raises(ValidationError):
+        service.resend_invitation(invitation.id, user=manager_user)
+
+    invitation.refresh_from_db()
+    assert invitation.resend_count == 0
+    assert invitation.last_resent_at is None
+
+
+@pytest.mark.django_db
+def test_resend_is_not_counted_when_the_email_cannot_be_enqueued(service, catalog, manager_user, mocker):
+    """If the email task cannot be enqueued, no resend is recorded."""
+    mocker.patch(
+        "partner_catalog.tasks.emails.send_catalog_invitation_created_email.delay",
+        side_effect=ConnectionError("broker down"),
+    )
+    invitation = make_invitation(catalog, invite_email="someone@example.com")
+
+    with pytest.raises(ConnectionError):
+        service.resend_invitation(invitation.id, user=manager_user)
+
+    invitation.refresh_from_db()
+    assert invitation.resend_count == 0
+    assert invitation.last_resent_at is None
+
+
+@pytest.mark.django_db
+def test_resend_endpoint_and_list_expose_resend_tracking(catalog, manager_user, mocker):
+    """The resend response and the invitations list both carry the raw resend values."""
+    from rest_framework.test import APIRequestFactory  # pylint: disable=import-outside-toplevel
+
+    from partner_catalog.api.v1.views import CatalogLearnerInvitationViewSet  # pylint: disable=import-outside-toplevel
+
+    mocker.patch("partner_catalog.tasks.emails.send_catalog_invitation_created_email.delay")
+    resent = make_invitation(catalog, invite_email="resent@example.com")
+    make_invitation(catalog, invite_email="untouched@example.com")
+    factory = APIRequestFactory()
+
+    request = factory.post(f"/api/v1/manage/catalogs/{catalog.id}/invitations/{resent.id}/resend/")
+    request.user = manager_user
+    response = CatalogLearnerInvitationViewSet.as_view({"post": "resend"})(
+        request, catalog_pk=str(catalog.id), pk=str(resent.id),
+    )
+    assert response.status_code == 200
+    assert response.data["resend_count"] == 1
+    assert response.data["last_resent_at"] is not None
+
+    request = factory.get(f"/api/v1/manage/catalogs/{catalog.id}/invitations/")
+    request.user = manager_user
+    response = CatalogLearnerInvitationViewSet.as_view({"get": "list"})(request, catalog_pk=str(catalog.id))
+    results = response.data.get("results", response.data) if isinstance(response.data, dict) else response.data
+    rows = {row["invite_email"]: row for row in results}
+    assert rows["resent@example.com"]["resend_count"] == 1
+    assert rows["resent@example.com"]["last_resent_at"] is not None
+    assert rows["untouched@example.com"]["resend_count"] == 0
+    assert rows["untouched@example.com"]["last_resent_at"] is None
+
+
+# ---------------------------------------------------------------------------
 # CatalogInvitationListSerializer – batched account resolution (no N+1)
 # ---------------------------------------------------------------------------
 
