@@ -65,6 +65,7 @@ TEMPLATES = [{
 
 COURSE_OVERVIEW_BACKEND = "partner_catalog.test.course_overview_backend"
 CERTIFICATES_MODULE_BACKEND = "partner_catalog.test.certificates_backend"
+COURSEWARE_MODULE_BACKEND = "partner_catalog.test.courseware_module_backend"
 GRADE_FACTORY_MODULE_BACKEND = "partner_catalog.test.grade_factory_backend"
 STUDENT_MODULE_BACKEND = "partner_catalog.test.student_module_backend"
 
