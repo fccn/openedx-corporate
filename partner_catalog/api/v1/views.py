@@ -85,7 +85,12 @@ class PartnerViewset(viewsets.ReadOnlyModelViewSet):
         qs = qs.annotate(
             catalogs_count=Count("catalogs", distinct=True),
             courses_count=Count("catalogs__catalog_courses", distinct=True),
-            learners_count=Count("catalogs__catalog_learners", distinct=True)
+            # Seats in use: active learners across the partner's catalogs.
+            learners_count=Count(
+                "catalogs__catalog_learners",
+                filter=Q(catalogs__catalog_learners__active=True),
+                distinct=True,
+            ),
         )
         qs = annotate_partner_certified_count(qs)
         return qs
