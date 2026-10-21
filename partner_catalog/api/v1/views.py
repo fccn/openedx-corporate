@@ -44,8 +44,10 @@ from partner_catalog.permissions import IsPartnerCatalogManager
 from partner_catalog.services.catalog_courses import CatalogCourseService
 from partner_catalog.services.catalogs import PartnerCatalogService
 from partner_catalog.services.certificates import (
+    annotate_catalog_certificates_count,
     annotate_catalog_certified_count,
     annotate_course_certified_count,
+    annotate_course_learners_count,
     annotate_learner_certified_count,
     annotate_partner_certified_count,
 )
@@ -166,6 +168,7 @@ class PartnerCatalogViewSet(CSVExportMixin, viewsets.ModelViewSet):
             ),
         )
         qs = annotate_catalog_certified_count(qs)
+        qs = annotate_catalog_certificates_count(qs)
         return qs
 
     def get_permission_classes(self):
@@ -401,6 +404,7 @@ class CatalogCourseViewSet(
             )
         )
         qs = annotate_course_certified_count(qs)
+        qs = annotate_course_learners_count(qs)
         return qs
 
 

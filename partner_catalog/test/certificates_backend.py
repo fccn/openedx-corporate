@@ -5,13 +5,15 @@ from django.db import models
 
 
 class CertiticateStatusedMock:
-    """Mock class to enable unit testing."""
+    """Mock of lms.djangoapps.certificates.data.CertificateStatuses (the statuses used in tests)."""
 
-    ACTIVE = "active"
-    INACTIVE = "inactive"
-    REVOKED = "revoked"
+    downloadable = "downloadable"
+    generating = "generating"
+    notpassing = "notpassing"
+    invalidated = "invalidated"
+    unavailable = "unavailable"
 
-    PASSED_STATUSES = [ACTIVE]
+    PASSED_STATUSES = (downloadable, generating)
 
 
 class GeneratedCertificateTestModel(models.Model):
@@ -30,6 +32,8 @@ class GeneratedCertificateTestModel(models.Model):
         """Meta class."""
 
         app_label = "partner_catalog"
+        # Same as the LMS model: one certificate per (user, course).
+        unique_together = (("user", "course_id"),)
 
 
 def generated_certificate_model():
