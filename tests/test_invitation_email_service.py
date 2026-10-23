@@ -3,22 +3,31 @@ Tests for InvitationEmailService — verifies that emails are rendered
 in the language configured by settings.LANGUAGE_CODE.
 """
 
+import ast
+import gettext
 import logging
 import os
+import re
 
 import pytest
 from django.core import mail
 from django.test import override_settings
+from django.utils.translation.template import templatize
 
 from partner_catalog.services.emails import InvitationEmailService
+from partner_catalog.settings.production import LOCALE_DIR
 from tests.factories import make_catalog, make_invitation
 
 _BASE_DIR = os.path.dirname(os.path.dirname(__file__))
-CONF_LOCALE_DIR = os.path.join(_BASE_DIR, "partner_catalog", "conf", "locale")
 TEMPLATES_DIR = os.path.join(_BASE_DIR, "partner_catalog", "templates")
+EMAIL_TEMPLATES = [
+    os.path.join(TEMPLATES_DIR, "partner_catalog", "emails", name)
+    for name in ("invitation_created_subject.txt", "invitation_created_body.txt", "invitation_created_body.html")
+]
+PT_PT_MESSAGES_DIR = os.path.join(LOCALE_DIR, "pt_PT", "LC_MESSAGES")
 
+# LOCALE_PATHS is deliberately not overridden: the tests use the path the app's settings add.
 _COMMON_SETTINGS = {
-    "LOCALE_PATHS": [CONF_LOCALE_DIR],
     "EMAIL_BACKEND": "django.core.mail.backends.locmem.EmailBackend",
     "TEMPLATES": [{
         "BACKEND": "django.template.backends.django.DjangoTemplates",
@@ -34,29 +43,147 @@ _COMMON_SETTINGS = {
     }],
 }
 
+ENGLISH_TEXT = [
+    "Hello,",
+    "Visit the catalog to see available courses:",
+    "Need help? Contact support@example.com",
+    "This is a notification email. You do not need to reply to this message.",
+]
+ENGLISH_HTML = [
+    "Hello,",
+    "Click the button below to visit the catalog and view available courses.",
+    "View Catalog",
+    "If the button above doesn't work, you can also visit this link:",
+    'Need help? <a href="mailto:support@example.com">Contact support</a>',
+    "This is a notification email. You do not need to reply to this message.",
+]
+PORTUGUESE_TEXT = [
+    "Olá,",
+    "Foi convidado/a para consultar o catálogo Test Catalog na plataforma corporativa de aprendizagem",
+    "Aceda ao catálogo para ver os cursos disponíveis:",
+    "Precisa de ajuda? Contacte support@example.com",
+    "Esta é uma mensagem de notificação. Não é necessário responder a este email.",
+]
+PORTUGUESE_HTML = [
+    "Olá,",
+    "Foi convidado/a para consultar o catálogo <strong>Test Catalog</strong>",
+    "Clique no botão abaixo para aceder ao catálogo e visualizar os cursos disponíveis.",
+    "Ver Catálogo",
+    "Se o botão acima não funcionar, pode também aceder através desta ligação:",
+    'Precisa de ajuda? <a href="mailto:support@example.com">Contacte o suporte</a>',
+    "Esta é uma mensagem de notificação. Não é necessário responder a este email.",
+]
+
+
+def _send_invitation_email():
+    """Send the invitation email for a new catalog and return the sent message."""
+    catalog = make_catalog(name="Test Catalog", support_email="support@example.com")
+    invitation = make_invitation(catalog, invite_email="test@example.com")
+    InvitationEmailService().send_invitation_created(invitation.id)
+
+    assert len(mail.outbox) == 1
+    return mail.outbox[0]
+
+
+def _html_body(message):
+    """Return the HTML alternative of an email message."""
+    return next(content for content, mimetype in message.alternatives if mimetype == "text/html")
+
+
+def _template_msgids():
+    """Return the msgids of every translatable string in the invitation email templates."""
+    msgids = set()
+    for template in EMAIL_TEMPLATES:
+        with open(template, encoding="utf-8") as template_file:
+            source = templatize(template_file.read())
+        for literal in re.findall(r"""gettext\(u?('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*")\)""", source):
+            msgids.add(ast.literal_eval(literal))
+    return msgids
+
+
+def _po_entries():
+    """Return the msgid -> msgstr pairs of the pt_PT catalog (no plural forms or contexts)."""
+    entries, entry, field = {}, {}, None
+    with open(os.path.join(PT_PT_MESSAGES_DIR, "django.po"), encoding="utf-8") as po_file:
+        for line in po_file:
+            line = line.strip()
+            if line.startswith(("msgid ", "msgstr ")):
+                field, _, value = line.partition(" ")
+                if field == "msgid" and "msgstr" in entry:
+                    entries[entry["msgid"]] = entry["msgstr"]
+                    entry = {}
+                entry[field] = ast.literal_eval(value)
+            elif line.startswith('"') and field:
+                entry[field] += ast.literal_eval(line)
+    if "msgstr" in entry:
+        entries[entry["msgid"]] = entry["msgstr"]
+    entries.pop("", None)
+    return entries
+
 
 @pytest.mark.django_db
 @override_settings(LANGUAGE_CODE="en", **_COMMON_SETTINGS)
 def test_invitation_email_sent_in_english():
-    """Email subject and body are in English when LANGUAGE_CODE is 'en'."""
-    invitation = make_invitation(make_catalog(), invite_email="test@example.com")
-    InvitationEmailService().send_invitation_created(invitation.id)
+    """Subject, text body and HTML body are in English when LANGUAGE_CODE is 'en'."""
+    message = _send_invitation_email()
 
-    assert len(mail.outbox) == 1
-    assert "invited to view" in mail.outbox[0].subject.lower()
-    assert "Hello," in mail.outbox[0].body
+    assert message.subject == "You've been invited to view Test Catalog"
+    for text in ENGLISH_TEXT:
+        assert text in message.body
+    for text in ENGLISH_HTML:
+        assert text in _html_body(message)
 
 
 @pytest.mark.django_db
-@override_settings(LANGUAGE_CODE="pt-pt", **_COMMON_SETTINGS)
-def test_invitation_email_sent_in_portuguese():
-    """Email subject and body are in Portuguese when LANGUAGE_CODE is 'pt-pt'."""
-    invitation = make_invitation(make_catalog(), invite_email="test@example.com")
-    InvitationEmailService().send_invitation_created(invitation.id)
+@pytest.mark.parametrize("language_code", ["pt-PT", "pt-pt", "pt"])
+def test_invitation_email_sent_in_portuguese(language_code):
+    """Subject, text body and HTML body are fully in Portuguese for every pt code in use."""
+    with override_settings(LANGUAGE_CODE=language_code, **_COMMON_SETTINGS):
+        message = _send_invitation_email()
 
-    assert len(mail.outbox) == 1
-    assert "Foi convidado" in mail.outbox[0].subject
-    assert "Olá," in mail.outbox[0].body
+    html_body = _html_body(message)
+    assert message.subject == "Foi convidado/a para consultar o catálogo Test Catalog"
+    for text in PORTUGUESE_TEXT:
+        assert text in message.body
+    for text in PORTUGUESE_HTML:
+        assert text in html_body
+    for text in ENGLISH_TEXT:
+        assert text not in message.body
+    for text in ENGLISH_HTML:
+        assert text not in html_body
+
+
+@pytest.mark.django_db
+@override_settings(LANGUAGE_CODE="de", **_COMMON_SETTINGS)
+def test_invitation_email_falls_back_to_english():
+    """A language without a catalog in the package renders the English strings."""
+    message = _send_invitation_email()
+
+    assert message.subject == "You've been invited to view Test Catalog"
+    for text in ENGLISH_TEXT:
+        assert text in message.body
+    for text in ENGLISH_HTML:
+        assert text in _html_body(message)
+
+
+def test_every_template_string_is_translated_in_the_po():
+    """Each translatable string of the three templates has a non-empty pt_PT translation."""
+    msgids = _template_msgids()
+    entries = _po_entries()
+
+    assert len(msgids) == 11
+    assert not sorted(msgid for msgid in msgids if not entries.get(msgid))
+
+
+def test_compiled_mo_matches_the_po():
+    """The committed .mo returns the .po translation for every entry, so it is not stale."""
+    with open(os.path.join(PT_PT_MESSAGES_DIR, "django.mo"), "rb") as mo_file:
+        compiled = gettext.GNUTranslations(mo_file)
+
+    for msgid, msgstr in _po_entries().items():
+        assert compiled.gettext(msgid) == msgstr
+    for msgid in _template_msgids():
+        assert compiled.gettext(msgid) != msgid
 
 
 @pytest.mark.django_db

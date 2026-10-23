@@ -82,18 +82,11 @@ compile_translations: ## compile translation files, outputting .po files for eac
 detect_changed_source_translations:
 	cd partner_catalog && i18n_tool changed
 
-ifeq ($(OPENEDX_ATLAS_PULL),)
-pull_translations: ## Pull translations from Transifex
-	tx pull -t -a -f --mode reviewed --minimum-perc=1
-else
-# Experimental: OEP-58 Pulls translations using atlas
-pull_translations:
-	find partner_catalog/conf/locale -mindepth 1 -maxdepth 1 -type d -exec rm -r {} \;
-	atlas pull $(OPENEDX_ATLAS_ARGS) translations/partner-catalog/partner_catalog/conf/locale:partner_catalog/conf/locale
-	python manage.py compilemessages
-
-	@echo "Translations have been pulled via Atlas and compiled."
-endif
+# The catalogs in partner_catalog/conf/locale are maintained in this repository. Neither Transifex
+# nor openedx-translations has them, so pulling would overwrite or delete them.
+pull_translations: ## translations are maintained in partner_catalog/conf/locale; nothing to pull
+	@echo "partner_catalog translations are maintained in partner_catalog/conf/locale and are not pulled."
+	@echo "Edit the .po file, then run: python manage.py compilemessages"
 
 dummy_translations: ## generate dummy translation (.po) files
 	cd partner_catalog && i18n_tool dummy

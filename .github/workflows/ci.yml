@@ -33,3 +33,24 @@ jobs:
         env:
           TOXENV: ${{ matrix.toxenv }}
         run: tox
+
+  check_translations:
+    name: compiled translations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: setup python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install gettext and Django
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gettext
+          pip install "Django>=4.2,<5.0"
+
+      - name: Check the committed .mo files match their .po files
+        run: |
+          django-admin compilemessages
+          git diff --exit-code -- '*.mo'
