@@ -5,15 +5,9 @@ In a real-world use case, apps in this project are installed into other
 Django applications, so these settings will not be used.
 """
 
-from os.path import abspath, dirname, join
+import sys
 
-
-def root(*args):
-    """
-    Get the absolute path of the given path relative to the project root.
-    """
-    return join(abspath(dirname(__file__)), *args)
-
+from partner_catalog.settings.production import plugin_settings as partner_catalog_production_settings
 
 DATABASES = {
     'default': {
@@ -37,9 +31,7 @@ INSTALLED_APPS = (
     'organizations',
 )
 
-LOCALE_PATHS = [
-    root('partner_catalog', 'conf', 'locale'),
-]
+LOCALE_PATHS = []
 
 ROOT_URLCONF = 'partner_catalog.urls'
 
@@ -72,3 +64,6 @@ STUDENT_MODULE_BACKEND = "partner_catalog.test.student_module_backend"
 # Celery settings for testing
 CELERY_TASK_ALWAYS_EAGER = True
 CELERY_TASK_EAGER_PROPAGATES = True
+
+# Let the app add its translation catalog, as it does in the LMS, instead of listing it here.
+partner_catalog_production_settings(sys.modules[__name__])

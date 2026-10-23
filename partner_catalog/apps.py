@@ -33,10 +33,12 @@ class PartnerCatalogConfig(AppConfig):
         },
         PluginSettings.CONFIG: {
             'lms.djangoapp': {
-                'common': {PluginSettings.RELATIVE_PATH: 'settings.common'}
+                'common': {PluginSettings.RELATIVE_PATH: 'settings.common'},
+                'production': {PluginSettings.RELATIVE_PATH: 'settings.production'},
             },
             'cms.djangoapp': {
-                'common': {PluginSettings.RELATIVE_PATH: 'settings.common'}
+                'common': {PluginSettings.RELATIVE_PATH: 'settings.common'},
+                'production': {PluginSettings.RELATIVE_PATH: 'settings.production'},
             },
         },
     }
