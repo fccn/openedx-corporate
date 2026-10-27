@@ -15,6 +15,8 @@ class CourseOverviewTestModel(models.Model):
     enrollment_start = models.DateTimeField(null=True)
     enrollment_end = models.DateTimeField(null=True)
     course_image_url = models.TextField(null=True)
+    # Read by partner_catalog.policies.catalogs.can_course_be_added_to_catalog.
+    org = models.TextField(null=True)
 
     class Meta:
         """Meta class."""

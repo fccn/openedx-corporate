@@ -218,7 +218,7 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
     def get_email_regexes(self, obj):
         return list(obj.catalog_email_regexes.all().values_list("regex", flat=True))
 
-    def get_completion_rate(self, obj):
+    def get_completion_rate(self, obj) -> float | None:
         """Passed certificates of the active learners / (active learners x courses), as a percentage."""
         return compute_completion_rate(
             getattr(obj, "certificates_count", None),
@@ -351,7 +351,7 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
 
         return super().update(instance, validated_data)
 
-    def get_completion_rate(self, obj):
+    def get_completion_rate(self, obj) -> float | None:
         """Certified learners / active learners of the catalog, as a percentage."""
         return compute_completion_rate(
             getattr(obj, "certified_count", None),

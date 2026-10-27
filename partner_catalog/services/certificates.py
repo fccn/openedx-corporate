@@ -185,7 +185,7 @@ def annotate_certified_count(
     })
 
 
-def compute_completion_rate(certificates, learners, courses):
+def compute_completion_rate(certificates: int | None, learners: int | None, courses: int | None) -> float | None:
     """Return the passed certificates as a percentage of the possible ones (learners x courses).
 
     It is 0.0 when there are no learners or no courses, rounded to one decimal and never
