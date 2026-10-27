@@ -11,7 +11,8 @@ def plugin_settings(settings):
 
     The LMS and CMS only turn LOCALE_PATHS into a list when they derive their settings, after the
     common plugin settings run and before these. The catalog is appended, so the theme and platform
-    catalogs listed before it keep priority.
+    catalogs listed before it keep priority: when one of them translates the same msgid, its
+    translation is used instead of this package's.
     """
     locale_paths = list(settings.LOCALE_PATHS)
     if LOCALE_DIR not in [str(path) for path in locale_paths]:

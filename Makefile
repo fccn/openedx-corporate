@@ -84,9 +84,10 @@ detect_changed_source_translations:
 
 # The catalogs in partner_catalog/conf/locale are maintained in this repository. Neither Transifex
 # nor openedx-translations has them, so pulling would overwrite or delete them.
-pull_translations: ## translations are maintained in partner_catalog/conf/locale; nothing to pull
-	@echo "partner_catalog translations are maintained in partner_catalog/conf/locale and are not pulled."
-	@echo "Edit the .po file, then run: python manage.py compilemessages"
+pull_translations: ## translations are maintained in partner_catalog/conf/locale; fails on purpose
+	@echo "partner_catalog translations are maintained in partner_catalog/conf/locale and are not pulled." >&2
+	@echo "Edit the .po file, then run: python manage.py compilemessages" >&2
+	@exit 1
 
 dummy_translations: ## generate dummy translation (.po) files
 	cd partner_catalog && i18n_tool dummy
