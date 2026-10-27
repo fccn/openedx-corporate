@@ -25,6 +25,13 @@ EMAIL_TEMPLATES = [
     for name in ("invitation_created_subject.txt", "invitation_created_body.txt", "invitation_created_body.html")
 ]
 PT_PT_MESSAGES_DIR = os.path.join(LOCALE_DIR, "pt_PT", "LC_MESSAGES")
+PT_PT_PO = os.path.join(PT_PT_MESSAGES_DIR, "django.po")
+# One msgid from each template, to notice when extraction stops finding strings.
+KNOWN_MSGIDS = {
+    "You've been invited to view %(catalog_name)s",
+    "Visit the catalog to see available courses:",
+    "View Catalog",
+}
 
 # LOCALE_PATHS is deliberately not overridden: the tests use the path the app's settings add.
 _COMMON_SETTINGS = {
@@ -101,12 +108,14 @@ def _template_msgids():
     return msgids
 
 
-def _po_entries():
-    """Return the msgid -> msgstr pairs of the pt_PT catalog (no plural forms or contexts)."""
+def _po_entries(path=PT_PT_PO):
+    """Return the msgid -> msgstr pairs of a .po file; raise on plural forms and contexts."""
     entries, entry, field = {}, {}, None
-    with open(os.path.join(PT_PT_MESSAGES_DIR, "django.po"), encoding="utf-8") as po_file:
+    with open(path, encoding="utf-8") as po_file:
         for line in po_file:
             line = line.strip()
+            if line.startswith(("msgctxt", "msgid_plural", "msgstr[")):
+                raise ValueError(f"{path}: {line.split()[0]!r} entries are not supported by this reader")
             if line.startswith(("msgid ", "msgstr ")):
                 field, _, value = line.partition(" ")
                 if field == "msgid" and "msgstr" in entry:
@@ -171,8 +180,20 @@ def test_every_template_string_is_translated_in_the_po():
     msgids = _template_msgids()
     entries = _po_entries()
 
-    assert len(msgids) == 11
-    assert not sorted(msgid for msgid in msgids if not entries.get(msgid))
+    assert msgids, "No msgids extracted from the templates: has Django's templatize() output changed?"
+    assert msgids >= KNOWN_MSGIDS, f"Extraction missed {sorted(KNOWN_MSGIDS - msgids)}"
+    untranslated = sorted(msgid for msgid in msgids if not entries.get(msgid))
+    assert not untranslated, f"Template strings without a pt_PT translation: {untranslated}"
+
+
+@pytest.mark.parametrize("line", ['msgctxt "button"', 'msgid_plural "Catalogs"', 'msgstr[0] "Catálogo"'])
+def test_po_reader_rejects_unsupported_entries(tmp_path, line):
+    """The .po reader fails loudly on entries it cannot parse instead of misreading them."""
+    po_path = tmp_path / "django.po"
+    po_path.write_text(f'msgid "Catalog"\n{line}\nmsgstr "Catálogo"\n', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="not supported"):
+        _po_entries(po_path)
 
 
 def test_compiled_mo_matches_the_po():

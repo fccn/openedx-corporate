@@ -36,7 +36,10 @@ jobs:
 
   check_translations:
     name: compiled translations
-    runs-on: ubuntu-latest
+    # Pinned on purpose: msgfmt output is only byte-stable within a gettext release. Ubuntu 24.04
+    # ships gettext 0.21, which reproduces the committed .mo files; ubuntu-latest will move on.
+    # tests/test_invitation_email_service.py also compares the .mo with the .po semantically.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - name: setup python
@@ -44,13 +47,18 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install gettext and Django
+      - name: Install gettext
         run: |
           sudo apt-get update
           sudo apt-get install -y gettext
-          pip install "Django>=4.2,<5.0"
+
+      - name: Install pip
+        run: pip install -r requirements/pip.txt
+
+      - name: Install Dependencies
+        run: pip install -r requirements/ci.txt
 
       - name: Check the committed .mo files match their .po files
-        run: |
-          django-admin compilemessages
-          git diff --exit-code -- '*.mo'
+        env:
+          TOXENV: translations
+        run: tox

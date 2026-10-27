@@ -14,6 +14,6 @@ Change Log
 Unreleased
 **********
 
-* fix: load the package's pt_PT catalog in the LMS and CMS, so invitation emails are sent in Portuguese
+* fix: load the package's pt_PT catalog in the LMS and CMS, so invitation emails are sent in Portuguese. The theme and platform catalogs keep priority: a msgid they also translate uses their translation
 * fix: enroll learners with the open mode the course actually offers (audit or honor) instead of a hardcoded "audit", which crashed catalog course enrollment on honor-mode courses
 * fix(admin): keep base_catalog pre-filled after "Save and add another" in BaseCatalogCourseAdmin
