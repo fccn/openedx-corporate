@@ -32,6 +32,7 @@ from partner_catalog.api.v1.serializers import (
 )
 from partner_catalog.api.v1.tasks import bulk_remove_invitations, bulk_upload_invitations
 from partner_catalog.helpers.mixins import CSVExportMixin
+from partner_catalog.helpers.queries import count_subquery
 from partner_catalog.models import (
     CatalogCourse,
     CatalogCourseEnrollment,
@@ -58,10 +59,9 @@ from partner_catalog.xapi.constants import INVITATION_CHANNEL_MANUAL
 def annotate_catalog_course_metrics(qs):
     """Annotate a CatalogCourse queryset with the metrics read by CatalogCourseSerializer."""
     qs = qs.annotate(
-        enrollments_count=Count(
-            "enrollments",
-            filter=Q(enrollments__active=True),
-            distinct=True,
+        enrollments_count=count_subquery(
+            CatalogCourseEnrollment.objects.filter(catalog_course=OuterRef("pk"), active=True),
+            "catalog_course",
         )
     )
     qs = annotate_course_certified_count(qs)
@@ -166,19 +166,22 @@ class PartnerCatalogViewSet(CSVExportMixin, viewsets.ModelViewSet):
                 catalog_managers__active=True,
             ).distinct()
 
+        # Every count is a correlated subquery: join-based counts would multiply the joined rows and
+        # make the database evaluate each certificate subquery once per joined row.
+        catalog = OuterRef("pk")
         qs = qs.annotate(
-            courses_count=Count("catalog_courses", distinct=True),
-            enrollments=Count(
-                "catalog_courses__enrollments",
-                filter=Q(catalog_courses__enrollments__active=True),
-                distinct=True
+            courses_count=count_subquery(CatalogCourse.objects.filter(catalog=catalog), "catalog"),
+            enrollments=count_subquery(
+                CatalogCourseEnrollment.objects.filter(catalog_course__catalog=catalog, active=True),
+                "catalog_course__catalog",
             ),
-            total_learners=Count("catalog_learners", distinct=True),
-            active_learners=Count("catalog_learners", filter=Q(catalog_learners__active=True), distinct=True),
-            pending_invitations=Count(
-                "cataloglearnerinvitation",
-                filter=Q(cataloglearnerinvitation__status=CatalogLearnerInvitation.Status.SENT),
-                distinct=True,
+            total_learners=count_subquery(CatalogLearner.objects.filter(catalog=catalog), "catalog"),
+            active_learners=count_subquery(CatalogLearner.objects.filter(catalog=catalog, active=True), "catalog"),
+            pending_invitations=count_subquery(
+                CatalogLearnerInvitation.objects.filter(
+                    catalog=catalog, status=CatalogLearnerInvitation.Status.SENT
+                ),
+                "catalog",
             ),
         )
         qs = annotate_catalog_certified_count(qs)

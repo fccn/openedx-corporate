@@ -314,3 +314,28 @@ def test_catalog_create_response_has_the_same_metrics_as_the_catalog_list(staff)
     assert {key: created[key] for key in metrics} == {
         key: _catalog_list(staff)[created["id"]][key] for key in metrics
     }
+
+
+# ---------------------------------------------------------------------------
+# Query shape: counts must not be join-based aggregates
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("as_staff", [True, False])
+def test_catalog_list_query_has_no_outer_group_by(as_staff):
+    """Join-based counts add a GROUP BY that makes MySQL evaluate the certificate subqueries per joined row."""
+    catalog = make_catalog()
+    user = make_user(is_staff=as_staff)
+    if not as_staff:
+        CatalogManager.objects.create(catalog=catalog, user=user, active=True)
+    view = PartnerCatalogViewSet()
+    view.request = SimpleNamespace(user=user)
+
+    assert view.get_queryset().query.group_by is None
+
+
+def test_course_list_query_has_no_outer_group_by(staff):
+    view = CatalogCourseViewSet()
+    view.request = SimpleNamespace(user=staff)
+    view.kwargs = {"catalog_pk": str(make_catalog().pk)}
+
+    assert view.get_queryset().query.group_by is None

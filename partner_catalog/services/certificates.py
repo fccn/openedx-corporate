@@ -10,6 +10,7 @@ from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Subque
 from django.db.models.functions import Coalesce
 
 from partner_catalog.edxapp_wrapper.certificates_module import certificate_statuses_model, generated_certificate_model
+from partner_catalog.helpers.queries import count_subquery
 from partner_catalog.models import CatalogCourse, CatalogLearner
 
 CertificateStatuses = certificate_statuses_model()
@@ -42,18 +43,11 @@ def annotate_course_learners_count(qs):
     It is the number of active learners of the course's catalog, the denominator of the
     course completion rate.
     """
-    learners_count_sq = (
-        CatalogLearner.objects.filter(
-            catalog_id=OuterRef("catalog_id"),
-            active=True,
-        )
-        .annotate(_group=Value(1))
-        .values("_group")
-        .annotate(cnt=Count("id"))
-        .values("cnt")[:1]
-    )
     return qs.annotate(
-        catalog_learners_count=Coalesce(Subquery(learners_count_sq, output_field=IntegerField()), 0)
+        catalog_learners_count=count_subquery(
+            CatalogLearner.objects.filter(catalog_id=OuterRef("catalog_id"), active=True),
+            "catalog",
+        )
     )
 
 
