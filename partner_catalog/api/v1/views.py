@@ -32,6 +32,7 @@ from partner_catalog.api.v1.serializers import (
 )
 from partner_catalog.api.v1.tasks import bulk_remove_invitations, bulk_upload_invitations
 from partner_catalog.helpers.mixins import CSVExportMixin
+from partner_catalog.helpers.queries import count_subquery
 from partner_catalog.models import (
     CatalogCourse,
     CatalogCourseEnrollment,
@@ -44,13 +45,28 @@ from partner_catalog.permissions import IsPartnerCatalogManager
 from partner_catalog.services.catalog_courses import CatalogCourseService
 from partner_catalog.services.catalogs import PartnerCatalogService
 from partner_catalog.services.certificates import (
+    annotate_catalog_certificates_count,
     annotate_catalog_certified_count,
     annotate_course_certified_count,
+    annotate_course_learners_count,
     annotate_learner_certified_count,
     annotate_partner_certified_count,
 )
 from partner_catalog.services.invitations import CatalogLearnerInvitationService
 from partner_catalog.xapi.constants import INVITATION_CHANNEL_MANUAL
+
+
+def annotate_catalog_course_metrics(qs):
+    """Annotate a CatalogCourse queryset with the metrics read by CatalogCourseSerializer."""
+    qs = qs.annotate(
+        enrollments_count=count_subquery(
+            CatalogCourseEnrollment.objects.filter(catalog_course=OuterRef("pk"), active=True),
+            "catalog_course",
+        )
+    )
+    qs = annotate_course_certified_count(qs)
+    qs = annotate_course_learners_count(qs)
+    return qs
 
 
 class PartnerViewset(viewsets.ReadOnlyModelViewSet):
@@ -150,23 +166,34 @@ class PartnerCatalogViewSet(CSVExportMixin, viewsets.ModelViewSet):
                 catalog_managers__active=True,
             ).distinct()
 
+        # Every count is a correlated subquery: join-based counts would multiply the joined rows and
+        # make the database evaluate each certificate subquery once per joined row.
+        catalog = OuterRef("pk")
         qs = qs.annotate(
-            courses_count=Count("catalog_courses", distinct=True),
-            enrollments=Count(
-                "catalog_courses__enrollments",
-                filter=Q(catalog_courses__enrollments__active=True),
-                distinct=True
+            courses_count=count_subquery(CatalogCourse.objects.filter(catalog=catalog), "catalog"),
+            enrollments=count_subquery(
+                CatalogCourseEnrollment.objects.filter(catalog_course__catalog=catalog, active=True),
+                "catalog_course__catalog",
             ),
-            total_learners=Count("catalog_learners", distinct=True),
-            active_learners=Count("catalog_learners", filter=Q(catalog_learners__active=True), distinct=True),
-            pending_invitations=Count(
-                "cataloglearnerinvitation",
-                filter=Q(cataloglearnerinvitation__status=CatalogLearnerInvitation.Status.SENT),
-                distinct=True,
+            total_learners=count_subquery(CatalogLearner.objects.filter(catalog=catalog), "catalog"),
+            active_learners=count_subquery(CatalogLearner.objects.filter(catalog=catalog, active=True), "catalog"),
+            pending_invitations=count_subquery(
+                CatalogLearnerInvitation.objects.filter(
+                    catalog=catalog, status=CatalogLearnerInvitation.Status.SENT
+                ),
+                "catalog",
             ),
         )
         qs = annotate_catalog_certified_count(qs)
+        qs = annotate_catalog_certificates_count(qs)
         return qs
+
+    def create(self, request, *args, **kwargs):
+        """Create a catalog (staff only). The response has the same metrics as the catalog list."""
+        response = super().create(request, *args, **kwargs)
+        catalog = self.get_queryset().get(pk=response.data["id"])
+        response.data = self.get_serializer(catalog).data
+        return response
 
     def get_permission_classes(self):
         """Get permission classes based on action."""
@@ -203,6 +230,10 @@ class PartnerCatalogViewSet(CSVExportMixin, viewsets.ModelViewSet):
             catalog=catalog,
             course_overview_ids=course_ids,
             position=position
+        )
+        # Serialize the annotated rows so the response has the same metrics as the course list.
+        created_courses = annotate_catalog_course_metrics(
+            CatalogCourseViewSet.queryset.filter(pk__in=[course.pk for course in created_courses])
         )
         serializer = CatalogCourseSerializer(created_courses, many=True)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
@@ -393,15 +424,7 @@ class CatalogCourseViewSet(
         catalog_pk = self.kwargs.get("catalog_pk")
         qs = qs.filter(catalog_id=catalog_pk) if catalog_pk else qs
 
-        qs = qs.annotate(
-            enrollments_count=Count(
-                "enrollments",
-                filter=Q(enrollments__active=True),
-                distinct=True,
-            )
-        )
-        qs = annotate_course_certified_count(qs)
-        return qs
+        return annotate_catalog_course_metrics(qs)
 
 
 class CatalogLearnerInvitationViewSet(

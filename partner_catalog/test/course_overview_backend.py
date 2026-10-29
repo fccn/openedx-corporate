@@ -8,6 +8,15 @@ class CourseOverviewTestModel(models.Model):
     """Test model to enable unit testing."""
 
     id = models.AutoField(primary_key=True)
+    # Fields read by flex_catalog.serializers.CourseOverviewSimpleSerializer.
+    display_name = models.TextField(null=True)
+    start = models.DateTimeField(null=True)
+    end = models.DateTimeField(null=True)
+    enrollment_start = models.DateTimeField(null=True)
+    enrollment_end = models.DateTimeField(null=True)
+    course_image_url = models.TextField(null=True)
+    # Read by partner_catalog.policies.catalogs.can_course_be_added_to_catalog.
+    org = models.TextField(null=True)
 
     class Meta:
         """Meta class."""
