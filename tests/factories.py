@@ -8,9 +8,12 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from organizations.models import Organization
 
+from partner_catalog.edxapp_wrapper.certificates_module import certificate_statuses_model, generated_certificate_model
 from partner_catalog.models import CatalogLearner, CatalogLearnerInvitation, Partner, PartnerCatalog
 
 User = get_user_model()
+GeneratedCertificate = generated_certificate_model()
+PASSED_CERTIFICATE_STATUS = certificate_statuses_model().downloadable
 
 _counter = 0
 
@@ -84,4 +87,27 @@ def make_learner(catalog, user, invitation):
         catalog=catalog,
         user=user,
         current_invitation=invitation,
+    )
+
+
+def make_catalog_learner(catalog, user=None, removed=False):
+    """Create a CatalogLearner from an accepted invitation, inactive if the invitation was later removed."""
+    user = user or make_user()
+    now = timezone.now()
+    invitation = make_invitation(
+        catalog,
+        user=user,
+        invite_email=user.email,
+        accepted_at=now,
+        removed_at=now if removed else None,
+    )
+    return make_learner(catalog, user, invitation)
+
+
+def make_certificate(user, catalog_course, status=PASSED_CERTIFICATE_STATUS):
+    """Create a certificate for the user in the catalog course's course run (passed by default)."""
+    return GeneratedCertificate.objects.create(
+        user=user,
+        course_id=catalog_course.course_overview_id,
+        status=status,
     )

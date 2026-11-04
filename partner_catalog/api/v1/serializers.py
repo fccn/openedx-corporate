@@ -20,12 +20,8 @@ from partner_catalog.models import (
 )
 from partner_catalog.services.catalog_courses import CatalogCourseService
 from partner_catalog.services.catalogs import PartnerCatalogService
-from partner_catalog.services.certificates import user_has_certificate
-from partner_catalog.services.progress import (
-    compute_catalog_completion_rate,
-    compute_catalog_course_completion_rate,
-    compute_progress_percent_by_user,
-)
+from partner_catalog.services.certificates import compute_completion_rate, user_has_certificate
+from partner_catalog.services.progress import compute_progress_percent_by_user
 
 User = get_user_model()
 
@@ -222,9 +218,13 @@ class PartnerCatalogSerializer(serializers.ModelSerializer):
     def get_email_regexes(self, obj):
         return list(obj.catalog_email_regexes.all().values_list("regex", flat=True))
 
-    def get_completion_rate(self, obj):
-        rate_statistics = compute_catalog_completion_rate(obj.id)
-        return rate_statistics.get("completion_rate")
+    def get_completion_rate(self, obj) -> float | None:
+        """Passed certificates of the active learners / (active learners x courses), as a percentage."""
+        return compute_completion_rate(
+            getattr(obj, "certificates_count", None),
+            getattr(obj, "active_learners", None),
+            getattr(obj, "courses_count", None),
+        )
 
     def get_status(self, obj):
         """Return the catalog status for the current user."""
@@ -351,9 +351,13 @@ class CatalogCourseSerializer(serializers.ModelSerializer):
 
         return super().update(instance, validated_data)
 
-    def get_completion_rate(self, obj):
-        rate_statistics = compute_catalog_course_completion_rate(obj.id)
-        return rate_statistics.get("completion_rate")
+    def get_completion_rate(self, obj) -> float | None:
+        """Certified learners / active learners of the catalog, as a percentage."""
+        return compute_completion_rate(
+            getattr(obj, "certified_count", None),
+            getattr(obj, "catalog_learners_count", None),
+            1,
+        )
 
 
 class CatalogLearnerInvitationSerializer(serializers.ModelSerializer):
