@@ -14,7 +14,7 @@ Change Log
 Unreleased
 **********
 
-* feat: compute completion rates and certificate counts from passed certificates of the catalog's active learners (``completion_rate`` and ``certified`` change meaning at course, catalog and learner level)
+* feat: compute completion rates and certificate counts from passed certificates of the catalog's active learners (``completion_rate`` and ``certified`` change meaning at course, catalog and learner level); removed the ``CP_COURSE_COMPLETION_TTL`` and ``CP_CATALOG_COMPLETION_TTL`` settings, which no longer have any effect
 * fix: load the package's pt_PT catalog in the LMS and CMS, so invitation emails are sent in Portuguese. The theme and platform catalogs keep priority: a msgid they also translate uses their translation
 * fix: enroll learners with the open mode the course actually offers (audit or honor) instead of a hardcoded "audit", which crashed catalog course enrollment on honor-mode courses
 * fix(admin): keep base_catalog pre-filled after "Save and add another" in BaseCatalogCourseAdmin

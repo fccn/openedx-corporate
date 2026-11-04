@@ -162,8 +162,8 @@ def test_course_list_returns_certified_learners_and_completion_rate(catalog_3x4,
     rows = _course_list(staff, catalog_3x4.catalog)
 
     assert {pk: (row["certified"], row["completion_rate"]) for pk, row in rows.items()} == {
-        catalog_3x4.courses[0].pk: (2, 66.7),
-        catalog_3x4.courses[1].pk: (2, 66.7),
+        catalog_3x4.courses[0].pk: (2, 66.6),
+        catalog_3x4.courses[1].pk: (2, 66.6),
         catalog_3x4.courses[2].pk: (1, 33.3),
         catalog_3x4.courses[3].pk: (1, 33.3),
     }
@@ -196,8 +196,8 @@ def test_certificate_counts_as_completed_regardless_of_unit_progress(staff, mock
         ),
     )
 
-    assert _course_list(staff, catalog)[course.pk]["completion_rate"] == 66.7
-    assert _catalog_row(staff, catalog)["completion_rate"] == 66.7
+    assert _course_list(staff, catalog)[course.pk]["completion_rate"] == 66.6
+    assert _catalog_row(staff, catalog)["completion_rate"] == 66.6
 
 
 def test_catalog_without_courses_has_zero_completion_rate(staff):
@@ -337,5 +337,74 @@ def test_course_list_query_has_no_outer_group_by(staff):
     view = CatalogCourseViewSet()
     view.request = SimpleNamespace(user=staff)
     view.kwargs = {"catalog_pk": str(make_catalog().pk)}
+
+    assert view.get_queryset().query.group_by is None
+
+
+def test_catalog_create_by_a_non_staff_manager_does_not_fail():
+    """The response must not re-read the new catalog through the manager-scoped queryset.
+
+    Who may create catalogs is an access-control question: 201 or 403 are both acceptable here.
+    """
+    catalog = make_catalog()
+    manager = make_user()
+    CatalogManager.objects.create(catalog=catalog, user=manager, active=True)
+    now = timezone.now()
+    request = APIRequestFactory().post("/", {
+        "name": "Created by a manager",
+        "partner": catalog.partner.pk,
+        "available_start_date": now - timedelta(days=1),
+        "available_end_date": now + timedelta(days=30),
+    }, format="json")
+    force_authenticate(request, user=manager)
+
+    response = PartnerCatalogViewSet.as_view({"post": "create"})(request)
+
+    assert response.status_code in (201, 403)
+
+
+# ---------------------------------------------------------------------------
+# Partner metrics scoped to the catalogs a manager manages
+# ---------------------------------------------------------------------------
+
+def _partner_row(user, partner):
+    view = PartnerViewset()
+    view.request = SimpleNamespace(user=user)
+    data = PartnerSerializer(view.get_queryset().get(pk=partner.pk)).data
+    return tuple(data[key] for key in ("catalogs", "courses", "enrollments", "certified"))
+
+
+def test_partner_metrics_are_scoped_to_the_managed_catalogs(staff):
+    """Catalogs, courses, seats and certified count only the catalogs a non-staff manager manages."""
+    catalog_a = make_catalog()
+    partner = catalog_a.partner
+    catalog_b, catalog_c = make_catalog(partner=partner), make_catalog(partner=partner)
+    (course_a,) = _add_courses(catalog_a, 1)
+    course_b = _add_courses(catalog_b, 2)[0]
+    (course_c,) = _add_courses(catalog_c, 1)
+    learner_a = make_catalog_learner(catalog_a)
+    make_catalog_learner(catalog_a)
+    learner_b = make_catalog_learner(catalog_b)
+    only_in_c = make_catalog_learner(catalog_c)
+    make_catalog_learner(catalog_c)
+    make_certificate(learner_a.user, course_a)
+    make_certificate(learner_b.user, course_b)
+    make_certificate(only_in_c.user, course_c)
+    manager = make_user()
+    for catalog in (catalog_a, catalog_b):
+        CatalogManager.objects.create(catalog=catalog, user=manager, active=True)
+
+    assert _partner_row(staff, partner) == (3, 4, 5, 3)
+    assert _partner_row(manager, partner) == (2, 3, 3, 2)
+
+
+@pytest.mark.parametrize("as_staff", [True, False])
+def test_partner_query_has_no_outer_group_by(as_staff):
+    catalog = make_catalog()
+    user = make_user(is_staff=as_staff)
+    if not as_staff:
+        CatalogManager.objects.create(catalog=catalog, user=user, active=True)
+    view = PartnerViewset()
+    view.request = SimpleNamespace(user=user)
 
     assert view.get_queryset().query.group_by is None

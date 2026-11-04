@@ -1,6 +1,6 @@
 """Partner Catalog API v1 Views."""
 
-from django.db.models import Count, F, OuterRef, Q, Subquery
+from django.db.models import Count, Exists, F, OuterRef, QuerySet, Subquery
 from django_filters.rest_framework import DjangoFilterBackend
 from edx_rest_framework_extensions.permissions import IsStaff, IsSuperuser
 from rest_framework import filters, mixins, status, viewsets
@@ -56,7 +56,34 @@ from partner_catalog.services.invitations import CatalogLearnerInvitationService
 from partner_catalog.xapi.constants import INVITATION_CHANNEL_MANUAL
 
 
-def annotate_catalog_course_metrics(qs):
+def annotate_catalog_metrics(qs: QuerySet) -> QuerySet:
+    """Annotate a PartnerCatalog queryset with the metrics read by PartnerCatalogSerializer.
+
+    Every count is a correlated subquery: join-based counts would multiply the joined rows and
+    make the database evaluate each certificate subquery once per joined row.
+    """
+    catalog = OuterRef("pk")
+    qs = qs.annotate(
+        courses_count=count_subquery(CatalogCourse.objects.filter(catalog=catalog), "catalog"),
+        enrollments=count_subquery(
+            CatalogCourseEnrollment.objects.filter(catalog_course__catalog=catalog, active=True),
+            "catalog_course__catalog",
+        ),
+        total_learners=count_subquery(CatalogLearner.objects.filter(catalog=catalog), "catalog"),
+        active_learners=count_subquery(CatalogLearner.objects.filter(catalog=catalog, active=True), "catalog"),
+        pending_invitations=count_subquery(
+            CatalogLearnerInvitation.objects.filter(
+                catalog=catalog, status=CatalogLearnerInvitation.Status.SENT
+            ),
+            "catalog",
+        ),
+    )
+    qs = annotate_catalog_certified_count(qs)
+    qs = annotate_catalog_certificates_count(qs)
+    return qs
+
+
+def annotate_catalog_course_metrics(qs: QuerySet) -> QuerySet:
     """Annotate a CatalogCourse queryset with the metrics read by CatalogCourseSerializer."""
     qs = qs.annotate(
         enrollments_count=count_subquery(
@@ -92,24 +119,26 @@ class PartnerViewset(viewsets.ReadOnlyModelViewSet):
         qs = self.queryset
         user = self.request.user
 
+        # A non-staff manager's numbers only cover the catalogs they manage. The scope goes inside
+        # each count subquery instead of an outer join, which would multiply the counted rows.
+        scope = {}
         if not (user.is_staff or user.is_superuser):
-            qs = qs.filter(
-                catalogs__catalog_managers__user=user,
-                catalogs__catalog_managers__active=True
-            ).distinct()
+            scope = {"catalog_managers__user": user, "catalog_managers__active": True}
+            qs = qs.filter(Exists(PartnerCatalog.objects.filter(partner=OuterRef("pk"), **scope)))
 
+        partner = OuterRef("pk")
+        prefixed = {f"catalog__{key}": value for key, value in scope.items()}
         qs = qs.annotate(
-            catalogs_count=Count("catalogs", distinct=True),
-            courses_count=Count("catalogs__catalog_courses", distinct=True),
+            catalogs_count=count_subquery(PartnerCatalog.objects.filter(partner=partner, **scope), "partner"),
+            courses_count=count_subquery(
+                CatalogCourse.objects.filter(catalog__partner=partner, **prefixed), "catalog__partner"
+            ),
             # Seats in use: active learners across the partner's catalogs.
-            learners_count=Count(
-                "catalogs__catalog_learners",
-                filter=Q(catalogs__catalog_learners__active=True),
-                distinct=True,
+            learners_count=count_subquery(
+                CatalogLearner.objects.filter(catalog__partner=partner, active=True, **prefixed), "catalog__partner"
             ),
         )
-        qs = annotate_partner_certified_count(qs)
-        return qs
+        return annotate_partner_certified_count(qs, scope)
 
 
 class PartnerCatalogViewSet(CSVExportMixin, viewsets.ModelViewSet):
@@ -166,32 +195,13 @@ class PartnerCatalogViewSet(CSVExportMixin, viewsets.ModelViewSet):
                 catalog_managers__active=True,
             ).distinct()
 
-        # Every count is a correlated subquery: join-based counts would multiply the joined rows and
-        # make the database evaluate each certificate subquery once per joined row.
-        catalog = OuterRef("pk")
-        qs = qs.annotate(
-            courses_count=count_subquery(CatalogCourse.objects.filter(catalog=catalog), "catalog"),
-            enrollments=count_subquery(
-                CatalogCourseEnrollment.objects.filter(catalog_course__catalog=catalog, active=True),
-                "catalog_course__catalog",
-            ),
-            total_learners=count_subquery(CatalogLearner.objects.filter(catalog=catalog), "catalog"),
-            active_learners=count_subquery(CatalogLearner.objects.filter(catalog=catalog, active=True), "catalog"),
-            pending_invitations=count_subquery(
-                CatalogLearnerInvitation.objects.filter(
-                    catalog=catalog, status=CatalogLearnerInvitation.Status.SENT
-                ),
-                "catalog",
-            ),
-        )
-        qs = annotate_catalog_certified_count(qs)
-        qs = annotate_catalog_certificates_count(qs)
-        return qs
+        return annotate_catalog_metrics(qs)
 
     def create(self, request, *args, **kwargs):
-        """Create a catalog (staff only). The response has the same metrics as the catalog list."""
+        """Create a catalog. The response has the same metrics as the catalog list."""
         response = super().create(request, *args, **kwargs)
-        catalog = self.get_queryset().get(pk=response.data["id"])
+        # Re-read without the caller's scope: a manager does not manage the catalog just created.
+        catalog = annotate_catalog_metrics(self.queryset.filter(pk=response.data["id"])).get()
         response.data = self.get_serializer(catalog).data
         return response
 

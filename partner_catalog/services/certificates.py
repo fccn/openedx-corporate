@@ -6,7 +6,7 @@ Every metric is computed per catalog, so a learner or course shared by several
 catalogs is counted separately in each of them.
 """
 
-from django.db.models import Case, Count, Exists, IntegerField, OuterRef, Subquery, Value, When
+from django.db.models import Case, Count, Exists, IntegerField, OuterRef, QuerySet, Subquery, Value, When
 from django.db.models.functions import Coalesce
 
 from partner_catalog.edxapp_wrapper.certificates_module import certificate_statuses_model, generated_certificate_model
@@ -37,7 +37,7 @@ def annotate_course_certified_count(qs):
     return annotate_certified_count(qs, users_qs, courses_qs)
 
 
-def annotate_course_learners_count(qs):
+def annotate_course_learners_count(qs: QuerySet) -> QuerySet:
     """Annotate a CatalogCourse queryset with catalog_learners_count.
 
     It is the number of active learners of the course's catalog, the denominator of the
@@ -73,7 +73,7 @@ def annotate_catalog_certified_count(qs):
     return annotate_certified_count(qs, _catalog_users_qs, _catalog_courses_qs)
 
 
-def annotate_catalog_certificates_count(qs):
+def annotate_catalog_certificates_count(qs: QuerySet) -> QuerySet:
     """Annotate a Catalog queryset with certificates_count.
 
     It is the number of passed certificates of the catalog's active learners in the
@@ -84,22 +84,29 @@ def annotate_catalog_certificates_count(qs):
     )
 
 
-def annotate_partner_certified_count(qs):
+def annotate_partner_certified_count(qs: QuerySet, catalog_scope: dict | None = None) -> QuerySet:
     """Annotate a Partner queryset with certified_count.
 
     It gets the count of users that are present in a corporate partner based on the active
     learners of each of its catalogs. The courses_qs gets the course_overview__id, of the courses
     related to the corporate partner through its catalogs as well.
+
+    ``catalog_scope`` holds PartnerCatalog filters (e.g. the catalogs a manager manages) that
+    restrict both the learners and the courses, like the partner's other counts.
     """
+    scope = {f"catalog__{key}": value for key, value in (catalog_scope or {}).items()}
+
     def users_qs(ref):
         return CatalogLearner.objects.filter(
             catalog__partner_id=ref,
             active=True,
+            **scope,
         ).values("user_id")
 
     def courses_qs(ref):
         return CatalogCourse.objects.filter(
             catalog__partner_id=ref,
+            **scope,
         ).values("course_overview__id")
 
     return annotate_certified_count(qs, users_qs, courses_qs)
@@ -182,16 +189,17 @@ def annotate_certified_count(
 def compute_completion_rate(certificates: int | None, learners: int | None, courses: int | None) -> float | None:
     """Return the passed certificates as a percentage of the possible ones (learners x courses).
 
-    It is 0.0 when there are no learners or no courses, rounded to one decimal and never
-    above 100. Returns None when a count is missing (e.g. an instance that was not
-    annotated by the viewset).
+    It is 0.0 when there are no learners or no courses, truncated (not rounded) to one decimal
+    and never above 100, so 100.0 only means every certificate exists (1999 of 2000 is 99.9).
+    Returns None when a count is missing (e.g. an instance that was not annotated by the viewset).
     """
     if None in (certificates, learners, courses):
         return None
     possible = learners * courses
     if possible <= 0:
         return 0.0
-    return round(min(100.0, certificates * 100.0 / possible), 1)
+    # Integer arithmetic, so no float error can move a value across a decimal (29 of 100 is 29.0).
+    return min(certificates, possible) * 1000 // possible / 10
 
 
 def user_has_certificate(course_id, user_id):
