@@ -606,6 +606,42 @@ class InvitationActionSerializer(serializers.Serializer):
         return obj.get_status_display()
 
 
+class CourseLoadFailureSerializer(serializers.Serializer):  # pylint: disable=abstract-method
+    """A course of the catalog that the catalog page could not load, and the HTTP status it got."""
+
+    course_key = serializers.CharField(max_length=255)
+    status = serializers.IntegerField(
+        min_value=100,
+        max_value=599,
+        allow_null=True,
+        default=None,
+        help_text="HTTP status of the failed request, or null when there was no response",
+    )
+
+
+class CourseLoadFailuresSerializer(serializers.Serializer):  # pylint: disable=abstract-method
+    """
+    Courses of a catalog that the catalog page could not load.
+
+    Every course key must be a course of the catalog, or the whole report is rejected, so nothing
+    else reaches the logs. A course sent more than once counts once.
+    """
+
+    failures = CourseLoadFailureSerializer(many=True, allow_empty=False)
+
+    def validate_failures(self, failures):
+        """Reject course keys that are not in the catalog and merge repeated ones."""
+        catalog = self.context["catalog"]
+        catalog_keys = {
+            str(course_key)
+            for course_key in catalog.catalog_courses.values_list("course_overview_id", flat=True)
+        }
+        if any(failure["course_key"] not in catalog_keys for failure in failures):
+            raise serializers.ValidationError("Every course must belong to this catalog.")
+        statuses = {failure["course_key"]: failure["status"] for failure in failures}
+        return [{"course_key": key, "status": status} for key, status in statuses.items()]
+
+
 class BulkRemoveInvitationSerializer(serializers.Serializer):
     """Serializer for bulk removal of invitations."""
 
