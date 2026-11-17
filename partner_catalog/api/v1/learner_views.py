@@ -4,25 +4,32 @@ These views are intended for regular learners/users to consume catalog data.
 They provide read-only access to catalogs and courses where the user is an active learner.
 """
 
+import logging
+
 from django.db.models import Count, Exists, OuterRef, Q
 from django_filters.rest_framework import DjangoFilterBackend
+from drf_spectacular.utils import extend_schema
 from edx_rest_framework_extensions.permissions import IsAuthenticated
 from rest_framework import filters, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from partner_catalog.api.exception_handlers import catalog_exception_handler
+from partner_catalog.api.throttles import CourseLoadFailuresThrottle
 from partner_catalog.api.v1.filters import PartnerCatalogFilter
 from partner_catalog.api.v1.mixins import InjectNestedFKMixin
 from partner_catalog.api.v1.serializers import (
     CatalogLearnerInvitationSerializer,
     CatalogLearnerSerializer,
+    CourseLoadFailuresSerializer,
     LearnerCatalogCourseSerializer,
     LearnerPartnerCatalogSerializer,
 )
 from partner_catalog.models import CatalogCourse, CatalogLearner, CatalogLearnerInvitation, PartnerCatalog
 from partner_catalog.services.catalogs import PartnerCatalogService
 from partner_catalog.services.enrollments import CatalogCourseEnrollmentService
+
+logger = logging.getLogger(__name__)
 
 
 class LearnerCatalogViewSet(viewsets.ReadOnlyModelViewSet):
@@ -121,6 +128,42 @@ class LearnerCatalogViewSet(viewsets.ReadOnlyModelViewSet):
         )
         serializer = CatalogLearnerInvitationSerializer(invitation)
         return Response(serializer.data, status=status.HTTP_200_OK)
+
+    @extend_schema(request=CourseLoadFailuresSerializer, responses={204: None})
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="course-load-failures",
+        throttle_classes=[CourseLoadFailuresThrottle],
+    )
+    def course_load_failures(self, request, **kwargs):
+        """
+        Log the courses of this catalog that the catalog page could not load.
+
+        The learner MFE calls this when some of the course requests of a catalog page fail, so the
+        failures reach the LMS logs. It writes one entry per report: a warning when some of the
+        catalog's courses failed, an error when all of them did.
+        """
+        catalog = self.get_object()
+        serializer = CourseLoadFailuresSerializer(data=request.data, context={"catalog": catalog})
+        serializer.is_valid(raise_exception=True)
+        failures = serializer.validated_data["failures"]
+
+        all_failed = len(failures) >= catalog.courses_count
+        logger.log(
+            logging.ERROR if all_failed else logging.WARNING,
+            "Catalog courses failed to load (catalog_id=%s, catalog_slug=%s, failed=%d/%d): %s",
+            catalog.id,
+            catalog.slug,
+            len(failures),
+            catalog.courses_count,
+            ", ".join(
+                f"{failure['course_key']} "
+                f"({'no response' if failure['status'] is None else failure['status']})"
+                for failure in failures
+            ),
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class LearnerCatalogCourseViewSet(InjectNestedFKMixin, viewsets.ReadOnlyModelViewSet):
